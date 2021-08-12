@@ -1,0 +1,16 @@
+## non-project stuff
+.vscode/
+*.pyc
+
+## project stuff
+data/
+caches/db/
+managers/_dynamicallyLoadedFactories/
+
+## testing stuff
+miscellaneous/
+*.txt
+*.dump
+*.marshal
+*.ods
+*.ods#
