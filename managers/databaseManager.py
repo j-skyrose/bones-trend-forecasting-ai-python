@@ -20,7 +20,7 @@ from structures.api.googleTrends.request import GoogleAPI
 from globalConfig import config as gconfig
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from constants.enums import FinancialReportType, OperatorDict, SeriesType, AccuracyType, SetType
-from utils.support import processRawValueToInsertValue, recdot, recdotdict, Singleton, extractDateFromDesc, getMarketHolidays, shortc
+from utils.support import processDBQuartersToDicts, processRawValueToInsertValue, recdot, recdotdict, Singleton, extractDateFromDesc, getMarketHolidays, recdotlist, shortc
 from constants.values import testingSymbols, unusableSymbols, apiList
 
 def addLastUpdatesRowsForAllSymbols(dbc):
@@ -261,7 +261,7 @@ class DatabaseManager(Singleton):
 
     ## get all historical data for ticker and seriesType
     ## sorted date ascending
-    def getData(self, exchange: str, symbol: str, type: SeriesType, fillGaps=False):
+    def getStockData(self, exchange: str, symbol: str, type: SeriesType, fillGaps=False):
         stmt = 'SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ORDER BY date'
         # return self._queryOrGetCache(stmt, (exchange, symbol, type.name), self._getHistoricalDataCount(), exchange+';'+symbol+';'+type.name)
 
@@ -366,7 +366,7 @@ class DatabaseManager(Singleton):
             print('Getting symbols and averages')
             normalizationLists = []
             stmt = ('SELECT exchange, symbol' + ', avg({})' * len(normalizationColumns) + ' FROM historical_data WHERE type=? GROUP BY exchange, symbol').format(*normalizationColumns)
-            if gconfig.testing.enabled: stmt += ' LIMIT 500'
+            if gconfig.testing.enabled: stmt += ' LIMIT 20'
 
             data = self._queryOrGetCache(stmt, (stype.name,), self._getHistoricalDataCount(), 'getsandavg')
 
@@ -396,42 +396,52 @@ class DatabaseManager(Singleton):
 
 
         ## get symbols data that meet normalization and other criteria        
-        stmt = 'SELECT * FROM historical_data h JOIN symbols s ON h.exchange=s.exchange AND h.symbol=s.symbol WHERE h.type=?'
+        stmt = '''SELECT s.exchange, s.symbol, s.sector, s.industry, s.founded, s.asset_type, s.google_topic_id 
+            FROM historical_data h JOIN symbols s'''
+        stmt2 = ' ON h.exchange=s.exchange AND h.symbol=s.symbol '
+        stmt3 = 'WHERE h.type=?'
         # stmt = 'SELECT * FROM historical_data h JOIN symbols s, staging_symbol_info st ON h.exchange=s.exchange AND h.symbol=s.symbol and h.exchange = st.exchange and h.symbol = st.symbol WHERE h.type=?'
         # stmt = 'SELECT h.exchange as exchange, h.symbol as symbol, s.asset_type as asset_type, s.google_topic_id as google_topic_id FROM historical_data h JOIN symbols s ON h.exchange=s.exchange AND h.symbol=s.symbol WHERE h.type=?'
+
+        if gconfig.feature.financials.enabled and gconfig.feature.financials.dataRequired:
+            stmt += ' , vwtb_edgar_quarters q'
+            stmt2 += ' AND h.exchange = q.exchange AND h.symbol = q.symbol '
+            stmt3 += ' AND h.exchange||h.symbol IN (SELECT DISTINCT q.exchange||q.symbol FROM vwtb_edgar_quarters q) AND REPLACE(h.date, \'-\', \'\') >= q.filed'
 
         if normalizationInfo or gconfig.testing.enabled:
             if gconfig.testing.enabled:
                 exchanges.append(gconfig.testing.exchange)
 
             if exchanges:
-                stmt += self._andXContainsListStatement('h.exchange', exchanges)
+                stmt3 += self._andXContainsListStatement('h.exchange', exchanges)
             elif excludeExchanges:
-                stmt += self._andXContainsListStatement('h.exchange', excludeExchanges, notIn=True)
+                stmt3 += self._andXContainsListStatement('h.exchange', excludeExchanges, notIn=True)
 
             if sectors:
-                stmt += self._andXContainsListStatement('h.sector', sectors)
+                stmt3 += self._andXContainsListStatement('h.sector', sectors)
             elif excludeSectors:
-                stmt += self._andXContainsListStatement('h.sector', excludeSectors, notIn=True)        
+                stmt3 += self._andXContainsListStatement('h.sector', excludeSectors, notIn=True)    
         else:
             if gconfig.feature.googleInterests.enabled: 
-                stmt += 'AND s.google_topic_id IS NOT NULL'
+                stmt3 += 'AND s.google_topic_id IS NOT NULL'
             if gconfig.feature.companyAge.enabled and gconfig.feature.companyAge.dataRequired: 
-                stmt += ' AND s.founded IS NOT NULL'
+                stmt3 += ' AND s.founded IS NOT NULL'
             if gconfig.feature.sector.enabled and gconfig.feature.sector.dataRequired:
-                stmt += ' AND s.sector IS NOT NULL'
-            if gconfig.feature.financials.enabled and gconfig.feature.financials.dataRequired:
-                stmt += ' AND h.exchange||h.symbol IN (SELECT DISTINCT q.exchange||q.symbol FROM vwtb_edgar_quarters q)'
+                stmt3 += ' AND s.sector IS NOT NULL'
+
 
         tuple = (stype.name,)
         for i in range(len(normalizationColumns)):
-            stmt += ' AND h.%s <= ? ' % normalizationColumns[i]
+            stmt3 += ' AND h.%s <= ? ' % normalizationColumns[i]
             tuple += (normalizationMaxes[i],)
 
+        stmt = stmt + stmt2 + stmt3
+
         stmt += ' GROUP BY h.exchange, h.symbol'
-        if gconfig.testing.enabled: stmt += ' LIMIT 500'
+        if gconfig.testing.enabled: stmt += ' LIMIT 20'
 
         symbolList = self._queryOrGetCache(stmt, tuple, self._getHistoricalDataCount(), 'getnormsymbolist')
+        # symbolList = self.dbc.execute(stmt, tuple).fetchall()
 
         if DEBUG and not normalizationInfo: print (len(symbolList), '/', len(normalizationLists[0]), 'are within thresholds')
 
@@ -462,6 +472,11 @@ class DatabaseManager(Singleton):
                 alreadyFound += 1
         if DEBUG: print(topicsFound, '/', len(symbols) - alreadyFound, 'topics found')
 
+    def getFinancialData(self, exchange, symbol, raw=False):
+        stmt = 'SELECT * FROM vwtb_edgar_financial_nums n JOIN vwtb_edgar_quarters q ON n.exchange = q.exchange AND n.symbol = q.symbol AND n.ddate = q.period WHERE n.exchange=? AND n.symbol=? ORDER BY q.period'
+        res = self.dbc.execute(stmt, (exchange, symbol)).fetchall()
+
+        return processDBQuartersToDicts(res) if not raw else res
 
     def getVIXData(self):
         stmt = 'SELECT * FROM cboe_volatility_index ORDER BY date'
@@ -1044,7 +1059,7 @@ class DatabaseManager(Singleton):
                     if i != ti: samei = False
 
                 if not samei:
-                    data = self.getData(s.exchange, s.symbol, SeriesType.DAILY)
+                    data = self.getStockData(s.exchange, s.symbol, SeriesType.DAILY)
 
                     if len(data) > 0:
                         print('Mismatch found', ipolist, s.exchange, s.symbol)
@@ -1196,7 +1211,7 @@ class DatabaseManager(Singleton):
             for t in tqdm(gaps[g], desc=str(g), leave=False) if ALL else [(exchange, symbol)]:
                 ## find closest date without going over
                 prevclose = None
-                for d in self.getData(t[0], t[1], type):
+                for d in self.getStockData(t[0], t[1], type):
                     if date.fromisoformat(d.date) > g: break
                     prevclose = d.close
                 tuples.append((t[0], t[1], type.name, str(g), prevclose, prevclose, prevclose, prevclose, 0, True))
@@ -1378,7 +1393,7 @@ if __name__ == '__main__':
     #         break
 
     # print(d.getDailyHistoricalGaps('BATS','ACES'))
-    # data = d.getData('BATS', 'AVDR', SeriesType.DAILY, True)
+    # data = d.getStockData('BATS', 'AVDR', SeriesType.DAILY, True)
     # for d in data: print(d)
 
     # d.fillHistoricalGaps(exchange='BATS', symbol='ACES', type=SeriesType.DAILY)
@@ -1458,43 +1473,43 @@ if __name__ == '__main__':
     # print(d.printTableColumns('staging_financials'))
     
 
-    ## staging financials stuff
-    rows = d.dbc.execute('SELECT * FROM staging_financials WHERE polygon = 1 AND alphavantage = 1 AND period = \'QUARTER\'').fetchall()
+    # ## staging financials stuff
+    # rows = d.dbc.execute('SELECT * FROM staging_financials WHERE polygon = 1 AND alphavantage = 1 AND period = \'QUARTER\'').fetchall()
     
-    ## print example row with column names
-    # for k,v in rows[0].items():
-    #     print(k, v)
+    # ## print example row with column names
+    # # for k,v in rows[0].items():
+    # #     print(k, v)
 
-    ## print specific row
-    for r in rows:
-        # if r.symbol == 'AAL' and r.calendarDate == '2018-09-30':
-        if r.symbol !='ACHC' and r.polygon_investments != r.polygon_investmentsCurrent:
-            for k,v in r.items():
-                print(k,v)
+    # ## print specific row
+    # for r in rows:
+    #     # if r.symbol == 'AAL' and r.calendarDate == '2018-09-30':
+    #     if r.symbol !='ACHC' and r.polygon_investments != r.polygon_investmentsCurrent:
+    #         for k,v in r.items():
+    #             print(k,v)
 
-    ## check intergrity of staging_financials
-    pairs = [
-        ('alphavantage_operatingIncome', 'polygon_operatingIncome'),
-        ('alphavantage_interestExpense', 'polygon_interestExpense'),
-        ('alphavantage_incomeBeforeTax', 'polygon_earningsBeforeTax'),
-        ('alphavantage_incomeTaxExpense', 'polygon_incomeTaxExpense'),
+    # ## check intergrity of staging_financials
+    # pairs = [
+    #     ('alphavantage_operatingIncome', 'polygon_operatingIncome'),
+    #     ('alphavantage_interestExpense', 'polygon_interestExpense'),
+    #     ('alphavantage_incomeBeforeTax', 'polygon_earningsBeforeTax'),
+    #     ('alphavantage_incomeTaxExpense', 'polygon_incomeTaxExpense'),
 
-        ('alphavantage_nonInterestIncome', 'polygon_revenues'),
+    #     ('alphavantage_nonInterestIncome', 'polygon_revenues'),
 
-        # ('alphavantage_netIncomeFromContinuingOperations', 'fmp'),
-        ('alphavantage_netIncome', 'fmp'),
-        ('fmp', 'polygon_consolidatedIncome'),
-        ('fmp', 'polygon_netIncome'),
-        ('fmp', 'polygon_netIncomeCommonStock'),
-        ('fmp', 'polygon_netIncomeCommonStockUSD'),
+    #     # ('alphavantage_netIncomeFromContinuingOperations', 'fmp'),
+    #     ('alphavantage_netIncome', 'fmp'),
+    #     ('fmp', 'polygon_consolidatedIncome'),
+    #     ('fmp', 'polygon_netIncome'),
+    #     ('fmp', 'polygon_netIncomeCommonStock'),
+    #     ('fmp', 'polygon_netIncomeCommonStockUSD'),
 
         
-        ('alphavantage_ebit', 'fmp'),
-        ('fmp', 'polygon_earningBeforeInterestTaxes'),
-        # ('fmp', 'polygon_earningsBeforeInterestTaxesDepreciationAmortization'),
-        # ('fmp', 'polygon_earningsBeforeInterestTaxesDepreciationAmortizationUSD'),
-        ('fmp', 'polygon_earningBeforeInterestTaxesUSD')
-    ]
+    #     ('alphavantage_ebit', 'fmp'),
+    #     ('fmp', 'polygon_earningBeforeInterestTaxes'),
+    #     # ('fmp', 'polygon_earningsBeforeInterestTaxesDepreciationAmortization'),
+    #     # ('fmp', 'polygon_earningsBeforeInterestTaxesDepreciationAmortizationUSD'),
+    #     ('fmp', 'polygon_earningBeforeInterestTaxesUSD')
+    # ]
 
     # c=0
     # for r in rows:
@@ -1505,6 +1520,9 @@ if __name__ == '__main__':
     #     print()
     #     c += 1
     #     if c > 6: break
+
+
+    print(d.getFinancialData('BATS','CBOE'))
 
 
     pass

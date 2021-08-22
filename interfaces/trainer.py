@@ -20,6 +20,7 @@ from managers.dataManager import DataManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from managers.inputVectorFactory import InputVectorFactory
 from structures.trainingInstance import TrainingInstance
+from managers.statsManager import StatsManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from constants.enums import AccuracyType, LossAccuracy, OperatorDict, SeriesType
 from constants.exceptions import SufficientlyUpdatedDataNotAvailable
@@ -46,6 +47,10 @@ class Trainer:
         sets = self.dm.getKerasSets()
         class1set = self.dm.getKerasSets(1, True)
         class2set = self.dm.getKerasSets(2, True)
+
+        print('Set creation time required:', time.time() - setstartt, 'seconds')
+        print('Set creation breakdown')
+        StatsManager().printAll()
         self.instance = TrainingInstance(self.network, *sets, { 'epochs': 1, 'batchSize': 32 }, class1set, class2set)  
         print('Startup time required:', time.time() - startt, 'seconds')
 

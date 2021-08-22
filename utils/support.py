@@ -245,6 +245,19 @@ def processRawValueToInsertValue(v):
     else:
         return '\'' + v + '\''
 
+def processDBQuartersToDicts(qlist):
+    createQuarterObj = lambda rw: { 'period': rw.period, 'quarter': rw.quarter, 'filed': rw.filed, 'nums': { rw.tag: rw.value }}
+    ret = []
+    curquarter = createQuarterObj(qlist[0])
+    for r in qlist[1:]:
+        if curquarter['period'] != r.period:
+            ret.append(curquarter)
+            curquarter = createQuarterObj(r)
+        else:
+            curquarter['nums'][r.tag] = r.value
+    ret.append(curquarter)
+
+    return recdotlist(ret)
 if __name__ == '__main__':
     # print(getMarketHolidays(2021))
     # print(processRawValueToInsertValue(44))

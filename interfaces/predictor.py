@@ -48,7 +48,7 @@ class Predictor:
         nn = self._getNeuralNetwork(networkid) if networkid else network
         symbolinfo = self.dbc.getSymbols(exchange, symbol)[0]
 
-        # data = self.dbc.getData(exchange, symbol, nn.stats.seriesType)
+        # data = self.dbc.getStockData(exchange, symbol, nn.stats.seriesType)
         data = self.analyzer.dm.stockDataManager.get(exchange, symbol).data
         
         ## check if there is data for the desired anchor date (with some massaging if it was a weekend)

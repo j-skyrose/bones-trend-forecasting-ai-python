@@ -48,9 +48,12 @@ def genFeatureObj(enabled, extype, dataRequired=True):
 
 config = recdotdict({
     'dataForm': {
-        'dayOfWeek': DataFormType.VECTOR,
-        'dayOfMonth': DataFormType.VECTOR,
-        'monthOfYear': DataFormType.VECTOR
+        # 'dayOfWeek': DataFormType.VECTOR,
+        # 'dayOfMonth': DataFormType.VECTOR,
+        # 'monthOfYear': DataFormType.VECTOR
+        'dayOfWeek': DataFormType.INTEGER,
+        'dayOfMonth': DataFormType.INTEGER,
+        'monthOfYear': DataFormType.INTEGER
     },
     'feature': {
         'exchange': genFeatureObj(False, 'single'),
@@ -76,12 +79,14 @@ config = recdotdict({
         },
         'financials': {
             'enabled': True,
+            'extype': 'financials',
+            'dataRequired': True,
+            
+            'includeDates': True,
             'maxTierIndex': 1,
             'tierTags': [
                 ['Assets', 'Liabilities', 'StockholdersEquity']
             ],
-            'extype': 'financials',
-            'dataRequired': True
         },
         'googleInterests': genFeatureObj(False, 'interest')
     },
