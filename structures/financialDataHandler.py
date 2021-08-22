@@ -7,13 +7,14 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-from datetime import timedelta
+from datetime import timedelta, date
 from utils.other import maxQuarters, normalizeFinancials
+from utils.support import _edgarformatd
 
 class FinancialDataHandler:
     normalized = False
 
-    def __init__(self, symbolData, financialData, generalMax=None):
+    def __init__(self, symbolData, financialData, generalMax=1000000):
         self.symbolData = symbolData
         self.data = financialData
 
@@ -26,20 +27,20 @@ class FinancialDataHandler:
             self.normalized = True
 
     def getPrecedingReports(self, indexDate, precedingRange):
+        if indexDate < _edgarformatd(self.data[0].filed): return []
+
         firstDay = indexDate - timedelta(days=precedingRange+1)
-        # ret = []
-        # gethering = False
-        # for i in reversed(range(len(self.data))):
-        #     if not gathering and self.data[i-1]
         firstIndex = 0
         lastIndex = 0
         for i in range(len(self.data)):
-            if self.data[i].filed < firstDay: 
+            if _edgarformatd(self.data[i].filed) < firstDay: 
                 firstIndex = i
-            if self.data[i].filed > indexDate: 
+            if _edgarformatd(self.data[i].filed) > indexDate: 
                 lastIndex = i-1
                 break
 
-        if lastIndex - firstIndex > maxQuarters(precedingRange): raise ValueError
+        # if lastIndex - firstIndex > maxQuarters(precedingRange): raise ValueError
+        while lastIndex - firstIndex > maxQuarters(precedingRange):
+            firstIndex += 1
 
         return self.data[firstIndex:lastIndex]

@@ -1,4 +1,3 @@
-from constants.enums import FinancialReportType, FinancialStatementType
 import os, sys
 path = os.path.dirname(os.path.abspath(__file__))
 while ".vscode" not in os.listdir(path):
@@ -17,6 +16,7 @@ import atexit
 import time as timer
 
 from constants.exceptions import APILimitReached, APITimeout, APIError
+from constants.enums import FinancialReportType, FinancialStatementType
 from utils.support import Singleton, recdot, recdotdict
 
 class APIManager(Singleton):

@@ -50,12 +50,14 @@ def normalizeStockData(data, highMax, volumeMax):
     return data
 
 def normalizeFinancials(data, generalMax):
-    for r  in data:
+    for q in data:
+        for v in q.nums:
+            q.nums[v] = shortc(q.nums[v], 0) / generalMax
         pass
     return data
 
 def maxQuarters(precedingDays):
-    return ceil(precedingDays/30)
+    return ceil(precedingDays/90)
    
 loggedonce = False
 def _inputVector_old(dataSet, vixRef, googleInterests, listingDate, sector, getSplitStat=False):

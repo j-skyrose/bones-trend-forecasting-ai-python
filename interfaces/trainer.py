@@ -43,9 +43,13 @@ class Trainer:
                 **kwargs
             )
 
+        setstartt = time.time()
         sets = self.dm.getKerasSets()
         class1set = self.dm.getKerasSets(1, True)
         class2set = self.dm.getKerasSets(2, True)
+        print('Set creation time required:', time.time() - setstartt, 'seconds')
+        print('Set creation breakdown')
+        StatsManager().printAll()
         self.instance = TrainingInstance(self.network, *sets, { 'epochs': 1, 'batchSize': 32 }, class1set, class2set)  
         print('Startup time required:', time.time() - startt, 'seconds')
 
@@ -187,7 +191,9 @@ if __name__ == '__main__':
         arg1 = 'new'
 
     if arg1.lower() == 'new':
-        precrange = 202
+        # precrange = 202
+        precrange = 150
+        # precrange = 75
         folrange = 20
         threshold = 0.05
         setSplitTuple = (0.80,0.20)
@@ -195,10 +201,11 @@ if __name__ == '__main__':
         if gconfig.testing.enabled:
             ## testing
             setCount = 250
+            # setCount = 5
             minimumSetsPerSymbol = 0
         else:
             ## real
-            setCount = 150000
+            setCount = 75000
             minimumSetsPerSymbol = 10
 
         ## network
@@ -231,10 +238,10 @@ if __name__ == '__main__':
 
     # p.train(iterations=50, evaluateEveryXIterations=20)
     # p.train(trainingDuration=0.2*60*60, evaluateEveryXIterations=20)
-    p.train(lossIterationTolerance=6)
+    p.train(lossIterationTolerance=2)
     # p.train(stopTime=getTimestamp(hour=14, minute=0))
 
-    p.saveNetwork()
+    # p.saveNetwork()
 
     print('done')
 

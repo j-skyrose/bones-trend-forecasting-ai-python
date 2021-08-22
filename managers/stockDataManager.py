@@ -46,7 +46,7 @@ def setupHandlerWorker(
         handlers = {}
         for s in tqdm.tqdm(symbolList, desc='Creating handlers') if processid == 0 else symbolList:   
             if (s.exchange, s.symbol) in testingSymbols + unusableSymbols: continue
-            data = dbm.getData(s.exchange, s.symbol, seriesType)
+            data = dbm.getStockData(s.exchange, s.symbol, seriesType)
             if len(data) >= precedingRange + followingRange + 1:
                 handlers[(s.exchange, s.symbol)] = StockDataHandler(
                     s,

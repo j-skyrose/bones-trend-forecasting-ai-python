@@ -12,17 +12,17 @@ from tensorflow import keras
 from timeit import default_timer as timer
 from multiprocessing import Pool, cpu_count
 from datetime import date
-from typing import List
+from typing import Dict, List
 
 from globalConfig import config as gconfig
 from constants.enums import SeriesType, SetType
-from utils.support import Singleton, recdotdict, shortc
+from utils.support import Singleton, flatten, recdotdict, recdotlist, shortc, processDBQuartersToDicts
 from constants.values import testingSymbols, unusableSymbols
 from managers.stockDataManager import StockDataManager
 from managers.databaseManager import DatabaseManager
 from managers.vixManager import VIXManager
 from managers.inputVectorFactory import InputVectorFactory
-from structures.neuralNetworkInstance import NeuralNetworkInstance
+from structures.financialDataHandler import FinancialDataHandler
 from structures.stockDataHandler import StockDataHandler
 from structures.dataPointInstance import DataPointInstance, numOutputClasses, positiveClass, negativeClass
 from structures.api.googleTrends.request import GoogleAPI
@@ -71,8 +71,11 @@ dbm: DatabaseManager = DatabaseManager()
 ## not sure how new exchange/symbol handler setups would work with normalization info, if not initialized when datamanager is created
 
 class DataManager():
-    stockDataManager: StockDataManager = None
-    instances: dict = {}
+    # stockDataManager: StockDataManager = None
+    stockDataHandlers = {}
+    vixDataHandler = VIXManager().data
+    financialDataHandlers: Dict[tuple, FinancialDataHandler] = {}
+    stockDataInstances = {}
     selectedInstances = []
     # unselectedInstances = []
     unselectedInstances = {}
@@ -90,33 +93,25 @@ class DataManager():
         # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
         # neuralNetwork: NeuralNetworkInstance=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[]
     ):
+        startt = time.time()
         self.config = inputVectorFactory.config
         self.inputVectorFactory = inputVectorFactory
         self.precedingRange = precedingRange
-        self.followingRange = followingRange
-        self.seriesType = seriesType
-        self.threshold = threshold
-        self.setCount = setCount
+        # self.followingRange = followingRange
+        # self.seriesType = seriesType
+        # self.threshold = threshold
+        # self.setCount = setCount
         self.kerasSetCaches = {}
-        self.normalizationInfo = recdotdict(normalizationInfo)
-        self.symbolList = symbolList
+        # self.normalizationInfo = recdotdict(normalizationInfo)
+        # self.symbolList = symbolList
 
         ## pull and setup financial reports ref
-        ## todo
-        self.financialDataHandler
+        self.initializeFinancialDataHandlers(symbolList)
 
-        self.stockDataManager = StockDataManager(
-            self.normalizationInfo,
-            self.symbolList,
-            self.precedingRange,
-            self.followingRange,
-            self.seriesType,
-            self.inputVectorFactory,
-            self.threshold
-        )
+        self.initializeStockDataHandlers(symbolList, recdotdict(normalizationInfo), precedingRange, followingRange, seriesType, threshold)
 
         if setCount is not None:
-            self.setupSets(self.setCount, setSplitTuple, minimumSetsPerSymbol)
+            self.setupSets(setCount, setSplitTuple, minimumSetsPerSymbol)
         elif analysis:
             # if gconfig.testing.enabled:
             #     c = 5000
@@ -127,36 +122,72 @@ class DataManager():
             #             break
             #         else:
             #             self.stockDataManager.instances.pop(x)
-            self.setupSets(len(self.stockDataManager.instances.values()), (0,1))
+            self.setupSets(len(self.stockDataInstances.values()), (0,1))
+        print('DataManager init complete. Took', time.time() - startt, 'seconds')
 
     @classmethod
     def forTraining(cls, seriesType=SeriesType.DAILY, **kwargs):
         normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType)
         
-        normalizationInfo = {}
-        for c in range(len(normalizationColumns)):
-            normalizationInfo[normalizationColumns[c]] = normalizationMaxes[c]
+    def buildInputVector(self, stockDataSet: StockDataHandler, stockDataIndex, googleInterestData, symbolData):
+        startt = time.time()
+        precset = stockDataSet.getPrecedingSet(stockDataIndex)
+        self.getprecstocktime += time.time() - startt
+
+        startt = time.time()
+        precfinset = self.financialDataHandlers[(symbolData.exchange, symbolData.symbol)].getPrecedingReports(date.fromisoformat(stockDataSet.data[stockDataIndex].date), self.precedingRange)
+        self.getprecfintime += time.time() - startt
+
+        startt = time.time()
+        ret = self.inputVectorFactory.build(
+            precset,
+            self.vixDataHandler,
+            precfinset,
+            googleInterestData,
+            symbolData.founded,
+            'todo',
+            symbolData.sector,
+            symbolData.exchange
+        )
+        self.actualbuildtime += time.time() - startt
+
+        return ret
+
+    def initializeStockDataHandlers(self, symbolList, normalizationInfo, precedingRange, followingRange, seriesType, threshold):
         
-        return cls(
-            seriesType=seriesType,
-            normalizationInfo=normalizationInfo, symbolList=symbolList, 
-            **kwargs
+        for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):   
+            if (s.exchange, s.symbol) in testingSymbols + unusableSymbols: continue
+            data = dbm.getStockData(s.exchange, s.symbol, seriesType)
+            if len(data) >= precedingRange + followingRange + 1:
+                self.stockDataHandlers[(s.exchange, s.symbol)] = StockDataHandler(
+                    s,
+                    seriesType,
+                    data,
+                    *normalizationInfo.values(),
+                    precedingRange,
+                    followingRange
         )
 
-    @classmethod
-    def forAnalysis(cls, nn: NeuralNetworkInstance, **kwargs):
-        normalizationInfo = nn.stats.getNormalizationInfo()
-        _, _, symbolList = dbm.getNormalizationData(nn.stats.seriesType, normalizationInfo=normalizationInfo, **kwargs) #exchanges=exchanges, excludeExchanges=excludeExchanges, sectors=sectors, excludeSectors=excludeSectors)
+        h: StockDataHandler
+        for h in tqdm.tqdm(self.stockDataHandlers.values(), desc='Initializing stock instances'):
+            for sindex in h.getAvailableSelections():
+                try:
+                    change = (h.data[sindex + followingRange].low / h.data[sindex - 1].high) - 1
+                except ZeroDivisionError:
+                    change = 0
 
-        return cls(
-            precedingRange=nn.stats.precedingRange, followingRange=nn.stats.followingRange, seriesType=nn.stats.seriesType, threshold=nn.stats.changeThreshold, inputVectorFactory=nn.inputVectorFactory,
-            normalizationInfo=normalizationInfo, symbolList=symbolList,
-            analysis=True,
-            **kwargs
+                self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, h.data[sindex].date)] = DataPointInstance(
+                    self.buildInputVector,
+                    h, sindex,
+                    positiveClass if change >= threshold else negativeClass
         )
+        
+        for s in tqdm.tqdm(symbolList, desc='Creating financial handlers'):  
+            if (s.exchange, s.symbol) in testingSymbols + unusableSymbols: continue
+            self.financialDataHandlers[(s.exchange, s.symbol)] = FinancialDataHandler(s, dbm.getFinancialData(s.exchange, s.symbol))
 
     def setupSets(self, setCount, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0):
-        self.unselectedInstances = self.stockDataManager.instances.values()
+        self.unselectedInstances = list(self.stockDataInstances.values())
         self.selectedInstances = []
 
         if DEBUG: print('Selecting', setCount, 'instances')
@@ -164,7 +195,7 @@ class DataManager():
         ## cover minimums
         if minimumSetsPerSymbol > 0:
             self.unselectedInstances = []
-            for h in self.stockDataManager.getAll():
+            for h in self.stockDataHandlers.values():
                 available = h.getAvailableSelections()
                 sampleSize = min(minimumSetsPerSymbol, len(available))
                 if sampleSize > 0:
@@ -175,9 +206,9 @@ class DataManager():
                     # print(selectDates)
                     random.shuffle(selectDates)
                     for d in selectDates[:sampleSize]:
-                        self.selectedInstances.append(self.stockDataManager.instances[(h.symbolData.exchange, h.symbolData.symbol, d)])
+                        self.selectedInstances.append(self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, d)])
                     for d in selectDates[sampleSize:]:
-                        self.unselectedInstances.append(self.stockDataManager.instances[(h.symbolData.exchange, h.symbolData.symbol, d)])
+                        self.unselectedInstances.append(self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, d)])
             if DEBUG: 
                 print(len(self.selectedInstances), 'instances selected to cover minimums')
                 print(len(self.unselectedInstances), 'instances available for remaining selection')
@@ -252,17 +283,6 @@ class DataManager():
         self.testingSet = [s for s in dataset if s.set_type == SetType.TESTING.name]
 
         # return trainingSet, validationSet, testingSet
-
-    # def _buildInstance(self, handler, index):
-    #     d = handler.data
-    #     try:
-    #         change = (d[index + self.followingRange].low / d[index - 1].high) - 1
-    #     except ZeroDivisionError:
-    #         change = 0
-
-    #     return DataPointInstance(shortc(self.inputVectorFactory, InputVectorFactory()), handler, index, self.vixm,
-    #         positiveClass if change >= self.threshold else negativeClass
-    #     )
 
     def _checkSelectedBalance(self):
         pclass, nclass = self._getInstancesByClass(self.selectedInstances)
