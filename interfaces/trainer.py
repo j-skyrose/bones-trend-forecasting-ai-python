@@ -20,6 +20,7 @@ from managers.dataManager import DataManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from managers.inputVectorFactory import InputVectorFactory
 from structures.trainingInstance import TrainingInstance
+from managers.statsManager import StatsManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from constants.enums import AccuracyType, LossAccuracy, OperatorDict, SeriesType
 from constants.exceptions import SufficientlyUpdatedDataNotAvailable
