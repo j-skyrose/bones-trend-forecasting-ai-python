@@ -13,6 +13,7 @@ import math, re, dill, operator, shutil
 import sqlite3, atexit, numpy as np, xlrd
 from datetime import date, timedelta, datetime
 from tqdm import tqdm
+from multiprocessing import current_process
 
 from managers.dbCacheManager import DBCacheManager
 from structures.api.googleTrends.request import GoogleAPI
@@ -69,7 +70,7 @@ class DatabaseManager(Singleton):
     def close(self):
         ## save changes and close database connection
         self.commit()
-        print('Committed changes')
+        if current_process().name == 'MainProcess': print('Committed changes')
         self.connect.close()
 
     def commit(self):
@@ -366,7 +367,7 @@ class DatabaseManager(Singleton):
             print('Getting symbols and averages')
             normalizationLists = []
             stmt = ('SELECT exchange, symbol' + ', avg({})' * len(normalizationColumns) + ' FROM historical_data WHERE type=? GROUP BY exchange, symbol').format(*normalizationColumns)
-            if gconfig.testing.enabled: stmt += ' LIMIT 20'
+            if gconfig.testing.enabled: stmt += ' LIMIT ' + str(gconfig.testing.stockQueryLimit)
 
             data = self._queryOrGetCache(stmt, (stype.name,), self._getHistoricalDataCount(), 'getsandavg')
 
@@ -438,7 +439,7 @@ class DatabaseManager(Singleton):
         stmt = stmt + stmt2 + stmt3
 
         stmt += ' GROUP BY h.exchange, h.symbol'
-        if gconfig.testing.enabled: stmt += ' LIMIT 20'
+        if gconfig.testing.enabled: stmt += ' LIMIT ' + str(gconfig.testing.stockQueryLimit)
 
         symbolList = self._queryOrGetCache(stmt, tuple, self._getHistoricalDataCount(), 'getnormsymbolist')
         # symbolList = self.dbc.execute(stmt, tuple).fetchall()

@@ -47,6 +47,7 @@ def genFeatureObj(enabled, extype, dataRequired=True):
     return { 'enabled': enabled, 'extype': extype, 'dataRequired': dataRequired }
 
 config = recdotdict({
+    'multicore': True,
     'dataForm': {
         # 'dayOfWeek': DataFormType.VECTOR,
         # 'dayOfMonth': DataFormType.VECTOR,

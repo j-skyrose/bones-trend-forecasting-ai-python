@@ -10,62 +10,32 @@ sys.path.append(path)
 import random, math, numpy, tqdm, time, pickle
 from tensorflow import keras
 from timeit import default_timer as timer
-from multiprocessing import Pool, cpu_count
 from datetime import date
 from typing import Dict, List
+from tqdm.contrib.concurrent import process_map
+from functools import partial
 
 from globalConfig import config as gconfig
 from constants.enums import SeriesType, SetType
-from utils.support import Singleton, flatten, recdotdict, recdotlist, shortc, processDBQuartersToDicts
+from utils.support import Singleton, flatten, recdotdict, recdotlist, shortc, multicore_poolIMap, processDBQuartersToDicts
 from constants.values import testingSymbols, unusableSymbols
-from managers.stockDataManager import StockDataManager
+# from managers.stockDataManager import StockDataManager
 from managers.databaseManager import DatabaseManager
-from managers.vixManager import VIXManager
+# from managers.vixManager import VIXManager
 from managers.inputVectorFactory import InputVectorFactory
+# from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.financialDataHandler import FinancialDataHandler
 from structures.stockDataHandler import StockDataHandler
 from structures.dataPointInstance import DataPointInstance, numOutputClasses, positiveClass, negativeClass
 from structures.api.googleTrends.request import GoogleAPI
 
 DEBUG = True
-MULTITHREAD = False
-picklepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'debugpickle.pkl')
-dumppickles = False
-usepickles = False
-picklepoint_normalizationdata = False
-picklepoint_normalizationdata_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'picklepoint_normalizationdata.pkl')
-picklepoint_selectedinstances = False
-picklepoint_selectedinstances_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'picklepoint_selectedinstances.pkl')
 
-dbm: DatabaseManager = DatabaseManager()
+def multicore_getFinancialDataTickerTuples(ticker):
+    return (ticker, DatabaseManager().getFinancialData(ticker.exchange, ticker.symbol))
 
-# def setupHandlerWorker(
-#     processid, 
-#     symbolList: List[dict], 
-#     seriesType: SeriesType, 
-#     normalizationMaxes: List[float], 
-#     precedingRange: int, 
-#     followingRange: int
-# ) -> List[StockDataHandler]:
-#     # try:
-#         handlers = []
-#         for s in tqdm.tqdm(symbolList, desc='Creating handlers') if processid == 0 else symbolList:
-#             if (s.exchange, s.symbol) in testingSymbols + unusableSymbols: continue
-#             data = dbm.getData(s.exchange, s.symbol, seriesType)
-#             if len(data) >= precedingRange + followingRange + 1:
-#                 handlers.append(StockDataHandler(
-#                     s,
-#                     seriesType,
-#                     data,
-#                     *normalizationMaxes,
-#                     precedingRange,
-#                     followingRange
-#                 ))
-#         return handlers
-#     # except:
-#     #     print("Unexpected error:", sys.exc_info()[0])
-
-
+def multicore_getStockDataTickerTuples(ticker, seriesType):
+    return (ticker, DatabaseManager().getStockData(ticker.exchange, ticker.symbol, seriesType))
 
 ## each session should only rely on one (precedingRange, followingRange) combination due to the way the handlers are setup
 ## not sure how new exchange/symbol handler setups would work with normalization info, if not initialized when datamanager is created
@@ -73,7 +43,7 @@ dbm: DatabaseManager = DatabaseManager()
 class DataManager():
     # stockDataManager: StockDataManager = None
     stockDataHandlers = {}
-    vixDataHandler = VIXManager().data
+    vixDataHandler = None
     financialDataHandlers: Dict[tuple, FinancialDataHandler] = {}
     stockDataInstances = {}
     selectedInstances = []
@@ -84,16 +54,17 @@ class DataManager():
     testingInstances = []
     inputVectorFactory = None
 
-    def __init__(self, 
+    def __init__(self, dbm, vixDataHandler,
         precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, threshold=0,
         setCount=None, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
-        normalizationInfo={}, symbolList=[],
+        normalizationInfo={}, symbolList:List=[],
         analysis=False,
         **kwargs
         # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
         # neuralNetwork: NeuralNetworkInstance=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[]
     ):
         startt = time.time()
+        self.vixDataHandler = vixDataHandler
         self.config = inputVectorFactory.config
         self.inputVectorFactory = inputVectorFactory
         self.precedingRange = precedingRange
@@ -105,30 +76,53 @@ class DataManager():
         # self.normalizationInfo = recdotdict(normalizationInfo)
         # self.symbolList = symbolList
 
-        ## pull and setup financial reports ref
-        self.initializeFinancialDataHandlers(symbolList)
+        ## purge invalid tickers
+        for s in symbolList:
+            if (s.exchange, s.symbol) in testingSymbols + unusableSymbols:
+                symbolList.remove(s)
 
-        self.initializeStockDataHandlers(symbolList, recdotdict(normalizationInfo), precedingRange, followingRange, seriesType, threshold)
+        ## pull and setup financial reports ref
+        startt2 = time.time()
+        self.initializeFinancialDataHandlers(dbm, symbolList)
+        print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
+
+        startt2 = time.time()
+        self.initializeStockDataHandlers(dbm, symbolList, recdotdict(normalizationInfo), precedingRange, followingRange, seriesType, threshold)
+        print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
+
 
         if setCount is not None:
             self.setupSets(setCount, setSplitTuple, minimumSetsPerSymbol)
         elif analysis:
-            # if gconfig.testing.enabled:
-            #     c = 5000
-            #     for x in list(self.stockDataManager.instances.keys()):
-            #         if c and self.stockDataManager.instances[x].handler.symbolData.exchange == gconfig.testing.exchange:
-            #             c -= 1
-            #         elif len(self.stockDataManager.instances) == c:
-            #             break
-            #         else:
-            #             self.stockDataManager.instances.pop(x)
             self.setupSets(len(self.stockDataInstances.values()), (0,1))
         print('DataManager init complete. Took', time.time() - startt, 'seconds')
 
-    @classmethod
-    def forTraining(cls, seriesType=SeriesType.DAILY, **kwargs):
-        normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType)
+    # @classmethod
+    # def forTraining(cls, seriesType=SeriesType.DAILY, **kwargs):
+    #     normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType)
         
+    #     normalizationInfo = {}
+    #     for c in range(len(normalizationColumns)):
+    #         normalizationInfo[normalizationColumns[c]] = normalizationMaxes[c]
+        
+    #     return cls(
+    #         seriesType=seriesType,
+    #         normalizationInfo=normalizationInfo, symbolList=symbolList, 
+    #         **kwargs
+    #     )
+
+    # @classmethod
+    # def forAnalysis(cls, nn: NeuralNetworkInstance, **kwargs):
+    #     normalizationInfo = nn.stats.getNormalizationInfo()
+    #     _, _, symbolList = dbm.getNormalizationData(nn.stats.seriesType, normalizationInfo=normalizationInfo, **kwargs) #exchanges=exchanges, excludeExchanges=excludeExchanges, sectors=sectors, excludeSectors=excludeSectors)
+
+    #     return cls(
+    #         precedingRange=nn.stats.precedingRange, followingRange=nn.stats.followingRange, seriesType=nn.stats.seriesType, threshold=nn.stats.changeThreshold, inputVectorFactory=nn.inputVectorFactory,
+    #         normalizationInfo=normalizationInfo, symbolList=symbolList,
+    #         analysis=True,
+    #         **kwargs
+    #     )
+
     def buildInputVector(self, stockDataSet: StockDataHandler, stockDataIndex, googleInterestData, symbolData):
         startt = time.time()
         precset = stockDataSet.getPrecedingSet(stockDataIndex)
@@ -153,38 +147,186 @@ class DataManager():
 
         return ret
 
-    def initializeStockDataHandlers(self, symbolList, normalizationInfo, precedingRange, followingRange, seriesType, threshold):
-        
-        for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):   
-            if (s.exchange, s.symbol) in testingSymbols + unusableSymbols: continue
-            data = dbm.getStockData(s.exchange, s.symbol, seriesType)
-            if len(data) >= precedingRange + followingRange + 1:
-                self.stockDataHandlers[(s.exchange, s.symbol)] = StockDataHandler(
-                    s,
-                    seriesType,
-                    data,
-                    *normalizationInfo.values(),
-                    precedingRange,
-                    followingRange
-        )
+    def initializeStockDataHandlers(self, dbm, symbolList, normalizationInfo, precedingRange, followingRange, seriesType, threshold):
+        if gconfig.multicore:
+            for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockDataTickerTuples, seriesType=seriesType), symbolList, chunksize=1, desc='Getting stock data'), desc='Creating stock handlers'):
+                if len(data) >= precedingRange + followingRange + 1:
+                    self.stockDataHandlers[(ticker.exchange, ticker.symbol)] = StockDataHandler(
+                        ticker,
+                        seriesType,
+                        data,
+                        *normalizationInfo.values(),
+                        precedingRange,
+                        followingRange
+                    )
+            
+            h: StockDataHandler
+            for h in tqdm.tqdm(self.stockDataHandlers.values(), desc='Initializing stock instances'):
+                for sindex in h.getAvailableSelections():
+                    try:
+                        change = (h.data[sindex + followingRange].low / h.data[sindex - 1].high) - 1
+                    except ZeroDivisionError:
+                        change = 0
 
-        h: StockDataHandler
-        for h in tqdm.tqdm(self.stockDataHandlers.values(), desc='Initializing stock instances'):
-            for sindex in h.getAvailableSelections():
-                try:
-                    change = (h.data[sindex + followingRange].low / h.data[sindex - 1].high) - 1
-                except ZeroDivisionError:
-                    change = 0
+                    self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, h.data[sindex].date)] = DataPointInstance(
+                        self.buildInputVector,
+                        h, sindex,
+                        positiveClass if change >= threshold else negativeClass
+                    )
 
-                self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, h.data[sindex].date)] = DataPointInstance(
-                    self.buildInputVector,
-                    h, sindex,
-                    positiveClass if change >= threshold else negativeClass
-        )
+        else:
+            for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):   
+                if (s.exchange, s.symbol) in testingSymbols + unusableSymbols: continue
+                data = dbm.getStockData(s.exchange, s.symbol, seriesType)
+                if len(data) >= precedingRange + followingRange + 1:
+                    self.stockDataHandlers[(s.exchange, s.symbol)] = StockDataHandler(
+                        s,
+                        seriesType,
+                        data,
+                        *normalizationInfo.values(),
+                        precedingRange,
+                        followingRange
+                    )
         
-        for s in tqdm.tqdm(symbolList, desc='Creating financial handlers'):  
-            if (s.exchange, s.symbol) in testingSymbols + unusableSymbols: continue
-            self.financialDataHandlers[(s.exchange, s.symbol)] = FinancialDataHandler(s, dbm.getFinancialData(s.exchange, s.symbol))
+            h: StockDataHandler
+            for h in tqdm.tqdm(self.stockDataHandlers.values(), desc='Initializing stock instances'):
+                for sindex in h.getAvailableSelections():
+                    try:
+                        change = (h.data[sindex + followingRange].low / h.data[sindex - 1].high) - 1
+                    except ZeroDivisionError:
+                        change = 0
+
+                    self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, h.data[sindex].date)] = DataPointInstance(
+                        self.buildInputVector,
+                        h, sindex,
+                        positiveClass if change >= threshold else negativeClass
+                    )
+        
+    def initializeFinancialDataHandlers(self, dbm, symbolList):
+        ANALYZE1 = False
+        ANALYZE2 = False
+        ANALYZE3 = False
+
+        if gconfig.multicore:
+            for ticker, data in tqdm.tqdm(process_map(multicore_getFinancialDataTickerTuples, symbolList, chunksize=1, desc='Getting financial data'), desc='Creating financial handlers'):
+                self.financialDataHandlers[(ticker.exchange, ticker.symbol)] = FinancialDataHandler(ticker, data)  
+
+        else:
+            gettingtime = 0
+            massagingtime = 0
+            creatingtime = 0
+            insertingtime = 0
+            
+
+            restotal = []
+            if not ANALYZE2:
+                for s in tqdm.tqdm(symbolList, desc='Creating financial handlers'):  
+                    if (s.exchange, s.symbol) in testingSymbols + unusableSymbols: continue
+                    if not ANALYZE1 and not ANALYZE2 and not ANALYZE3:
+                        self.financialDataHandlers[(s.exchange, s.symbol)] = FinancialDataHandler(s, dbm.getFinancialData(s.exchange, s.symbol))
+                    else:
+
+                        if ANALYZE3:
+                            startt = time.time()
+
+                            # data = dbm.getFinancialData(s.exchange, s.symbol)
+                            stmt = 'SELECT * FROM vwtb_edgar_financial_nums n JOIN vwtb_edgar_quarters q ON n.exchange = q.exchange AND n.symbol = q.symbol AND n.ddate = q.period WHERE n.exchange=? AND n.symbol=? ORDER BY q.period'
+                            restotal.append((s, dbm.dbc.execute(stmt, (s.exchange, s.symbol)).fetchall()))
+                            gettingtime += time.time() - startt
+                        elif ANALYZE1:
+                            startt = time.time()
+
+                            # data = dbm.getFinancialData(s.exchange, s.symbol)
+                            stmt = 'SELECT * FROM vwtb_edgar_financial_nums n JOIN vwtb_edgar_quarters q ON n.exchange = q.exchange AND n.symbol = q.symbol AND n.ddate = q.period WHERE n.exchange=? AND n.symbol=? ORDER BY q.period'
+                            res = dbm.dbc.execute(stmt, (s.exchange, s.symbol)).fetchall()
+                            gettingtime += time.time() - startt
+
+                            startt = time.time()
+                            ## format results, maybe need new layer
+                            createQuarterObj = lambda rw: { 'period': rw.period, 'quarter': rw.quarter, 'filed': rw.filed, 'nums': { rw.tag: rw.value }}
+                            ret = []
+                            curquarter = createQuarterObj(res[0])
+                            for r in res[1:]:
+                                if curquarter['period'] != r.period:
+                                    ret.append(curquarter)
+                                    curquarter = createQuarterObj(r)
+                                else:
+                                    curquarter['nums'][r.tag] = r.value
+                            ret.append(curquarter)
+
+                            data = recdotlist(ret)
+                            massagingtime += time.time() - startt
+
+
+                            startt = time.time()
+                            fdh = FinancialDataHandler(s, data)
+                            creatingtime += time.time() - startt
+                            
+                            startt = time.time()
+                            self.financialDataHandlers[(s.exchange, s.symbol)] = fdh
+                            insertingtime += time.time() - startt
+            elif ANALYZE2:
+                startt = time.time()
+
+                # data = dbm.getFinancialData(s.exchange, s.symbol)
+                stmt = 'SELECT * FROM vwtb_edgar_financial_nums n JOIN vwtb_edgar_quarters q ON n.exchange = q.exchange AND n.symbol = q.symbol AND n.ddate = q.period ORDER BY n.exchange, n.symbol, q.period'
+                res = dbm.dbc.execute(stmt).fetchall()
+                gettingtime += time.time() - startt
+
+                startt = time.time()
+                excludeList = testingSymbols + unusableSymbols
+                ## format results, maybe need new layer
+                createQuarterObj = lambda rw: { 'period': rw.period, 'quarter': rw.quarter, 'filed': rw.filed, 'nums': { rw.tag: rw.value }}
+
+                ret = []
+                curquarter = createQuarterObj(res[0])
+                curticker = (res[0].exchange, res[0].symbol)
+                for r in res[1:]:
+                    if (r.exchange, r.symbol) in excludeList: continue
+
+
+                    if (r.exchange, r.symbol) != curticker:
+                        if curticker in excludeList:
+                            pass
+                        else:
+                            ret.append(curquarter)
+                            s = next((x for x in symbolList if x.exchange == r.exchange and x.symbol == r.symbol), None)
+                            if s: 
+                                
+                                # raise IndexError
+                                self.financialDataHandlers[(r.exchange, r.symbol)] = FinancialDataHandler(s, recdotlist(ret))
+                            
+                        ret = []
+                        curquarter = createQuarterObj(r)
+                        curticker = (r.exchange, r.symbol)
+                        continue
+
+                    if curquarter['period'] != r.period:
+                        ret.append(curquarter)
+                        curquarter = createQuarterObj(r)
+                    else:
+                        curquarter['nums'][r.tag] = r.value
+                massagingtime += time.time() - startt
+            
+            if ANALYZE3:
+                    
+                startt = time.time()
+                fdhs = multicore_poolIMap(parseResAndCreateFDH, restotal)
+                creatingtime += time.time() - startt
+
+                for fdh in fdhs:
+                    startt = time.time()
+                    self.financialDataHandlers[(fdh.symbolData.exchange, fdh.symbolData.symbol)] = fdh
+                    insertingtime += time.time() - startt
+
+
+            if ANALYZE1 or ANALYZE2 or ANALYZE3:
+                print('initializeFinancialDataHandlers stats')
+                print('gettingtime',gettingtime,'seconds')
+                print('massagingtime',massagingtime,'seconds')
+                print('creatingtime',creatingtime,'seconds')
+                print('insertingtime',insertingtime,'seconds')
+                print('total',gettingtime+massagingtime+creatingtime+insertingtime,'seconds')
 
     def setupSets(self, setCount, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0):
         self.unselectedInstances = list(self.stockDataInstances.values())
@@ -276,7 +418,7 @@ class DataManager():
 
         # return trainingSet, validationSet, testingSet
 
-    def setupSetsFromSave(self, id, setid=1):
+    def setupSetsFromSave(self, dbm, id, setid=1):
         dataset = dbm.getDataSet(id, setid)
         self.trainingSet = [s for s in dataset if s.set_type == SetType.TRAINING.name]
         self.validationSet = [s for s in dataset if s.set_type == SetType.VALIDATION.name]
@@ -314,34 +456,26 @@ class DataManager():
         return ret
 
     def getKerasSets(self, classification=0, validationDataOnly=False, maxSize=0, index=0, exchange=None, symbol=None, verbose=1):
-        def constrList_helper(set: List[DataPointInstance], isInput):
+        
+        self.getprecstocktime = 0
+        self.getprecfintime = 0
+        self.actualbuildtime = 0
+        def constrList_helper(set: List[DataPointInstance], isInput, showProgress=True):
             retList = []
-            for i in tqdm.tqdm(set, desc='Building input vector array') if isInput and verbose != 0 else set:
+            for i in tqdm.tqdm(set, desc='Building input vector array') if showProgress and isInput and verbose != 0 else set:
                 retList.append(i.getInputVector() if isInput else i.getOutputVector())
             return retList
 
-        # def constrList_multicore(set, isInput):
-        #     MAX_WORKERS = 4
-        #     retList = []
-        #     stime = int(time.time())
-        #     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as execu:
-        #         splice = len(set)/MAX_WORKERS
-        #         splits = [set[0 + int(splice*i) : int(splice*(i+1))] for i in range(MAX_WORKERS)]
-        #         future_retlist = {execu.submit(constrList_helper, splits[i], isInput): i for i in range(MAX_WORKERS)}
-        #         for future in concurrent.futures.as_completed(future_retlist):
-        #             retList.append(future.result())
-        #     print("Spent ", str(int(time.time()) - stime),' seconds looping in constrList')
-        #     return numpy.asarray(retList)
-
         def constrList(set: List, isInput: bool) -> numpy.array:
-            # USE_MULTICORE = False
-            # USE_MULTICORE = True
-            # if (USE_MULTICORE): return constrList_multicore(set, isInput)
-            # else: 
             return numpy.asarray(constrList_helper(set, isInput))
 
         def constructDataSet(lst):
+            # inp = constrList(lst, True)
+            # ouplist = constrList(lst, False)
+            # oup = keras.utils.to_categorical(ouplist, num_classes=numOutputClasses)
+            # return [inp, oup]
             return [constrList(lst, True), keras.utils.to_categorical(constrList(lst, False), num_classes=numOutputClasses)]
+
 
         ## only select from certain class if specified
         if classification:
@@ -366,9 +500,13 @@ class DataManager():
         trainingData = constructDataSet(trainingSet)
         testingData = constructDataSet(testingSet)
 
+        print('Stock data handler build time', self.getprecstocktime)
+        print('Financial reports build time', self.getprecfintime)
+        print('Total vector build time', self.actualbuildtime)
+
         return [trainingData, validationData, testingData]
 
-    def save(self, networkId, setId=None):
+    def save(self, dbm, networkId, setId=None):
         dbm.saveDataSet(networkId, self.trainingSet, self.validationSet, self.testingSet, setId)
 
 

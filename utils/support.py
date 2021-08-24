@@ -10,6 +10,7 @@ sys.path.append(path)
 
 import numpy, re
 from datetime import date, datetime, timedelta
+from multiprocessing import Pool, cpu_count
 
 from constants.values import months, foundedSynonyms
 
@@ -258,6 +259,14 @@ def processDBQuartersToDicts(qlist):
     ret.append(curquarter)
 
     return recdotlist(ret)
+
+def multicore_poolIMap(func, iter, chuckSize=1):
+    pool = Pool()
+    ret = pool.imap(func, iter, chuckSize)
+    pool.close()
+    pool.join()
+    return ret
+
 if __name__ == '__main__':
     # print(getMarketHolidays(2021))
     # print(processRawValueToInsertValue(44))
