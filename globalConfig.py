@@ -94,7 +94,8 @@ config = recdotdict({
 
     'testing': {
         'enabled': TESTING,
-        'exchange': 'NYSE'
+        'exchange': 'NYSE',
+        'stockQueryLimit': 250
     },
 
     'training': trainingConfig

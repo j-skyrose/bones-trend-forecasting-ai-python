@@ -56,68 +56,6 @@ class Trainer:
         self.instance = TrainingInstance(self.network, *sets, { 'epochs': 1, 'batchSize': 32 }, class1set, class2set)  
         print('Startup time required:', time.time() - startt, 'seconds')
 
-    ## todo, modify for validationData change to .fit, might not be interruptible
-    def train(self, stopTime=None, trainingDuration=0, iterations=None, evaluateEveryXIterations=0, lossIterationTolerance=0):
-        if iterations:
-            epochs = 1
-            periodicValidation = False
-            if evaluateEveryXIterations:
-                iterations, remainderIterations = divmod(iterations, evaluateEveryXIterations)
-                epochs = evaluateEveryXIterations
-                periodicValidation = True
-
-            self.instance.train(iterations, epochs=epochs, validatePeriodically=periodicValidation)
-            if remainderIterations: self.instance.train(1, epochs=remainderIterations)
-        else:
-
-            stopTime = shortc(stopTime, time.time() + trainingDuration)
-
-            iterationTimeRequired = time.time()
-            self.instance.train(1)
-            iterationTimeRequired = time.time() - iterationTimeRequired
-
-            previousLoss = self.instance.evaluate()[self.instance.network.stats.accuracyType][LossAccuracy.LOSS] if lossIterationTolerance else 0
-            lossIterationToleranceCounter = 0
-
-            batchingIterations = 1
-            if not lossIterationTolerance:
-                if evaluateEveryXIterations:
-                        batchingIterations = evaluateEveryXIterations
-                        iterationTimeRequired = iterationTimeRequired * evaluateEveryXIterations
-                else:
-                    batchingIterations = int((stopTime - time.time()) / iterationTimeRequired)
-                    print(stopTime - time.time(), iterationTimeRequired, batchingIterations)
-
-            itcount = 0
-            while lossIterationTolerance or time.time() + iterationTimeRequired < stopTime:
-                if itcount % 5 == 0:
-                    # K.clear_session()
-                    gc.collect()
-                itcount += 1
-                try:
-                    print('Iterating...')
-                    self.instance.train(1, epochs=batchingIterations)
-
-                    if lossIterationTolerance:
-                        loss = self.instance.evaluate()[self.instance.network.stats.accuracyType][LossAccuracy.LOSS]
-
-                        if previousLoss < loss:
-                            lossIterationToleranceCounter += 1
-                            if lossIterationToleranceCounter > lossIterationTolerance:
-                                break
-                        else:
-                            lossIterationToleranceCounter = 0
-                            
-                        previousLoss = loss
-
-                    else:
-                        if evaluateEveryXIterations:
-                            self.instance.evaluate()
-                        else:
-                            batchingIterations = 1
-                except KeyboardInterrupt:
-                    break
-
     ## outddated with incorporation of validationSet, EarlyStopping, ModelCheckpoint in model.fit
     def train_old(self, stopTime=None, trainingDuration=0, iterations=None, evaluateEveryXIterations=0, lossIterationTolerance=0):
         if iterations:
@@ -158,7 +96,8 @@ class Trainer:
                 itcount += 1
                 try:
                     print('Iterating...')
-                    self.instance.train(1, epochs=batchingIterations)
+                    # self.instance.train(1, epochs=batchingIterations)
+                    self.instance.train(batchingIterations)
 
                     if lossIterationTolerance:
                         loss = self.instance.evaluate()[self.instance.network.stats.accuracyType][LossAccuracy.LOSS]
@@ -239,10 +178,13 @@ if __name__ == '__main__':
     
     p: Trainer = t
 
-    # p.train(iterations=50, evaluateEveryXIterations=20)
-    # p.train(trainingDuration=0.2*60*60, evaluateEveryXIterations=20)
-    p.train(lossIterationTolerance=2)
-    # p.train(stopTime=getTimestamp(hour=14, minute=0))
+    # p.instance.train(iterations=50, evaluateEveryXIterations=20)
+    # p.instance.train(trainingDuration=0.2*60*60, evaluateEveryXIterations=20)
+    p.instance.train(patience=4)
+    # p.instance.train(stopTime=getTimestamp(hour=14, minute=0))
+    # p.instance.train(validationType=AccuracyType.NEGATIVE, timeDuration=60*2)
+    # p.instance.train(timeDuration=30)
+    # p.instance.train(stopTime=getTimestamp(hour=22, minute=28))
 
     # p.saveNetwork()
 

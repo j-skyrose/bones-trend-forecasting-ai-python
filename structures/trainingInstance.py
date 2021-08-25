@@ -7,9 +7,10 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import math
 os.environ['FOR_DISABLE_CONSOLE_CTRL_HANDLER'] = '1'
+import math, time
 from tensorflow.keras.optimizers import Adam
+from tensorflow import keras
 from keras.callbacks import EarlyStopping
 from keras.callbacks import ModelCheckpoint
 
@@ -22,6 +23,21 @@ from utils.support import recdotdict, shortc
 from globalConfig import trainingConfig
 
 
+class TimeBasedEarlyStoppingCallback(keras.callbacks.Callback):
+    def __init__(self, stopTime=None, timeDuration=None):
+        super(TimeBasedEarlyStoppingCallback, self).__init__()
+        self.stopTime = stopTime
+        self.timeDuration = timeDuration
+    
+    def on_train_begin(self, logs=None):
+        self.startTime = time.time()
+
+    def on_epoch_end(self, epoch, logs=None):
+        if (self.stopTime and time.time() > self.stopTime) or (self.timeDuration and time.time() - self.startTime > self.timeDuration):
+            self.stopped_epoch = epoch
+            self.model.stop_training = True
+
+
 class TrainingInstance():
     def __init__(self, nnetwork: NeuralNetworkInstance, trainingSet, validationSet, testingSet, 
             tconfig=trainingConfig, validationPSet=None, validationNSet=None, testingPSet=None, testingNSet=None):
@@ -31,13 +47,15 @@ class TrainingInstance():
         self.testingSet = testingSet
         self.config = recdotdict(tconfig)
 
-        self.validationDataHandler: EvaluationDataHandler = EvaluationDataHandler(validationSet)
-        self.validationDataHandler[AccuracyType.POSITIVE] = validationPSet
-        self.validationDataHandler[AccuracyType.NEGATIVE] = validationNSet
+        if len(validationSet[0]) or (validationPSet and validationNSet):
+            self.validationDataHandler: EvaluationDataHandler = EvaluationDataHandler(validationSet)
+            self.validationDataHandler[AccuracyType.POSITIVE] = validationPSet
+            self.validationDataHandler[AccuracyType.NEGATIVE] = validationNSet
 
-        self.testingDataHandler: EvaluationDataHandler = EvaluationDataHandler(testingSet)
-        self.testingDataHandler[AccuracyType.POSITIVE] = testingPSet
-        self.testingDataHandler[AccuracyType.NEGATIVE] = testingNSet
+        if len(testingSet[0]) or (testingPSet and testingNSet):
+            self.testingDataHandler: EvaluationDataHandler = EvaluationDataHandler(testingSet)
+            self.testingDataHandler[AccuracyType.POSITIVE] = testingPSet
+            self.testingDataHandler[AccuracyType.NEGATIVE] = testingNSet
 
     def setTrainingConfig(self, config=None, epochs=None, batchSize=None):
         if config:
@@ -60,40 +78,51 @@ class TrainingInstance():
             pass
         return self.evaluate(verbose)
 
-    ## todo, custom callbacks for earlystopping, modelcheckpoint, to check against all eval sets
-    def train(self, epochs, validationType: AccuracyType=None, earlyStopping=False, esPatience=1, modelCheckpoint=False, verbose=1):
+    def train(self, epochs=None, minEpochs=5, validationType: AccuracyType=AccuracyType.OVERALL, patience=None, stopTime=None, timeDuration=None, verbose=1):
         try:
-            callbacks = []
-            if earlyStopping: callbacks.append(EarlyStopping(monitor='val_loss', mode='min', verbose=verbose, patience=esPatience))
-            if modelCheckpoint: callbacks.append(ModelCheckpoint(self.network.filepath, monitor='val_loss', mode='min', verbose=verbose, save_best_only=True))
+            validation_data = self.validationDataHandler.getTuple(validationType) if validationType else None
+            self.network.fit(*self.trainingSet, 
+                epochs=minEpochs, 
+                batch_size=self.config.batchSize, verbose=verbose, validation_data=validation_data
+            )
+            
+            ## train for a few epochs without any callbacks?
 
-            self.network.fit(*self.trainingSet, epochs=shortc(epochs, self.config.epochs), batch_size=self.config.batchSize, verbose=verbose,
-                validationData=self.validationDataHandler[validationType] if validationType else None,
+            callbacks = [TimeBasedEarlyStoppingCallback(stopTime=stopTime, timeDuration=timeDuration)]
+            if patience: callbacks.append(EarlyStopping(
+                monitor='val_accuracy', mode='max', 
+                # monitor='val_loss', mode='min', 
+                verbose=verbose, patience=patience, restore_best_weights=True))
+
+            if stopTime: 
+                print('Stopping at', stopTime)
+                print('Current time', time.time())
+
+            if len(self.validationDataHandler[validationType][0]) == 0:
+                raise IndexError('Validation set empty')
+
+            self.network.fit(*self.trainingSet, 
+                epochs=sys.maxsize if stopTime or timeDuration or patience else shortc(epochs, self.config.epochs), 
+                batch_size=self.config.batchSize, verbose=verbose, validation_data=validation_data,
                 callbacks=callbacks
             )
-
-            ## reload best network from saved file
-            if modelCheckpoint:
-                self.network.reload()
             
             ## update stats
             self.evaluate(verbose)
-            
             
             pass
         except KeyboardInterrupt:
             print('interruptted')
             raise KeyboardInterrupt
             pass
-        # return self.evaluate(verbose)
     
     def evaluate(self, verbose=1):
-        # if len(self.validationData[0]) > 0:
-            # return self.network.evaluate(*self.validationData, batch_size=self.config.batchSize, verbose=verbose)
+        if not self.validationDataHandler: raise AttributeError
         return self.network.evaluate(self.validationDataHandler, batch_size=self.config.batchSize, verbose=verbose)
 
 
     def test(self, verbose=1):
+        if not self.testingDataHandler: raise AttributeError
         return self.network.evaluate(self.testingDataHandler, batch_size=self.config.batchSize, verbose=verbose)        
 
 

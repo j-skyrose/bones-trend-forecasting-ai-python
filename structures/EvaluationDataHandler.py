@@ -51,6 +51,9 @@ class EvaluationDataHandler:
     def getAccuracyType(self, index):
         return self.internal.keys()[index]
 
+    def getTuple(self, key):
+        return (self.internal[key][0], self.internal[key][1])
+
     def evaluateAll(self, model: tf.keras.Model, **kwargs) -> EvaluationResultsObj:
         # for s in range(len(inputVectorSets)):
         #     if len(inputVectorSets[s]) > 0:
