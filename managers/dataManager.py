@@ -82,9 +82,10 @@ class DataManager():
                 symbolList.remove(s)
 
         ## pull and setup financial reports ref
-        startt2 = time.time()
-        self.initializeFinancialDataHandlers(dbm, symbolList)
-        print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
+        if gconfig.feature.financials.enabled:
+            startt2 = time.time()
+            self.initializeFinancialDataHandlers(dbm, symbolList)
+            print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
 
         startt2 = time.time()
         self.initializeStockDataHandlers(dbm, symbolList, recdotdict(normalizationInfo), precedingRange, followingRange, seriesType, threshold)
@@ -128,9 +129,12 @@ class DataManager():
         precset = stockDataSet.getPrecedingSet(stockDataIndex)
         self.getprecstocktime += time.time() - startt
 
-        startt = time.time()
-        precfinset = self.financialDataHandlers[(symbolData.exchange, symbolData.symbol)].getPrecedingReports(date.fromisoformat(stockDataSet.data[stockDataIndex].date), self.precedingRange)
-        self.getprecfintime += time.time() - startt
+        if gconfig.feature.financials.enabled:
+            startt = time.time()
+            precfinset = self.financialDataHandlers[(symbolData.exchange, symbolData.symbol)].getPrecedingReports(date.fromisoformat(stockDataSet.data[stockDataIndex].date), self.precedingRange)
+            self.getprecfintime += time.time() - startt
+        else:
+            precfinset = []
 
         startt = time.time()
         ret = self.inputVectorFactory.build(
