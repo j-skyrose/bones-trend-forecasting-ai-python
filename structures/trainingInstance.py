@@ -18,6 +18,7 @@ from managers.dataManager import DataManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.EvaluationDataHandler import EvaluationDataHandler
+from structures.EarlyStoppingWithCustomValidationCallback import EarlyStoppingWithCustomValidation
 from constants.enums import SeriesType, AccuracyType
 from utils.support import recdotdict, shortc
 from globalConfig import trainingConfig
@@ -83,13 +84,20 @@ class TrainingInstance():
             validation_data = self.validationDataHandler.getTuple(validationType) if validationType else None
             self.network.fit(*self.trainingSet, 
                 epochs=minEpochs, 
-                batch_size=self.config.batchSize, verbose=verbose, validation_data=validation_data
+                batch_size=self.config.batchSize, verbose=verbose, 
+                validation_data=validation_data
             )
             
             ## train for a few epochs without any callbacks?
 
             callbacks = [TimeBasedEarlyStoppingCallback(stopTime=stopTime, timeDuration=timeDuration)]
-            if patience: callbacks.append(EarlyStopping(
+            if patience: callbacks.append(EarlyStoppingWithCustomValidation(
+                network = self.network, batchSize=self.config.batchSize, 
+                    custom_validation_data= None if validationType == AccuracyType.OVERALL else [
+                        self.validationDataHandler.getTuple(AccuracyType.POSITIVE),
+                        self.validationDataHandler.getTuple(AccuracyType.NEGATIVE)
+                    ], 
+                    custom_validation_data_values=[1/3, 2/3] if validationType != AccuracyType.OVERALL else None,
                 monitor='val_accuracy', mode='max', 
                 # monitor='val_loss', mode='min', 
                 verbose=verbose, patience=patience, restore_best_weights=True))
@@ -103,7 +111,7 @@ class TrainingInstance():
 
             self.network.fit(*self.trainingSet, 
                 epochs=sys.maxsize if stopTime or timeDuration or patience else shortc(epochs, self.config.epochs), 
-                batch_size=self.config.batchSize, verbose=verbose, validation_data=validation_data,
+                batch_size=self.config.batchSize, verbose=verbose, 
                 callbacks=callbacks
             )
             

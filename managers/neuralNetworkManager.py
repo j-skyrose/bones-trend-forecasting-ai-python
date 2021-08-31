@@ -32,7 +32,7 @@ class NeuralNetworkManager(Singleton):
         }
 
     def createNetworkInstance(self, *args, **kwargs):
-        print('Creating NN', *args, **kwargs)
+        print('Creating NN', args, kwargs)
         id = str(int(time.time()))
         r = self.networks[id] = NeuralNetworkInstance.new(id, *args, **kwargs)
         return r

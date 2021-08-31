@@ -17,11 +17,11 @@ class EvaluationDataHandler:
     internal = {}
 
     def __init__(self, validationSet, negativeValidationSet=None, positiveValidationSet=None):
-        self.internal[AccuracyType.OVERALL] = validationSet
-        if negativeValidationSet:
-            self.internal[AccuracyType.NEGATIVE] = negativeValidationSet
         if positiveValidationSet:
             self.internal[AccuracyType.POSITIVE] = positiveValidationSet
+        if negativeValidationSet:
+            self.internal[AccuracyType.NEGATIVE] = negativeValidationSet
+        self.internal[AccuracyType.OVERALL] = validationSet
 
     def __getitem__(self, key):
         try:

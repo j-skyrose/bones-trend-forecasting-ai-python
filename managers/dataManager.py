@@ -371,7 +371,7 @@ class DataManager():
                 print('Available positive instances', len(puints))
                 print('Available negative instances', len(nuints))
 
-            pusamplesize = int(min(len(puints), setCount / 2 - len(psints)) if setCount / 2 - len(psints) > 0 else len(puints))
+            pusamplesize = int(min(len(puints), setCount * gconfig.sets.positiveSplitRatio - len(psints)) if setCount / 2 - len(psints) > 0 else len(puints))
             self.selectedInstances.extend(random.sample(puints, pusamplesize))
             nusamplesize = int(min(len(nuints), setCount - len(self.selectedInstances)) if setCount - len(self.selectedInstances) > 0 else len(nuints))
             self.selectedInstances.extend(random.sample(nuints, nusamplesize))

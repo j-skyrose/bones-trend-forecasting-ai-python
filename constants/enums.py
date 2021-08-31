@@ -28,6 +28,12 @@ class AccuracyType(Enum):
     def __init__(self, a, b):
         self.statsName = b
 
+    @classmethod
+    def getOpposite(cls, a):
+        if a == cls.POSITIVE: return cls.NEGATIVE
+        if a == cls.NEGATIVE: return cls.POSITIVE
+        return a
+
     OVERALL = 'OVERALL', 'overallAccuracy'
     POSITIVE = 'POSITIVE', 'positiveAccuracy'
     NEGATIVE = 'NEGATIVE', 'negativeAccuracy'
@@ -88,3 +94,5 @@ if __name__ == '__main__':
     print(AccuracyType.OVERALL.name, AccuracyType.OVERALL.value, AccuracyType.OVERALL.statsName)
     print(FinancialReportType.YEAR.name, FinancialReportType.YEAR.value)
     print(FinancialReportType.getNameFor('Q'))
+
+    print(AccuracyType.getOpposite(AccuracyType.POSITIVE))

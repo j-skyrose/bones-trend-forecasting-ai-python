@@ -134,10 +134,10 @@ if __name__ == '__main__':
 
     if arg1.lower() == 'new':
         # precrange = 202
-        precrange = 150
-        # precrange = 75
-        folrange = 20
-        threshold = 0.05
+        # precrange = 150
+        precrange = 65
+        folrange = 30
+        threshold = 0.1
         setSplitTuple = (0.80,0.20)
 
         if gconfig.testing.enabled:
@@ -154,12 +154,13 @@ if __name__ == '__main__':
         inputSize = InputVectorFactory().getInputSize(precrange)
         optimizer = Adam(amsgrad=True)
         layers = [
-            { 'units': math.floor(inputSize / 1.5), 'dropout': False, 'dropoutRate': 0.001 },
+            { 'units': math.floor(inputSize / 1.3), 'dropout': False, 'dropoutRate': 0.001 },
+            { 'units': math.floor(inputSize / 1.7), 'dropout': False, 'dropoutRate': 0.001 },
         ]
 
         t = Trainer(
             network=nnm.createNetworkInstance(
-                optimizer, layers, inputSize
+                optimizer, layers, inputSize, accuracyType=AccuracyType.NEGATIVE
             ),
             precedingRange=precrange, 
             followingRange=folrange,
@@ -180,11 +181,15 @@ if __name__ == '__main__':
 
     # p.instance.train(iterations=50, evaluateEveryXIterations=20)
     # p.instance.train(trainingDuration=0.2*60*60, evaluateEveryXIterations=20)
-    p.instance.train(patience=4)
+    # p.instance.train(patience=4)
     # p.instance.train(stopTime=getTimestamp(hour=14, minute=0))
     # p.instance.train(validationType=AccuracyType.NEGATIVE, timeDuration=60*2)
     # p.instance.train(timeDuration=30)
     # p.instance.train(stopTime=getTimestamp(hour=22, minute=28))
+    
+    p.instance.train(validationType=AccuracyType.NEGATIVE, patience=25, 
+    # stopTime=getTimestamp(hour=22, minute=0)
+    )
 
     # p.saveNetwork()
 

@@ -11,7 +11,10 @@ from constants.enums import DataFormType, SeriesType
 from utils.support import recdotdict
 
 # TESTING = True
-TESTING = False
+try:
+    if TESTING: pass
+except:
+    TESTING = False
 
 trainingConfig = {
     ## master
@@ -49,12 +52,15 @@ def genFeatureObj(enabled, extype, dataRequired=True):
 config = recdotdict({
     'multicore': True,
     'dataForm': {
-        # 'dayOfWeek': DataFormType.VECTOR,
-        # 'dayOfMonth': DataFormType.VECTOR,
-        # 'monthOfYear': DataFormType.VECTOR
-        'dayOfWeek': DataFormType.INTEGER,
-        'dayOfMonth': DataFormType.INTEGER,
-        'monthOfYear': DataFormType.INTEGER
+        'dayOfWeek': DataFormType.VECTOR,
+        'dayOfMonth': DataFormType.VECTOR,
+        'monthOfYear': DataFormType.VECTOR
+        # 'dayOfWeek': DataFormType.INTEGER,
+        # 'dayOfMonth': DataFormType.INTEGER,
+        # 'monthOfYear': DataFormType.INTEGER
+    },
+    'sets': {
+        'positiveSplitRatio': 1/6 # default 0.5
     },
     'feature': {
         'exchange': genFeatureObj(False, 'single'),
@@ -79,7 +85,7 @@ config = recdotdict({
             'close': genFeatureObj(True, 'vixkey')
         },
         'financials': {
-            'enabled': True,
+            'enabled': False,
             'extype': 'financials',
             'dataRequired': True,
             
@@ -95,7 +101,7 @@ config = recdotdict({
     'testing': {
         'enabled': TESTING,
         'exchange': 'NYSE',
-        'stockQueryLimit': 250
+        'stockQueryLimit': 50
     },
 
     'training': trainingConfig
