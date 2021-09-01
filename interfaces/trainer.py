@@ -37,7 +37,7 @@ class Trainer:
     def __init__(self, network=None, networkId=None, **kwargs):
         startt = time.time()
         self.network = nnm.get(networkId) if networkId else network
-        self.dm: DataManagerDBWrapper = DataManagerDBWrapper.forTraining(inputVectorFactory=self.network.inputVectorFactory, **kwargs)
+        self.dm: DataManager = DataManager.forTraining(inputVectorFactory=self.network.inputVectorFactory, **kwargs)
 
         if network:
             self.network.updateStats(
@@ -46,9 +46,9 @@ class Trainer:
             )
 
         setstartt = time.time()
-        sets = self.dm.dm.getKerasSets()
-        class1set = self.dm.dm.getKerasSets(1, True)
-        class2set = self.dm.dm.getKerasSets(2, True)
+        sets = self.dm.getKerasSets()
+        class1set = self.dm.getKerasSets(1, True)
+        class2set = self.dm.getKerasSets(2, True)
 
         print('Set creation time required:', time.time() - setstartt, 'seconds')
         print('Set creation breakdown')
