@@ -19,17 +19,19 @@ from globalConfig import config as gconfig
 from constants.enums import SeriesType, SetType
 from utils.support import Singleton, flatten, recdotdict, recdotlist, shortc, multicore_poolIMap, processDBQuartersToDicts
 from constants.values import testingSymbols, unusableSymbols
-# from managers.stockDataManager import StockDataManager
+from managers.stockDataManager import StockDataManager
 from managers.databaseManager import DatabaseManager
-# from managers.vixManager import VIXManager
+from managers.vixManager import VIXManager
 from managers.inputVectorFactory import InputVectorFactory
-# from structures.neuralNetworkInstance import NeuralNetworkInstance
+from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.financialDataHandler import FinancialDataHandler
 from structures.stockDataHandler import StockDataHandler
 from structures.dataPointInstance import DataPointInstance, numOutputClasses, positiveClass, negativeClass
 from structures.api.googleTrends.request import GoogleAPI
 
 DEBUG = True
+
+dbm: DatabaseManager = DatabaseManager()
 
 def multicore_getFinancialDataTickerTuples(ticker):
     return (ticker, DatabaseManager().getFinancialData(ticker.exchange, ticker.symbol))
@@ -43,7 +45,7 @@ def multicore_getStockDataTickerTuples(ticker, seriesType):
 class DataManager():
     # stockDataManager: StockDataManager = None
     stockDataHandlers = {}
-    vixDataHandler = None
+    vixDataHandler = VIXManager().data
     financialDataHandlers: Dict[tuple, FinancialDataHandler] = {}
     stockDataInstances = {}
     selectedInstances = []
@@ -54,7 +56,7 @@ class DataManager():
     testingInstances = []
     inputVectorFactory = None
 
-    def __init__(self, dbm, vixDataHandler,
+    def __init__(self,
         precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, threshold=0,
         setCount=None, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
         normalizationInfo={}, symbolList:List=[],
@@ -64,7 +66,6 @@ class DataManager():
         # neuralNetwork: NeuralNetworkInstance=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[]
     ):
         startt = time.time()
-        self.vixDataHandler = vixDataHandler
         self.config = inputVectorFactory.config
         self.inputVectorFactory = inputVectorFactory
         self.precedingRange = precedingRange
@@ -84,11 +85,11 @@ class DataManager():
         ## pull and setup financial reports ref
         if gconfig.feature.financials.enabled:
             startt2 = time.time()
-            self.initializeFinancialDataHandlers(dbm, symbolList)
+            self.initializeFinancialDataHandlers(symbolList)
             print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
 
         startt2 = time.time()
-        self.initializeStockDataHandlers(dbm, symbolList, recdotdict(normalizationInfo), precedingRange, followingRange, seriesType, threshold)
+        self.initializeStockDataHandlers(symbolList, recdotdict(normalizationInfo), precedingRange, followingRange, seriesType, threshold)
         print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
 
 
@@ -98,31 +99,31 @@ class DataManager():
             self.setupSets(len(self.stockDataInstances.values()), (0,1))
         print('DataManager init complete. Took', time.time() - startt, 'seconds')
 
-    # @classmethod
-    # def forTraining(cls, seriesType=SeriesType.DAILY, **kwargs):
-    #     normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType)
+    @classmethod
+    def forTraining(cls, seriesType=SeriesType.DAILY, **kwargs):
+        normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType)
         
-    #     normalizationInfo = {}
-    #     for c in range(len(normalizationColumns)):
-    #         normalizationInfo[normalizationColumns[c]] = normalizationMaxes[c]
+        normalizationInfo = {}
+        for c in range(len(normalizationColumns)):
+            normalizationInfo[normalizationColumns[c]] = normalizationMaxes[c]
         
-    #     return cls(
-    #         seriesType=seriesType,
-    #         normalizationInfo=normalizationInfo, symbolList=symbolList, 
-    #         **kwargs
-    #     )
+        return cls(
+            seriesType=seriesType,
+            normalizationInfo=normalizationInfo, symbolList=symbolList, 
+            **kwargs
+        )
 
-    # @classmethod
-    # def forAnalysis(cls, nn: NeuralNetworkInstance, **kwargs):
-    #     normalizationInfo = nn.stats.getNormalizationInfo()
-    #     _, _, symbolList = dbm.getNormalizationData(nn.stats.seriesType, normalizationInfo=normalizationInfo, **kwargs) #exchanges=exchanges, excludeExchanges=excludeExchanges, sectors=sectors, excludeSectors=excludeSectors)
+    @classmethod
+    def forAnalysis(cls, nn: NeuralNetworkInstance, **kwargs):
+        normalizationInfo = nn.stats.getNormalizationInfo()
+        _, _, symbolList = dbm.getNormalizationData(nn.stats.seriesType, normalizationInfo=normalizationInfo, **kwargs) #exchanges=exchanges, excludeExchanges=excludeExchanges, sectors=sectors, excludeSectors=excludeSectors)
 
-    #     return cls(
-    #         precedingRange=nn.stats.precedingRange, followingRange=nn.stats.followingRange, seriesType=nn.stats.seriesType, threshold=nn.stats.changeThreshold, inputVectorFactory=nn.inputVectorFactory,
-    #         normalizationInfo=normalizationInfo, symbolList=symbolList,
-    #         analysis=True,
-    #         **kwargs
-    #     )
+        return cls(
+            precedingRange=nn.stats.precedingRange, followingRange=nn.stats.followingRange, seriesType=nn.stats.seriesType, threshold=nn.stats.changeThreshold, inputVectorFactory=nn.inputVectorFactory,
+            normalizationInfo=normalizationInfo, symbolList=symbolList,
+            analysis=True,
+            **kwargs
+        )
 
     def buildInputVector(self, stockDataSet: StockDataHandler, stockDataIndex, googleInterestData, symbolData):
         startt = time.time()
@@ -151,7 +152,7 @@ class DataManager():
 
         return ret
 
-    def initializeStockDataHandlers(self, dbm, symbolList, normalizationInfo, precedingRange, followingRange, seriesType, threshold):
+    def initializeStockDataHandlers(self, symbolList, normalizationInfo, precedingRange, followingRange, seriesType, threshold):
         if gconfig.multicore:
             for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockDataTickerTuples, seriesType=seriesType), symbolList, chunksize=1, desc='Getting stock data'), desc='Creating stock handlers'):
                 if len(data) >= precedingRange + followingRange + 1:
@@ -206,7 +207,7 @@ class DataManager():
                         positiveClass if change >= threshold else negativeClass
                     )
         
-    def initializeFinancialDataHandlers(self, dbm, symbolList):
+    def initializeFinancialDataHandlers(self, symbolList):
         ANALYZE1 = False
         ANALYZE2 = False
         ANALYZE3 = False
@@ -422,7 +423,7 @@ class DataManager():
 
         # return trainingSet, validationSet, testingSet
 
-    def setupSetsFromSave(self, dbm, id, setid=1):
+    def setupSetsFromSave(self, id, setid=1):
         dataset = dbm.getDataSet(id, setid)
         self.trainingSet = [s for s in dataset if s.set_type == SetType.TRAINING.name]
         self.validationSet = [s for s in dataset if s.set_type == SetType.VALIDATION.name]
@@ -510,18 +511,18 @@ class DataManager():
 
         return [trainingData, validationData, testingData]
 
-    def save(self, dbm, networkId, setId=None):
+    def save(self, networkId, setId=None):
         dbm.saveDataSet(networkId, self.trainingSet, self.validationSet, self.testingSet, setId)
 
 
 if __name__ == '__main__':
-    s = DataManager(
-        90,
-        30,
+    s = DataManager.forTraining(
         SeriesType.DAILY,
-        2500,
-        setSplitTuple=(1/3,1/3),
+        precedingRange=90,
+        followingRange=30,
         threshold=0.1,
+        setCount=2500,
+        setSplitTuple=(1/3,1/3),
         minimumSetsPerSymbol=1
     )
     # s.getKerasSets(classification=1)
