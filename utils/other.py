@@ -15,6 +15,7 @@ from datetime import date, datetime, timedelta
 from structures.inputVectorStats import InputVectorStats
 from utils.support import recdotdict, shortc, _isoformatd
 from constants.values import interestColumn, stockOffset
+from constants.enums import OutputClass
 
 from globalConfig import config
 
@@ -175,6 +176,16 @@ def _inputVector_old(dataSet, vixRef, googleInterests, listingDate, sector, getS
         )
 
 
+def getInstancesByClass(instances):
+    pclass = []
+    nclass = []
+    for i in instances:
+        try:
+            if i.outputClass == OutputClass.POSITIVE: pclass.append(i)
+            else: nclass.append(i)
+        except:
+            print(i)
+    return pclass, nclass  
 
 
 if __name__ == '__main__':

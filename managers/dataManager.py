@@ -16,8 +16,8 @@ from tqdm.contrib.concurrent import process_map
 from functools import partial
 
 from globalConfig import config as gconfig
-from constants.enums import SeriesType, SetType
-from utils.support import Singleton, flatten, recdotdict, recdotlist, shortc, multicore_poolIMap, processDBQuartersToDicts
+from constants.enums import DataFormType, OutputClass, SeriesType, SetType
+from utils.other import getInstancesByClass
 from constants.values import testingSymbols, unusableSymbols
 from managers.stockDataManager import StockDataManager
 from managers.databaseManager import DatabaseManager
@@ -26,7 +26,7 @@ from managers.inputVectorFactory import InputVectorFactory
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.financialDataHandler import FinancialDataHandler
 from structures.stockDataHandler import StockDataHandler
-from structures.dataPointInstance import DataPointInstance, numOutputClasses, positiveClass, negativeClass
+from structures.dataPointInstance import DataPointInstance
 from structures.api.googleTrends.request import GoogleAPI
 
 DEBUG = True
@@ -176,7 +176,7 @@ class DataManager():
                     self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, h.data[sindex].date)] = DataPointInstance(
                         self.buildInputVector,
                         h, sindex,
-                        positiveClass if change >= threshold else negativeClass
+                        OutputClass.POSITIVE if change >= threshold else OutputClass.NEGATIVE
                     )
 
         else:
@@ -204,7 +204,7 @@ class DataManager():
                     self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, h.data[sindex].date)] = DataPointInstance(
                         self.buildInputVector,
                         h, sindex,
-                        positiveClass if change >= threshold else negativeClass
+                        OutputClass.POSITIVE if change >= threshold else OutputClass.NEGATIVE
                     )
         
     def initializeFinancialDataHandlers(self, symbolList):
@@ -361,8 +361,8 @@ class DataManager():
                 print(len(self.unselectedInstances), 'instances available for remaining selection')
 
         ## check balance
-        psints, nsints = self._getInstancesByClass(self.selectedInstances)
-        puints, nuints = self._getInstancesByClass(self.unselectedInstances)
+            psints, nsints = getInstancesByClass(self.selectedInstances)
+            puints, nuints = getInstancesByClass(self.unselectedInstances)
         if DEBUG: print('sel rem', len(self.selectedInstances), setCount, len(self.selectedInstances) < setCount)
         # select remaining
         if len(self.selectedInstances) < setCount:
@@ -379,7 +379,7 @@ class DataManager():
         else:
             if DEBUG: print('Warning: setCount too low for minimum sets per symbol')
         if DEBUG:
-            psints, nsints = self._getInstancesByClass(self.selectedInstances)
+                psints, nsints = getInstancesByClass(self.selectedInstances)
             print('All instances selected\nFinal balance:', len(psints), '/', len(nsints))
 
         if len(self.selectedInstances) < setCount: raise IndexError('Not enough sets available: %d vs %d' % (len(self.selectedInstances) + len(self.unselectedInstances), setCount))
@@ -411,7 +411,7 @@ class DataManager():
 
         ## shuffle and distribute instances
         random.shuffle(self.selectedInstances)
-        c1, c2 = self._getInstancesByClass(self.selectedInstances)
+        c1, c2 = getInstancesByClass(self.selectedInstances)
         # b = self._checkSelectedBalance()
         trnStop = setSplitTuple[0]
         vldStop = setSplitTuple[1] + trnStop
@@ -432,7 +432,7 @@ class DataManager():
         # return trainingSet, validationSet, testingSet
 
     def _checkSelectedBalance(self):
-        pclass, nclass = self._getInstancesByClass(self.selectedInstances)
+        pclass, nclass = getInstancesByClass(self.selectedInstances)
         return len(pclass) / (len(pclass) + len(nclass))
 
     def _getInstancesByClass(self, ins):
@@ -479,18 +479,18 @@ class DataManager():
             # ouplist = constrList(lst, False)
             # oup = keras.utils.to_categorical(ouplist, num_classes=numOutputClasses)
             # return [inp, oup]
-            return [constrList(lst, True), keras.utils.to_categorical(constrList(lst, False), num_classes=numOutputClasses)]
+            oup = constrList(lst, False)
+            return [
+                constrList(lst, True), 
+                keras.utils.to_categorical(oup, num_classes=OutputClass.__len__()) if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL else oup
+            ]
 
 
         ## only select from certain class if specified
         if classification:
-            trainingSet = self._getInstancesByClass(self.trainingSet)[classification-1]
-            validationSet = self._getInstancesByClass(self.validationSet)[classification-1]
-            testingSet = self._getInstancesByClass(self.testingSet)[classification-1]
-        elif maxSize:
-            trainingSet = self._getSetSlice(self.trainingSet, maxSize, index)
-            validationSet = self._getSetSlice(self.validationSet, maxSize, index)
-            testingSet = self._getSetSlice(self.testingSet, maxSize, index)
+            trainingSet = getInstancesByClass(self.trainingSet)[classification-1]
+            validationSet = getInstancesByClass(self.validationSet)[classification-1]
+            testingSet = getInstancesByClass(self.testingSet)[classification-1]
         elif exchange or symbol:
             trainingSet = self._getSubset(self.trainingSet, exchange, symbol)
             validationSet = self._getSubset(self.validationSet, exchange, symbol)

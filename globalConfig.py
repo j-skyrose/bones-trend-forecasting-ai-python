@@ -54,10 +54,12 @@ config = recdotdict({
     'dataForm': {
         'dayOfWeek': DataFormType.VECTOR,
         'dayOfMonth': DataFormType.VECTOR,
-        'monthOfYear': DataFormType.VECTOR
+        'monthOfYear': DataFormType.VECTOR,
         # 'dayOfWeek': DataFormType.INTEGER,
         # 'dayOfMonth': DataFormType.INTEGER,
         # 'monthOfYear': DataFormType.INTEGER
+        'outputVector': DataFormType.BINARY,
+        # 'outputVector': DataFormType.CATEGORICAL
     },
     'sets': {
         'positiveSplitRatio': 1/6 # default 0.5

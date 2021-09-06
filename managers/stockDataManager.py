@@ -17,7 +17,7 @@ from datetime import date
 from typing import Dict, List
 
 from globalConfig import config as gconfig
-from constants.enums import SeriesType, SetType
+from constants.enums import OutputClass, SeriesType, SetType
 from utils.support import Singleton, recdotdict, shortc
 from constants.values import testingSymbols, unusableSymbols
 from managers.databaseManager import DatabaseManager
@@ -25,7 +25,7 @@ from managers.vixManager import VIXManager
 from managers.inputVectorFactory import InputVectorFactory
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.stockDataHandler import StockDataHandler
-from structures.dataPointInstance import DataPointInstance, numOutputClasses, positiveClass, negativeClass
+from structures.dataPointInstance import DataPointInstance
 from structures.api.googleTrends.request import GoogleAPI
 
 DEBUG = True
@@ -125,7 +125,7 @@ class StockDataManager(Singleton):
             change = 0
 
         return DataPointInstance(shortc(self.inputVectorFactory, InputVectorFactory()), stockDataHandler, stockDataIndex, self.vixManager, financialDataHandler,
-            positiveClass if change >= self.threshold else negativeClass
+            OutputClass.POSITIVE if change >= self.threshold else OutputClass.NEGATIVE
         )
 
 

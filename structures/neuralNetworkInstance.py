@@ -19,7 +19,7 @@ from typing import Dict
 from structures.networkStats import NetworkStats
 from structures.EvaluationResultsObj import EvaluationResultsObj
 from constants.exceptions import LocationNotSpecificed
-from constants.enums import AccuracyType, LossAccuracy, SeriesType
+from constants.enums import AccuracyType, DataFormType, LossAccuracy, SeriesType
 from utils.support import recdotdict, shortc
 from managers.inputVectorFactory import InputVectorFactory
 from structures.EvaluationDataHandler import EvaluationDataHandler
@@ -36,6 +36,9 @@ os.environ["CUDA_VISIBLE_DEVICES"]= "0" if useMainGPU else "1"
 
 # 5 allows for 750 Ti; default 8
 os.environ["TF_MIN_GPU_MULTIPROCESSOR_COUNT"]= "8" if useMainGPU else "5"
+
+# might help with memory fragmentation apparently --program fails to run if set
+# os.environ["TF_GPU_ALLOCATOR"]= "cuda_malloc_async"
 
 # print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 # from tensorflow.python.client import device_lib
@@ -86,12 +89,20 @@ class NeuralNetworkInstance:
             if l['dropout']:
                 # model.add(Dropout(l['dropoutRate']))
                 model.add(AlphaDropout(l['dropoutRate']))
-        model.add(Dense(2, activation='softmax'))
+        model.add(
+            Dense(2, activation='softmax')
+            if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL else
+            Dense(1, activation='sigmoid')
+        )
 
-        model.compile(loss='categorical_crossentropy',
+        model.compile(
+            loss='categorical_crossentropy' if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL else 'binary_crossentropy',
                     # optimizer=SGD(optimizer['learningRate'], optimizer['momentum'], optimizer['decay'], optimizer['nesterov']),
                     optimizer=optimizer, ## Adam(amsgrad=True)
                     metrics=['accuracy'])
+
+        print('Input size:', inputSize)
+        model.summary()
 
         ## initialize stats
         stats = NetworkStats(id, threshold, precedingRange, followingRange, seriesType, accuracyType)

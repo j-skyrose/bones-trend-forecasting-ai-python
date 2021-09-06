@@ -76,6 +76,12 @@ class DataFormType(Enum):
     VECTOR = 'VECTOR'
     INTEGER = 'INTEGER'
     NATURAL = 'NATURAL' ##(number)
+    BINARY = 'BINARY'
+    CATEGORICAL = 'CATEGORICAL'
+
+class OutputClass(Enum):
+    POSITIVE = 'POSITIVE'
+    NEGATIVE = 'NEGATIVE'
 
 class OperatorDict(Enum):
     def __init__(self, a, b, c=None):

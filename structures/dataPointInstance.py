@@ -7,15 +7,10 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
+from constants.enums import OutputClass
 from structures.stockDataHandler import StockDataHandler
 from constants.values import interestColumn
 from utils.support import shortc
-
-
-numOutputClasses = 2
-positiveClass = 'positiveClass'
-negativeClass = 'negativeClass'
-
 
 class DataPointInstance:
     ## index is the anchor point, between preceding and following, so total length will always be +1
@@ -34,7 +29,7 @@ class DataPointInstance:
         return self.buildInputVectorFunc(self.stockDataHandler, self.index, self.googleInterestData, self.stockDataHandler.symbolData)
 
     def getOutputVector(self):
-        return 0 if self.outputClass == negativeClass else 1
+        return 0 if self.outputClass == OutputClass.NEGATIVE else 1
 
     def setGoogleInterestData(self, data):
         gdataKeys = [r.strftime('%Y-%m-%d') for r in list(data.to_dict()[interestColumn].keys())]
