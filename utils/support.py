@@ -8,7 +8,7 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 
-import numpy, re
+import numpy, re, math
 from datetime import date, datetime, timedelta
 from multiprocessing import Pool, cpu_count
 
@@ -267,6 +267,52 @@ def multicore_poolIMap(func, iter, chuckSize=1):
     pool.join()
     return ret
 
+def getAdjustedSlidingWindowSize(total, desired):
+    DEBUG = False
+
+    numofsets = total / desired
+    remainder = (total/desired) % 1
+
+    if DEBUG: print(numofsets)
+    if DEBUG: print(remainder)
+
+    increasesetsize = False
+    if numofsets > 2 and remainder < 0.5:
+        increasesetsize = True
+    
+    if DEBUG: print(increasesetsize)
+
+    adjust = 0
+    for x in range(desired):
+        if increasesetsize:
+            if DEBUG: print(x, (total / (desired + x)))
+            if (total / (desired + x)) < math.floor(numofsets):
+                adjust = x
+                break
+        else:
+            if DEBUG: print(x, (total / (desired - x)))
+            if (total / (desired - x)) > math.ceil(numofsets):
+                adjust = -1 * (x - 1)
+                break
+    
+    return (desired + adjust) / total
+
+def containsAllKeys(dict, *args, throwSomeError=None, throwAllError=None):
+    cont = 0
+    out = 0
+    for k in args:
+        if k not in dict.keys():
+            out += 1
+        else:
+            cont += 1
+    
+    if throwSomeError and out > 0 and cont > 0: raise throwSomeError
+    if cont != len(args): 
+        if throwAllError: raise throwAllError
+        else: return False
+
+    return True  
+
 if __name__ == '__main__':
     # print(getMarketHolidays(2021))
     # print(processRawValueToInsertValue(44))
@@ -274,4 +320,5 @@ if __name__ == '__main__':
     # print(processRawValueToInsertValue(None))
     # print(processRawValueToInsertValue(['4', 4, None]))
     # print(processRawValueToInsertValue(True))
-    print(flatten([1,[3,'dave',[6,[0,6,0],6],2],3,{'key':'value'}]))
+    # print(flatten([1,[3,'dave',[6,[0,6,0],6],2],3,{'key':'value'}]))
+    print(getAdjustedSlidingWindowSize(5000, 600))

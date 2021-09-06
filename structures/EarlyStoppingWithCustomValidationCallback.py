@@ -41,9 +41,9 @@ class EarlyStoppingWithCustomValidation(EarlyStopping):
                 logs['val_accuracy'] += results[1] * dval
 
         # print('epoch end out',logs)
-        if self.verbose > 0: print(self.monitor, ':', logs.get(self.monitor))
+        if self.verbose > 0: print('Custom', self.monitor, ':', logs.get(self.monitor))
 
         super().on_epoch_end(epoch, logs)
         if self.wait >= self.patience and epoch > 0 and self.restore_best_weights and self.best_weights is not None and self.verbose > 0: ## from super.on_epoch_end
-            print('Best', self.monitor, ':', self.best)
+            print('Best custom', self.monitor, ':', self.best)
         

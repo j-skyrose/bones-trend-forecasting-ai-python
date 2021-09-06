@@ -123,8 +123,8 @@ def analyzeInputSectionWeight(dm: DataManager):
         nn = NeuralNetworkInstance.new(ci, optimizer, layers, inputSize)
 
         ti = TrainingInstance(
-            nn, t, v, ts,
-            { 'epochs': epochs, 'batchSize': 16 }
+            nn, { 'epochs': epochs, 'batchSize': 16 },
+            trainingSet=t, validationSet=v, testingSet=ts
         )
 
         ti.train(2, True)

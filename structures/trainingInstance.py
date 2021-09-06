@@ -40,20 +40,29 @@ class TimeBasedEarlyStoppingCallback(keras.callbacks.Callback):
 
 
 class TrainingInstance():
-    def __init__(self, nnetwork: NeuralNetworkInstance, trainingSet, validationSet, testingSet, 
-            tconfig=trainingConfig, validationPSet=None, validationNSet=None, testingPSet=None, testingNSet=None):
+    trainingSet = None
+    validationSet = None
+    testingSet = None
+
+    def __init__(self, nnetwork: NeuralNetworkInstance, tconfig=trainingConfig, **kwargs):
+            # trainingSet=None, validationSet=None, testingSet=None, 
+            # validationPSet=None, validationNSet=None, testingPSet=None, testingNSet=None):
         self.network = nnetwork
-        self.trainingSet = trainingSet
-        self.validationSet = validationSet
-        self.testingSet = testingSet
         self.config = recdotdict(tconfig)
 
-        if len(validationSet[0]) or (validationPSet and validationNSet):
+        self.updateSets(**kwargs)
+
+    def updateSets(self, trainingSet=None, validationSet=None, testingSet=None, validationPSet=None, validationNSet=None, testingPSet=None, testingNSet=None):
+        self.trainingSet = shortc(trainingSet, self.trainingSet)
+        self.validationSet = shortc(validationSet, self.validationSet)
+        self.testingSet = shortc(testingSet, self.testingSet)
+
+        if (type(validationSet) is list and len(validationSet[0])) or (validationPSet and validationNSet):
             self.validationDataHandler: EvaluationDataHandler = EvaluationDataHandler(validationSet)
             self.validationDataHandler[AccuracyType.POSITIVE] = validationPSet
             self.validationDataHandler[AccuracyType.NEGATIVE] = validationNSet
 
-        if len(testingSet[0]) or (testingPSet and testingNSet):
+        if (type(testingSet) is list and len(testingSet[0])) or (testingPSet and testingNSet):
             self.testingDataHandler: EvaluationDataHandler = EvaluationDataHandler(testingSet)
             self.testingDataHandler[AccuracyType.POSITIVE] = testingPSet
             self.testingDataHandler[AccuracyType.NEGATIVE] = testingNSet
@@ -79,7 +88,9 @@ class TrainingInstance():
             pass
         return self.evaluate(verbose)
 
-    def train(self, epochs=None, minEpochs=5, validationType: AccuracyType=AccuracyType.OVERALL, patience=None, stopTime=None, timeDuration=None, verbose=1):
+    def train(self, epochs=None, minEpochs=5, validationType: AccuracyType=AccuracyType.OVERALL, patience=None, stopTime=None, timeDuration=None, verbose=1, **kwargs):
+        print('split:', len(self.validationDataHandler[AccuracyType.POSITIVE][0]), ':', len(self.validationDataHandler[AccuracyType.NEGATIVE][0]))
+
         try:
             validation_data = self.validationDataHandler.getTuple(validationType) if validationType else None
             self.network.fit(*self.trainingSet, 

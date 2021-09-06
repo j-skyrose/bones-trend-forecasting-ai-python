@@ -15,7 +15,6 @@ from typing import Tuple
 import tensorflow.keras.backend as K
 
 from utils.other import normalizeStockData
-from managers.dataManagerDBWrapper import DataManagerDBWrapper
 from managers.databaseManager import DatabaseManager
 from managers.dataManager import DataManager
 from managers.neuralNetworkManager import NeuralNetworkManager
@@ -25,7 +24,7 @@ from managers.statsManager import StatsManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from constants.enums import AccuracyType, LossAccuracy, OperatorDict, SeriesType
 from constants.exceptions import SufficientlyUpdatedDataNotAvailable
-from utils.support import shortc
+from utils.support import containsAllKeys, shortc
 from globalConfig import config as gconfig
 
 nnm: NeuralNetworkManager = NeuralNetworkManager()
@@ -34,27 +33,60 @@ def getTimestamp(year=datetime.now().year, month=datetime.now().month, day=datet
     return time.mktime(datetime(year, month, day, hour, minute).timetuple())
 
 class Trainer:
-    def __init__(self, network=None, networkId=None, **kwargs):
+    def __init__(self, network=None, networkId=None, useAllSets=False, **kwargs):
         startt = time.time()
         self.network = nnm.get(networkId) if networkId else network
-        self.dm: DataManager = DataManager.forTraining(inputVectorFactory=self.network.inputVectorFactory, **kwargs)
+        self.dm: DataManager = DataManager.forTraining(inputVectorFactory=self.network.inputVectorFactory, useAllSets=useAllSets, **kwargs)
+        self.useAllSets = useAllSets
 
-        if network:
-            self.network.updateStats(
-                normalizationInfo=self.dm.normalizationInfo,
-                **kwargs
-            )
+        # if network:
+        #     self.network.updateStats(
+        #         normalizationInfo=self.dm.normalizationInfo,
+        #         **kwargs
+        #     ) 
 
-        setstartt = time.time()
-        sets = self.dm.getKerasSets()
-        class1set = self.dm.getKerasSets(1, True)
-        class2set = self.dm.getKerasSets(2, True)
+        kwparams = {}
+        if not useAllSets:
+            setstartt = time.time()
+            kwparams = self._getSetKWParams()
 
-        print('Set creation time required:', time.time() - setstartt, 'seconds')
-        print('Set creation breakdown')
-        StatsManager().printAll()
-        self.instance = TrainingInstance(self.network, *sets, { 'epochs': 1, 'batchSize': 32 }, class1set, class2set)  
+            print('Set creation time required:', time.time() - setstartt, 'seconds')
+            print('Set creation breakdown')
+            StatsManager().printAll()
+
+        self.instance = TrainingInstance(self.network, { 'epochs': 1, 'batchSize': 32 }, **kwparams)
         print('Startup time required:', time.time() - startt, 'seconds')
+
+    def _getSetKWParams(self, **kwargs):
+        print('Building KWParams object')
+        t, v, ts = self.dm.getKerasSets(**kwargs)
+        class1set = self.dm.getKerasSets(1, True, **kwargs)
+        class2set = self.dm.getKerasSets(2, True, **kwargs)
+        print('Keras sets built')
+        return {
+            'trainingSet': t, 
+            'validationSet': v, 
+            'testingSet': ts, 
+            'validationPSet': class1set, 
+            'validationNSet': class2set
+        }
+
+    def train(self, **kwargs):
+        if not self.useAllSets:
+            self.instance.train(**kwargs)
+        else:
+            print('Iterating through set slices')
+            maxIterations = self.dm.getNumberOfWindowIterations()
+            usePatienceGradient = containsAllKeys(kwargs, 'initialPatience', 'finalPatience', throwSomeError=ValueError('Missing some patience gradience arguments'))
+            for s in range(maxIterations):
+                if usePatienceGradient:
+                    kwargs['patience'] = kwargs['initialPatience'] + int(s * (kwargs['finalPatience'] - kwargs['initialPatience']) / (maxIterations-1))
+                    print('Patience:', kwargs['patience'])
+
+                print('Slice', s+1, '/', maxIterations)
+                self.instance.updateSets(**self._getSetKWParams(slice=s))
+                self.instance.train(**kwargs)
+                gc.collect()
 
     ## outddated with incorporation of validationSet, EarlyStopping, ModelCheckpoint in model.fit
     def train_old(self, stopTime=None, trainingDuration=0, iterations=None, evaluateEveryXIterations=0, lossIterationTolerance=0):
@@ -147,15 +179,19 @@ if __name__ == '__main__':
             minimumSetsPerSymbol = 0
         else:
             ## real
-            setCount = 75000
+            setCount = 55000
             minimumSetsPerSymbol = 10
 
         ## network
         inputSize = InputVectorFactory().getInputSize(precrange)
         optimizer = Adam(amsgrad=True)
         layers = [
+            # { 'units': math.floor(inputSize / 0.85), 'dropout': False, 'dropoutRate': 0.001 },
+            # { 'units': math.floor(inputSize / 1), 'dropout': False, 'dropoutRate': 0.001 },
             { 'units': math.floor(inputSize / 1.3), 'dropout': False, 'dropoutRate': 0.001 },
             { 'units': math.floor(inputSize / 1.7), 'dropout': False, 'dropoutRate': 0.001 },
+            { 'units': math.floor(inputSize / 2), 'dropout': False, 'dropoutRate': 0.001 },
+            { 'units': math.floor(inputSize / 2.5), 'dropout': False, 'dropoutRate': 0.001 },
         ]
 
         t = Trainer(
@@ -167,7 +203,9 @@ if __name__ == '__main__':
             threshold=threshold,
             setCount=setCount,
             setSplitTuple=setSplitTuple,
-            minimumSetsPerSymbol=minimumSetsPerSymbol
+            minimumSetsPerSymbol=minimumSetsPerSymbol,
+
+            useAllSets=True
         )
 
 
@@ -187,9 +225,23 @@ if __name__ == '__main__':
     # p.instance.train(timeDuration=30)
     # p.instance.train(stopTime=getTimestamp(hour=22, minute=28))
     
-    p.instance.train(validationType=AccuracyType.NEGATIVE, patience=25, 
+
+
+    p.train(validationType=AccuracyType.NEGATIVE, 
+        # patience=7, 
+        initialPatience=10, finalPatience=30
+        # patience=4
+        
     # stopTime=getTimestamp(hour=22, minute=0)
     )
+
+
+    ## debugging getAdjustedSlidingWindowSize on real data
+    # for i in range(p.dm.getNumberOfWindowIterations()):
+    #     trsize = len(p.dm._getSetSlice(p.dm.trainingSet, i))
+    #     vsize = len(p.dm._getSetSlice(p.dm.validationSet, i))
+    #     tssize = len(p.dm._getSetSlice(p.dm.testingSet, i))
+    #     print('it', i, 'sizes:', trsize, vsize, tssize)
 
     # p.saveNetwork()
 

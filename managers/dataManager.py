@@ -17,6 +17,7 @@ from functools import partial
 
 from globalConfig import config as gconfig
 from constants.enums import DataFormType, OutputClass, SeriesType, SetType
+from utils.support import Singleton, flatten, getAdjustedSlidingWindowSize, recdotdict, recdotlist, shortc, multicore_poolIMap, processDBQuartersToDicts
 from utils.other import getInstancesByClass
 from constants.values import testingSymbols, unusableSymbols
 from managers.stockDataManager import StockDataManager
@@ -55,12 +56,13 @@ class DataManager():
     validationInstances = []
     testingInstances = []
     inputVectorFactory = None
+    setsSlidingWindowSize = 0
 
     def __init__(self,
         precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, threshold=0,
-        setCount=None, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
-        normalizationInfo={}, symbolList:List=[],
-        analysis=False,
+        setCount=None, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, useAllSets=False,
+        inputVectorFactory=InputVectorFactory(), normalizationInfo={}, symbolList:List=[],
+        analysis=False, statsOnly=False,
         **kwargs
         # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
         # neuralNetwork: NeuralNetworkInstance=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[]
@@ -94,9 +96,11 @@ class DataManager():
 
 
         if setCount is not None:
-            self.setupSets(setCount, setSplitTuple, minimumSetsPerSymbol)
+            self.setupSets(setCount, setSplitTuple, minimumSetsPerSymbol, useAllSets)
         elif analysis:
             self.setupSets(len(self.stockDataInstances.values()), (0,1))
+        elif statsOnly:
+            self.setupSets(1, (1,0), 0)
         print('DataManager init complete. Took', time.time() - startt, 'seconds')
 
     @classmethod
@@ -124,6 +128,19 @@ class DataManager():
             analysis=True,
             **kwargs
         )
+
+    ## basically just to run through initialization to get all the print() info on pos/neg split counts
+    @classmethod
+    def forStats(cls, seriesType=SeriesType.DAILY, **kwargs):
+        # mocknormalizationInfo = { 'highMax': sys.maxsize, 'volumeMax': sys.maxsize }
+        # _, _, symbolList = dbm.getNormalizationData(seriesType, normalizationInfo=mocknormalizationInfo, **kwargs)
+
+        # return cls(
+        #     precedingRange=precedingRange, followingRange=followingRange, seriesType=seriesType, threshold=threshold,
+        #     symbolList=symbolList, normalizationInfo=mocknormalizationInfo,
+        #     statsOnly=True
+        # )
+        return cls.forTraining(seriesType, statsOnly=True, **kwargs)
 
     def buildInputVector(self, stockDataSet: StockDataHandler, stockDataIndex, googleInterestData, symbolData):
         startt = time.time()
@@ -333,57 +350,69 @@ class DataManager():
                 print('insertingtime',insertingtime,'seconds')
                 print('total',gettingtime+massagingtime+creatingtime+insertingtime,'seconds')
 
-    def setupSets(self, setCount, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0):
-        self.unselectedInstances = list(self.stockDataInstances.values())
-        self.selectedInstances = []
-
-        if DEBUG: print('Selecting', setCount, 'instances')
-
-        ## cover minimums
-        if minimumSetsPerSymbol > 0:
+    def setupSets(self, setCount, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, useAllSets=False):
+        if useAllSets:
             self.unselectedInstances = []
-            for h in self.stockDataHandlers.values():
-                available = h.getAvailableSelections()
-                sampleSize = min(minimumSetsPerSymbol, len(available))
-                if sampleSize > 0:
-                    selectDates = [h.data[d].date for d in available]
-                    # print('preshuffle')
-                    # print(available)
-                    # print(sampleSize)
-                    # print(selectDates)
-                    random.shuffle(selectDates)
-                    for d in selectDates[:sampleSize]:
-                        self.selectedInstances.append(self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, d)])
-                    for d in selectDates[sampleSize:]:
-                        self.unselectedInstances.append(self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, d)])
-            if DEBUG: 
-                print(len(self.selectedInstances), 'instances selected to cover minimums')
-                print(len(self.unselectedInstances), 'instances available for remaining selection')
+            self.selectedInstances = list(self.stockDataInstances.values())
 
-        ## check balance
+            ## determine window size for iterating through all sets            
+            psints, nsints = getInstancesByClass(self.selectedInstances)
+            print('Class split ratio:', len(psints) / len(self.selectedInstances))
+            if len(psints) / len(self.selectedInstances) < gconfig.sets.minimumClassSplitRatio: raise ValueError('Positive to negative set ratio below minimum threshold')
+            self.setsSlidingWindowSize = getAdjustedSlidingWindowSize(len(self.selectedInstances), setCount)
+            print('Adjusted sets window size from', setCount, 'to', int(len(self.selectedInstances)*self.setsSlidingWindowSize))
+
+        else:
+            self.unselectedInstances = list(self.stockDataInstances.values())
+            self.selectedInstances = []
+
+            if DEBUG: print('Selecting', setCount, 'instances')
+
+            ## cover minimums
+            if minimumSetsPerSymbol > 0 and not useAllSets:
+                self.unselectedInstances = []
+                for h in self.stockDataHandlers.values():
+                    available = h.getAvailableSelections()
+                    sampleSize = min(minimumSetsPerSymbol, len(available))
+                    if sampleSize > 0:
+                        selectDates = [h.data[d].date for d in available]
+                        # print('preshuffle')
+                        # print(available)
+                        # print(sampleSize)
+                        # print(selectDates)
+                        random.shuffle(selectDates)
+                        for d in selectDates[:sampleSize]:
+                            self.selectedInstances.append(self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, d)])
+                        for d in selectDates[sampleSize:]:
+                            self.unselectedInstances.append(self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, d)])
+                if DEBUG: 
+                    print(len(self.selectedInstances), 'instances selected to cover minimums')
+                    print(len(self.unselectedInstances), 'instances available for remaining selection')
+
+            ## check balance
             psints, nsints = getInstancesByClass(self.selectedInstances)
             puints, nuints = getInstancesByClass(self.unselectedInstances)
-        if DEBUG: print('sel rem', len(self.selectedInstances), setCount, len(self.selectedInstances) < setCount)
-        # select remaining
-        if len(self.selectedInstances) < setCount:
+            if DEBUG: print('sel rem', len(self.selectedInstances), setCount, len(self.selectedInstances) < setCount)
+            # select remaining
+            if len(self.selectedInstances) < setCount and not useAllSets:
+                if DEBUG:
+                    print('Positive selected instances', len(psints))
+                    print('Negative selected instances', len(nsints))
+                    print('Available positive instances', len(puints))
+                    print('Available negative instances', len(nuints))
+
+                pusamplesize = int(min(len(puints), setCount * gconfig.sets.positiveSplitRatio - len(psints)) if setCount / 2 - len(psints) > 0 else len(puints))
+                self.selectedInstances.extend(random.sample(puints, pusamplesize))
+                nusamplesize = int(min(len(nuints), setCount - len(self.selectedInstances)) if setCount - len(self.selectedInstances) > 0 else len(nuints))
+                self.selectedInstances.extend(random.sample(nuints, nusamplesize))
+            else:
+                if DEBUG: print('Warning: setCount too low for minimum sets per symbol')
             if DEBUG:
-                print('Positive selected instances', len(psints))
-                print('Negative selected instances', len(nsints))
-                print('Available positive instances', len(puints))
-                print('Available negative instances', len(nuints))
-
-            pusamplesize = int(min(len(puints), setCount * gconfig.sets.positiveSplitRatio - len(psints)) if setCount / 2 - len(psints) > 0 else len(puints))
-            self.selectedInstances.extend(random.sample(puints, pusamplesize))
-            nusamplesize = int(min(len(nuints), setCount - len(self.selectedInstances)) if setCount - len(self.selectedInstances) > 0 else len(nuints))
-            self.selectedInstances.extend(random.sample(nuints, nusamplesize))
-        else:
-            if DEBUG: print('Warning: setCount too low for minimum sets per symbol')
-        if DEBUG:
                 psints, nsints = getInstancesByClass(self.selectedInstances)
-            print('All instances selected\nFinal balance:', len(psints), '/', len(nsints))
+                print('All instances selected\nFinal balance:', len(psints), '/', len(nsints))
 
-        if len(self.selectedInstances) < setCount: raise IndexError('Not enough sets available: %d vs %d' % (len(self.selectedInstances) + len(self.unselectedInstances), setCount))
-        ## instance selection done
+            if len(self.selectedInstances) < setCount: raise IndexError('Not enough sets available: %d vs %d' % (len(self.selectedInstances) + len(self.unselectedInstances), setCount))
+            ## instance selection done
 
         ## retrieve Google interests for each selected set
         if self.config.feature.googleInterests.enabled:
@@ -419,6 +448,10 @@ class DataManager():
         self.trainingSet = c1[:math.floor(trnStop*len(c1))] + c2[:math.floor(trnStop*len(c2))]
         self.validationSet = c1[math.floor(trnStop*len(c1)):math.floor(vldStop*len(c1))] + c2[math.floor(trnStop*len(c2)):math.floor(vldStop*len(c2))]
         self.testingSet = c1[math.floor(vldStop*len(c1)):] + c2[math.floor(vldStop*len(c2)):]
+
+        random.shuffle(self.trainingSet)
+        random.shuffle(self.validationSet)
+        random.shuffle(self.testingSet)
         if DEBUG: print('Sets split into', len(self.trainingSet), '/', len(self.validationSet), '/', len(self.testingSet))
 
         # return trainingSet, validationSet, testingSet
@@ -431,25 +464,25 @@ class DataManager():
 
         # return trainingSet, validationSet, testingSet
 
+    def getNumberOfWindowIterations(self):
+        return math.ceil(1 / self.setsSlidingWindowSize)
+
     def _checkSelectedBalance(self):
         pclass, nclass = getInstancesByClass(self.selectedInstances)
         return len(pclass) / (len(pclass) + len(nclass))
 
-    def _getInstancesByClass(self, ins):
-        pclass = []
-        nclass = []
-        for i in ins:
-            try:
-                if i.outputClass == positiveClass: pclass.append(i)
-                else: nclass.append(i)
-            except:
-                print(i)
-        return pclass, nclass
+    def _getSetSlice(self, set, index):
+        if index is None:
+            return set
 
-    def _getSetSlice(self, set, maxSize, index):
-        start = min(maxSize * index, len(set))
-        end = min(maxSize * (index + 1), len(set))
-        return set[start:end]
+        sz = len(set) * self.setsSlidingWindowSize
+        start = min(int(sz * index), len(set))
+        end = min(int(sz * (index + 1)), len(set))
+
+        if index == self.getNumberOfWindowIterations() - 1:
+            return set[start:]
+        else:
+            return set[start:end]
 
     def _getSubset(self, sourceSet, exchange, symbol):
         ret = [x for x in sourceSet if (exchange == x.handler.symbolData.exchange and (not symbol or symbol == x.handler.symbolData.symbol))]
@@ -460,8 +493,10 @@ class DataManager():
         #         ret.append(x)
         return ret
 
-    def getKerasSets(self, classification=0, validationDataOnly=False, maxSize=0, index=0, exchange=None, symbol=None, verbose=1):
-        
+    def getKerasSets(self, classification=0, validationDataOnly=False, exchange=None, symbol=None, slice=None, verbose=1):
+        if slice > self.getNumberOfWindowIterations() - 1: raise IndexError()
+        if self.setsSlidingWindowSize and slice is None: raise ValueError('Keras set setup will overload memory, useAllSets set but not slice indicated')
+
         self.getprecstocktime = 0
         self.getprecfintime = 0
         self.actualbuildtime = 0
@@ -488,9 +523,13 @@ class DataManager():
 
         ## only select from certain class if specified
         if classification:
-            trainingSet = getInstancesByClass(self.trainingSet)[classification-1]
-            validationSet = getInstancesByClass(self.validationSet)[classification-1]
-            testingSet = getInstancesByClass(self.testingSet)[classification-1]
+            trainingSet = self._getSetSlice(getInstancesByClass(self.trainingSet)[classification-1], slice)
+            validationSet = self._getSetSlice(getInstancesByClass(self.validationSet)[classification-1], slice)
+            testingSet = self._getSetSlice(getInstancesByClass(self.testingSet)[classification-1], slice)
+        elif slice is not None:
+            trainingSet = self._getSetSlice(self.trainingSet, slice)
+            validationSet = self._getSetSlice(self.validationSet, slice)
+            testingSet = self._getSetSlice(self.testingSet, slice)
         elif exchange or symbol:
             trainingSet = self._getSubset(self.trainingSet, exchange, symbol)
             validationSet = self._getSubset(self.validationSet, exchange, symbol)
@@ -521,8 +560,18 @@ if __name__ == '__main__':
         precedingRange=90,
         followingRange=30,
         threshold=0.1,
-        setCount=2500,
+        setCount=25000,
         setSplitTuple=(1/3,1/3),
-        minimumSetsPerSymbol=1
+        minimumSetsPerSymbol=1,
+        useAllSets=True
     )
     # s.getKerasSets(classification=1)
+    s.getKerasSets(slice=2)
+
+
+    # s=DataManager.forStats(
+    #     precedingRange=100,
+    #     followingRange=30,
+    #     seriesType=SeriesType.DAILY,
+    #     threshold=0.1
+    # )

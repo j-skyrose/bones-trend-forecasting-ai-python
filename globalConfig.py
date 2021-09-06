@@ -62,7 +62,8 @@ config = recdotdict({
         # 'outputVector': DataFormType.CATEGORICAL
     },
     'sets': {
-        'positiveSplitRatio': 1/6 # default 0.5
+        'positiveSplitRatio': 1/6, # default 0.5,
+        'minimumClassSplitRatio': 0.15 if not TESTING else 0.01
     },
     'feature': {
         'exchange': genFeatureObj(False, 'single'),
