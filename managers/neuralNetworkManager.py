@@ -15,11 +15,6 @@ from constants.enums import AccuracyType, SeriesType
 
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 
-# maxOverallAccuracyKey = '-mo'
-# maxPositiveClassAccuracyKey = '-mp'
-# maxNegativeClassAccuracyKey = '-mn'
-# maxCombinedAccuracyKey = '-mc'
-
 dbm: DatabaseManager = DatabaseManager()
 
 class NeuralNetworkManager(Singleton):

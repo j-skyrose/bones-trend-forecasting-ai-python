@@ -27,7 +27,6 @@ class NetworkStats:
     overallAccuracy = 0
     negativeAccuracy = 0
     positiveAccuracy = 0
-    combinedAccuracy = 0
     epochs = 0
 
     def __init__(self, id, threshold=None, precedingRange=None, followingRange=None, seriesType=None, accuracyType=None):
@@ -41,15 +40,12 @@ class NetworkStats:
         # self.overallAccuracy = 0
         # self.negativeAccuracy = 0
         # self.positiveAccuracy = 0
-        # self.combinedAccuracy = 0
         # self.epochs = 0
         # self.stats = {}
 
     @classmethod
     def importFrom(cls, statsObj):
         c = cls(statsObj.id)
-        # , statsObj.changeThreshold, statsObj.precedingRange, statsObj.followingRange, statsObj.seriesType, statsObj.accuracyType, 
-        #         statsObj.overallAccuracy, statsObj.negativeAccuracy, statsObj.positiveAccuracy, statsObj.combinedAccuracy, statsObj.)
         for k,v in statsObj.items():
             # if 'Max' in k:
             #     # c.setMax(k, v))

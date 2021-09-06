@@ -605,7 +605,7 @@ class DatabaseManager(Singleton):
         else:
             factoryId = nn.stats.factoryId
         
-        stmt = 'INSERT OR REPLACE INTO networks(id, factoryId, accuracyType, overallAccuracy, negativeAccuracy, positiveAccuracy, combinedAccuracy, changeThreshold, precedingRange, followingRange, seriesType, highMax, volumeMax, epochs) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+        stmt = 'INSERT OR REPLACE INTO networks(id, factoryId, accuracyType, overallAccuracy, negativeAccuracy, positiveAccuracy, changeThreshold, precedingRange, followingRange, seriesType, highMax, volumeMax, epochs) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
         tpl = (nn.id,
             factoryId,
             nn.stats.accuracyType.name,
@@ -613,7 +613,6 @@ class DatabaseManager(Singleton):
             nn.stats.overallAccuracy,
             nn.stats.negativeAccuracy,
             nn.stats.positiveAccuracy,
-            nn.stats.combinedAccuracy,
             nn.stats.changeThreshold,
             nn.stats.precedingRange,
             nn.stats.followingRange,
@@ -1417,7 +1416,6 @@ if __name__ == '__main__':
     #     'overallAccuracy': 0.9926470518112183, 
     #     'negativeAccuracy': 1.0, 
     #     'positiveAccuracy': 0.0, 
-    #     'combinedAccuracy': 1.0, 
     #     'epochs': 5}))
 
 

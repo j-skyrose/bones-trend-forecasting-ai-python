@@ -121,7 +121,6 @@ class NeuralNetworkInstance:
         # stats['overallAccuracy'] = 0
         # stats['negativeAccuracy'] = 0
         # stats['positiveAccuracy'] = 0
-        # stats['combinedAccuracy'] = 0
         # stats['epochs'] = 0
         # stats = recdotdict(stats)
 
@@ -193,19 +192,16 @@ class NeuralNetworkInstance:
             # if (
             #     (self.stats.accuracyType == AccuracyType.OVERALL and accuracies[0] > self.stats.overallAccuracy) or
             #     (self.stats.accuracyType == AccuracyType.POSITIVE and accuracies[1] > self.stats.positiveAccuracy) or
-            #     (self.stats.accuracyType == AccuracyType.NEGATIVE and accuracies[2] > self.stats.negativeAccuracy) or
-            #     (self.stats.accuracyType == AccuracyType.COMBINED and accuracies[1] + accuracies[2] > self.stats.combinedAccuracy)
+            #     (self.stats.accuracyType == AccuracyType.NEGATIVE and accuracies[2] > self.stats.negativeAccuracy)
             # ):
             #     self.stats.overallAccuracy = accuracies[0]
             #     self.stats.positiveAccuracy = accuracies[1]
             #     self.stats.negativeAccuracy = accuracies[2]
-            #     self.stats.combinedAccuracy = accuracies[1] + accuracies[2]
 
             if results[self.stats.accuracyType][LossAccuracy.ACCURACY] > self.stats[self.stats.accuracyType.statsName]:
                 self.stats.overallAccuracy = results[AccuracyType.OVERALL][LossAccuracy.ACCURACY]
                 self.stats.positiveAccuracy = results[AccuracyType.POSITIVE][LossAccuracy.ACCURACY]
                 self.stats.negativeAccuracy = results[AccuracyType.NEGATIVE][LossAccuracy.ACCURACY]
-                self.stats.combinedAccuracy = results[AccuracyType.COMBINED][LossAccuracy.ACCURACY]
 
                 self.printAccuracyStats()
         

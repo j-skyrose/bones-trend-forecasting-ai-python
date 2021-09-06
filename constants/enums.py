@@ -37,7 +37,6 @@ class AccuracyType(Enum):
     OVERALL = 'OVERALL', 'overallAccuracy'
     POSITIVE = 'POSITIVE', 'positiveAccuracy'
     NEGATIVE = 'NEGATIVE', 'negativeAccuracy'
-    COMBINED = 'COMBINED', 'combinedAccuracy'
 
 class SetType(Enum):
     TRAINING = 'TRAINING'
