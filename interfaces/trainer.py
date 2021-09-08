@@ -75,6 +75,8 @@ class Trainer:
         if not self.useAllSets:
             self.instance.train(**kwargs)
         else:
+            self.instance.network.useAllSets = True
+
             print('Iterating through set slices')
             maxIterations = self.dm.getNumberOfWindowIterations()
             usePatienceGradient = containsAllKeys(kwargs, 'initialPatience', 'finalPatience', throwSomeError=ValueError('Missing some patience gradience arguments'))
@@ -165,6 +167,7 @@ if __name__ == '__main__':
         arg1 = 'new'
 
     if arg1.lower() == 'new':
+        useAllSets = True
         # precrange = 202
         # precrange = 150
         precrange = 65
@@ -196,7 +199,7 @@ if __name__ == '__main__':
 
         t = Trainer(
             network=nnm.createNetworkInstance(
-                optimizer, layers, inputSize, accuracyType=AccuracyType.NEGATIVE
+                optimizer, layers, inputSize, accuracyType=AccuracyType.NEGATIVE, useAllSets=useAllSets
             ),
             precedingRange=precrange, 
             followingRange=folrange,
@@ -205,7 +208,7 @@ if __name__ == '__main__':
             setSplitTuple=setSplitTuple,
             minimumSetsPerSymbol=minimumSetsPerSymbol,
 
-            useAllSets=True
+            useAllSets=useAllSets
         )
 
 

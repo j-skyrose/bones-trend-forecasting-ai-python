@@ -57,6 +57,7 @@ class DataManager():
     testingInstances = []
     inputVectorFactory = None
     setsSlidingWindowSize = 0
+    useAllSets = False
 
     def __init__(self,
         precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, threshold=0,
@@ -78,6 +79,7 @@ class DataManager():
         self.kerasSetCaches = {}
         # self.normalizationInfo = recdotdict(normalizationInfo)
         # self.symbolList = symbolList
+        self.useAllSets = useAllSets
 
         ## purge invalid tickers
         for s in symbolList:
@@ -96,7 +98,7 @@ class DataManager():
 
 
         if setCount is not None:
-            self.setupSets(setCount, setSplitTuple, minimumSetsPerSymbol, useAllSets)
+            self.setupSets(setCount, setSplitTuple, minimumSetsPerSymbol)
         elif analysis:
             self.setupSets(len(self.stockDataInstances.values()), (0,1))
         elif statsOnly:
@@ -350,8 +352,8 @@ class DataManager():
                 print('insertingtime',insertingtime,'seconds')
                 print('total',gettingtime+massagingtime+creatingtime+insertingtime,'seconds')
 
-    def setupSets(self, setCount, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, useAllSets=False):
-        if useAllSets:
+    def setupSets(self, setCount, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0):
+        if self.useAllSets:
             self.unselectedInstances = []
             self.selectedInstances = list(self.stockDataInstances.values())
 
@@ -369,7 +371,7 @@ class DataManager():
             if DEBUG: print('Selecting', setCount, 'instances')
 
             ## cover minimums
-            if minimumSetsPerSymbol > 0 and not useAllSets:
+            if minimumSetsPerSymbol > 0 and not self.useAllSets:
                 self.unselectedInstances = []
                 for h in self.stockDataHandlers.values():
                     available = h.getAvailableSelections()
@@ -394,7 +396,7 @@ class DataManager():
             puints, nuints = getInstancesByClass(self.unselectedInstances)
             if DEBUG: print('sel rem', len(self.selectedInstances), setCount, len(self.selectedInstances) < setCount)
             # select remaining
-            if len(self.selectedInstances) < setCount and not useAllSets:
+            if len(self.selectedInstances) < setCount and not self.useAllSets:
                 if DEBUG:
                     print('Positive selected instances', len(psints))
                     print('Negative selected instances', len(nsints))
@@ -479,7 +481,7 @@ class DataManager():
         start = min(int(sz * index), len(set))
         end = min(int(sz * (index + 1)), len(set))
 
-        if index == self.getNumberOfWindowIterations() - 1:
+        if self.useAllSets and index == self.getNumberOfWindowIterations() - 1:
             return set[start:]
         else:
             return set[start:end]
@@ -494,7 +496,7 @@ class DataManager():
         return ret
 
     def getKerasSets(self, classification=0, validationDataOnly=False, exchange=None, symbol=None, slice=None, verbose=1):
-        if slice > self.getNumberOfWindowIterations() - 1: raise IndexError()
+        if self.useAllSets and slice > self.getNumberOfWindowIterations() - 1: raise IndexError()
         if self.setsSlidingWindowSize and slice is None: raise ValueError('Keras set setup will overload memory, useAllSets set but not slice indicated')
 
         self.getprecstocktime = 0

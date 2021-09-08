@@ -58,10 +58,12 @@ class NeuralNetworkInstance:
     filepath = None
     stats: NetworkStats = None
     id = None
+    useAllSets = False
+    useAllSetsAccumulator = None
 
-    def __init__(self, model: tf.keras.Model, inputVectorFactory, filepath, stats):
+    def __init__(self, model: tf.keras.Model, inputVectorFactory, filepath, stats, useAllSets):
         if model:
-        self.model = model
+            self.model = model
         if inputVectorFactory:
             self.inputVectorFactory = inputVectorFactory
             self.defaultInputVectorFactory = False
@@ -70,11 +72,14 @@ class NeuralNetworkInstance:
         self.filepath = filepath
         self.stats = stats
         self.id = stats.id
+        self.useAllSets = useAllSets
+
+        self._initializeAccumulatorIfRequired()
 
     @classmethod
     def new(
         cls, id, optimizer, layers, inputSize,
-        threshold=0, precedingRange=1, followingRange=1, seriesType=SeriesType.DAILY, highMax=0, volumeMax=0, accuracyType=AccuracyType.OVERALL
+        threshold=0, precedingRange=1, followingRange=1, seriesType=SeriesType.DAILY, highMax=0, volumeMax=0, accuracyType=AccuracyType.OVERALL, useAllSets=False
     ):
         model = Sequential()
 
@@ -126,17 +131,17 @@ class NeuralNetworkInstance:
         # stats['epochs'] = 0
         # stats = recdotdict(stats)
 
-        return cls(model, None, None, stats)
+        return cls(model, None, None, stats, useAllSets)
 
     @classmethod
-    def fromSave(cls, factoryFile, factoryConfig, modelpath, stats):
+    def fromSave(cls, factoryFile, factoryConfig, modelpath, stats, useAllSets=False):
         folder = '_dynamicallyLoadedFactories'
         id = str(stats.id)
         with open(os.path.join(path, 'managers', folder, id) + '.py', 'wb') as f:
             f.write(factoryFile)
         factory = importlib.import_module('managers.' + folder + '.' + id).InputVectorFactory
 
-        return cls(None, factory(factoryConfig), modelpath, NetworkStats.importFrom(stats))
+        return cls(None, factory(factoryConfig), modelpath, NetworkStats.importFrom(stats), useAllSets)
 
     def updateStats(self, threshold=0, precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, highMax=0, volumeMax=0, accuracyType=AccuracyType.OVERALL, normalizationInfo=None, **kwargs):
         if threshold:       self.stats.changeThreshold = threshold
@@ -177,6 +182,11 @@ class NeuralNetworkInstance:
         K.clear_session()
         gc.collect()
 
+    def _initializeAccumulatorIfRequired(self):
+        if not self.useAllSetsAccumulator:
+            self.useAllSetsAccumulator = {
+                actype: [] for actype in AccuracyType
+            }
 
     def fit(self, inputVectors, outputVectors, **kwargs):
         if not self.model: raise BufferError('Model not loaded')
@@ -221,6 +231,19 @@ class NeuralNetworkInstance:
                 self.stats.negativeAccuracy = results[AccuracyType.NEGATIVE][LossAccuracy.ACCURACY]
 
                 self.printAccuracyStats()
+
+            if self.useAllSets:
+                self._initializeAccumulatorIfRequired()
+
+                for actype in AccuracyType:
+                    self.useAllSetsAccumulator[actype].append(results[actype][LossAccuracy.ACCURACY])
+
+                ## print accumulated accuracy stats
+                totlength = len(self.useAllSetsAccumulator[AccuracyType.OVERALL])
+                print('Iterations: {}\nOverall positive accuracy: {}\nOverall negative accuracy: {}\nOverall overall accuracy: {}\n'.format(
+                    totlength, sum(self.useAllSetsAccumulator[AccuracyType.POSITIVE])/totlength, sum(self.useAllSetsAccumulator[AccuracyType.NEGATIVE])/totlength, sum(self.useAllSetsAccumulator[AccuracyType.OVERALL])/totlength
+                ))
+
         
         self.updated = True
 
