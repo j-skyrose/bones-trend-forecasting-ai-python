@@ -7,11 +7,12 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import numpy, importlib
+import numpy, importlib, gc
 # from keras import backend as K
 import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras.models import Sequential
+from keras import backend as K
+from tensorflow.keras import utils as kutils, Model
+from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Dense, Dropout, Activation, AlphaDropout
 from tensorflow.keras.optimizers import SGD, Nadam, Adam
 from typing import Dict
@@ -50,7 +51,7 @@ os.environ["TF_MIN_GPU_MULTIPROCESSOR_COUNT"]= "8" if useMainGPU else "5"
 
 
 class NeuralNetworkInstance:
-    model: tf.keras.Model = None
+    model: Model = None
     updated = False
     defaultInputVectorFactory = True
     inputVectorFactory: InputVectorFactory = None
@@ -59,6 +60,7 @@ class NeuralNetworkInstance:
     id = None
 
     def __init__(self, model: tf.keras.Model, inputVectorFactory, filepath, stats):
+        if model:
         self.model = model
         if inputVectorFactory:
             self.inputVectorFactory = inputVectorFactory
@@ -134,7 +136,7 @@ class NeuralNetworkInstance:
             f.write(factoryFile)
         factory = importlib.import_module('managers.' + folder + '.' + id).InputVectorFactory
 
-        return cls(keras.models.load_model(modelpath), factory(factoryConfig), modelpath, NetworkStats.importFrom(stats))
+        return cls(None, factory(factoryConfig), modelpath, NetworkStats.importFrom(stats))
 
     def updateStats(self, threshold=0, precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, highMax=0, volumeMax=0, accuracyType=AccuracyType.OVERALL, normalizationInfo=None, **kwargs):
         if threshold:       self.stats.changeThreshold = threshold
@@ -163,18 +165,33 @@ class NeuralNetworkInstance:
         else:
             self.model.save(self.filepath)
 
-    def reload(self):
-        self.model = keras.models.load_model(self.filepath)
+    def load(self):
+        K.clear_session()
+        gc.collect()
+        self.model = load_model(self.filepath)
+
+    def unload(self, save=False):
+        if save:
+            self.save()
+        self.model = None
+        K.clear_session()
+        gc.collect()
+
 
     def fit(self, inputVectors, outputVectors, **kwargs):
+        if not self.model: raise BufferError('Model not loaded')
+        
         # self.model.fit(inputVectors, outputVectors, **kwargs)
         # print(len(inputVectors), inputVectors[0])
         # print(len(outputVectors), outputVectors[0])
-        self.model.fit(inputVectors, outputVectors, **kwargs)
+        hist = self.model.fit(inputVectors, outputVectors, **kwargs)
         if kwargs['epochs']:
-            self.stats.epochs += kwargs['epochs']
+            # self.stats.epochs += kwargs['epochs']
+            self.stats.epochs += len(hist.epoch)
     
     def evaluate(self, evaluationDataHandler: EvaluationDataHandler, **kwargs) -> EvaluationResultsObj:
+        if not self.model: raise BufferError('Model not loaded')
+
         # if len(inputVectorSets) != 3: raise IndexError
         print('Evaluating...')
         # losses = []
@@ -210,6 +227,8 @@ class NeuralNetworkInstance:
         return results
 
     def predict(self, inputData, **kwargs):
+        if not self.model: raise BufferError('Model not loaded')
+
         inputData = inputData.reshape(-1, inputData.size)
         return numpy.argmax(self.model.predict(inputData, **kwargs), axis=None, out=None)
 
@@ -220,7 +239,7 @@ class NeuralNetworkInstance:
 
 if __name__ == '__main__':
     inp = numpy.array([[0,1],[1,0]])
-    oup = keras.utils.to_categorical([0,1], num_classes=2)
+    oup = kutils.to_categorical([0,1], num_classes=2)
     n = NeuralNetworkInstance.new(
         '1',
         Adam(amsgrad=True),
