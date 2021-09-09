@@ -225,25 +225,28 @@ class NeuralNetworkInstance:
             #     self.stats.positiveAccuracy = accuracies[1]
             #     self.stats.negativeAccuracy = accuracies[2]
 
-            if results[self.stats.accuracyType][LossAccuracy.ACCURACY] > self.stats[self.stats.accuracyType.statsName]:
+            if self.useAllSets:
+                self._initializeAccumulatorIfRequired()
+                iterationCount = len(self.useAllSetsAccumulator[AccuracyType.OVERALL]) + 1
+
+                for actype in AccuracyType:
+                    self.useAllSetsAccumulator[actype].append(results[actype][LossAccuracy.ACCURACY])
+                    self.stats.__setattr__(actype.statsName, sum(self.useAllSetsAccumulator[actype]) / iterationCount)
+
+                ## print accumulated accuracy stats
+                # print('Iterations: {}\nOverall positive accuracy: {}\nOverall negative accuracy: {}\nOverall overall accuracy: {}\n'.format(
+                #     totlength, sum(self.useAllSetsAccumulator[AccuracyType.POSITIVE])/totlength, sum(self.useAllSetsAccumulator[AccuracyType.NEGATIVE])/totlength, sum(self.useAllSetsAccumulator[AccuracyType.OVERALL])/totlength
+                # ))
+                print('Iterations:', iterationCount)
+                
+
+            elif results[self.stats.accuracyType][LossAccuracy.ACCURACY] > self.stats[self.stats.accuracyType.statsName]:
                 self.stats.overallAccuracy = results[AccuracyType.OVERALL][LossAccuracy.ACCURACY]
                 self.stats.positiveAccuracy = results[AccuracyType.POSITIVE][LossAccuracy.ACCURACY]
                 self.stats.negativeAccuracy = results[AccuracyType.NEGATIVE][LossAccuracy.ACCURACY]
 
-                self.printAccuracyStats()
 
-            if self.useAllSets:
-                self._initializeAccumulatorIfRequired()
-
-                for actype in AccuracyType:
-                    self.useAllSetsAccumulator[actype].append(results[actype][LossAccuracy.ACCURACY])
-
-                ## print accumulated accuracy stats
-                totlength = len(self.useAllSetsAccumulator[AccuracyType.OVERALL])
-                print('Iterations: {}\nOverall positive accuracy: {}\nOverall negative accuracy: {}\nOverall overall accuracy: {}\n'.format(
-                    totlength, sum(self.useAllSetsAccumulator[AccuracyType.POSITIVE])/totlength, sum(self.useAllSetsAccumulator[AccuracyType.NEGATIVE])/totlength, sum(self.useAllSetsAccumulator[AccuracyType.OVERALL])/totlength
-                ))
-
+            self.printAccuracyStats()
         
         self.updated = True
 
