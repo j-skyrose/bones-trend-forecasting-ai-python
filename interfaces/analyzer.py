@@ -157,15 +157,13 @@ class Analyzer(Singleton):
         self.nn = nn
         self.dm = DataManager.forAnalysis(nn, **kwargs)
 
-    def getStockAccuracy(self, exchange, symbol, nn: NeuralNetworkInstance=None) -> EvaluationResultsObj:
-        validationSet = self.dm.getKerasSets(exchange=exchange, symbol=symbol, validationDataOnly=True, verbose=0) if nn.stats.accuracyType == AccuracyType.OVERALL else []
-        negativeValidationSet = self.dm.getKerasSets(exchange=exchange, symbol=symbol, validationDataOnly=True, verbose=0, classification=1) if nn.stats.accuracyType == AccuracyType.NEGATIVE else []
-        positiveValidationSet = self.dm.getKerasSets(exchange=exchange, symbol=symbol, validationDataOnly=True, verbose=0, classification=2) if nn.stats.accuracyType == AccuracyType.POSITIVE else []
-        if len(validationSet[0]) > 0 or len(negativeValidationSet) > 0 or len(positiveValidationSet) > 0:
-            vhandler: EvaluationDataHandler = EvaluationDataHandler(validationSet, negativeValidationSet=negativeValidationSet, positiveValidationSet=positiveValidationSet)
+    def getStockAccuracy(self, exchange, symbol, nn: NeuralNetworkInstance=None, accuracyType: AccuracyType=AccuracyType.OVERALL, lossAccuracyKey: LossAccuracy=LossAccuracy.ACCURACY) -> EvaluationResultsObj:
+        validationSet = self.dm.getKerasSets(exchange=exchange, symbol=symbol, validationDataOnly=True, verbose=0.5, classification=[e.value for e in AccuracyType].index(accuracyType.value))
+        if len(validationSet) > 0:
+            vhandler: EvaluationDataHandler = EvaluationDataHandler(**{ accuracyType.value[0].lower() + 'ValidationSet': validationSet})
             res = vhandler.evaluateAll(getattr(shortc(nn, self.nn), 'model'), verbose=0)
             # print(exchange, symbol, ':', res[AccuracyType.OVERALL][LossAccuracy.ACCURACY] *100, '%')
-            return res
+            return res[accuracyType][lossAccuracyKey]
         else:
             # print(exchange, symbol, ': no data')
             # return -1

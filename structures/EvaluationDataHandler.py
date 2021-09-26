@@ -16,12 +16,13 @@ from structures.evaluateObj import EvaluateObj
 class EvaluationDataHandler:
     internal = {}
 
-    def __init__(self, validationSet, negativeValidationSet=None, positiveValidationSet=None):
+    def __init__(self, overallValidationSet=None, positiveValidationSet=None, negativeValidationSet=None):
+        if overallValidationSet:
+            self.internal[AccuracyType.OVERALL] = overallValidationSet
         if positiveValidationSet:
             self.internal[AccuracyType.POSITIVE] = positiveValidationSet
         if negativeValidationSet:
             self.internal[AccuracyType.NEGATIVE] = negativeValidationSet
-        self.internal[AccuracyType.OVERALL] = validationSet
 
     def __getitem__(self, key):
         try:
