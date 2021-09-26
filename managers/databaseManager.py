@@ -22,7 +22,7 @@ from globalConfig import config as gconfig
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from constants.enums import FinancialReportType, OperatorDict, SeriesType, AccuracyType, SetType
 from utils.support import processDBQuartersToDicts, processRawValueToInsertValue, recdot, recdotdict, Singleton, extractDateFromDesc, getMarketHolidays, recdotlist, shortc
-from constants.values import testingSymbols, unusableSymbols, apiList
+from constants.values import unusableSymbols, apiList
 
 def addLastUpdatesRowsForAllSymbols(dbc):
     symbolPairs = dbc.execute("SELECT exchange, symbol FROM symbols").fetchall()
@@ -109,6 +109,10 @@ class DatabaseManager(Singleton):
         for i in range (1, 5):
             data[i] = data[i] if data[i] != 'n/a' else 0
         return data
+
+    def __purgeUnusableTickers(self, data, raw=False, **kwargs):
+        if raw: return data
+        return [d for d in data if (d.exchange, d.symbol) not in unusableSymbols]
 
 
     ####################################################################################################################################################################
@@ -227,8 +231,7 @@ class DatabaseManager(Singleton):
         if dt:
             stmt += ' AND date' + dateModifier.sqlsymbol + '? '
             args.append(dt)
-        stmt += 'ORDER BY date ASC'
-        return self.dbc.execute(stmt, tuple(args)).fetchall()
+        return self.__purgeUnusableTickers(self.dbc.execute(stmt, tuple(args)).fetchall())
 
     ## used by collector to determine which stocks are more in need of new/updated data
     def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, type=None, api=None):
@@ -313,15 +316,22 @@ class DatabaseManager(Singleton):
 
         dateGaps = {} if ALL else []
         print('Determining DAILY historical gaps')
+        damagedTickers = set()
         for r in results if DEBUG else tqdm(results):
+            if (r.exchange, r.symbol) in unusableSymbols: continue
+
             data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ORDER BY date', (r.exchange, r.symbol, SeriesType.DAILY.name)).fetchall()
             startDate = date.fromisoformat(r.start)
             endDate = date.fromisoformat(r.finish)
-            if DEBUG: print(startDate, ' -> ', endDate)
+            if DEBUG: 
+                print('###############################################')
+                print(r.exchange, r.symbol)
+                print(startDate, ' -> ', endDate)
 
             dindex = 0
             cyear = 0
             holidays = []
+            consecgaps = 0
             for d in range(int((endDate - startDate).total_seconds() / (60 * 60 * 24))):
                 cdate = startDate + timedelta(days=d)
                 if DEBUG: print('Checking', cdate)
@@ -348,11 +358,26 @@ class DatabaseManager(Singleton):
                             dateGaps[cdate] = [(r.exchange, r.symbol)]
                     else:
                         dateGaps.append(cdate)
+                    consecgaps += 1
+
+                    if consecgaps > 75: 
+                        # print('consecutive gaps too big for', r.exchange, r.symbol)
+                        # raise Exception('consecutive gaps too big for  (\'' + r.exchange + '\',\'' + r.symbol + '\')')
+                        damagedTickers.add((r.exchange, r.symbol))
                 else:
                     dindex += 1
+                    consecgaps = 0
 
             #     if dindex > 30: break
             # break
+
+        if len(damagedTickers) > 0:
+            dtstr = ''
+            for d in damagedTickers:
+                dtstr += ',(\'' + d[0] + '\',\'' + d[1] + '\')'
+            print(dtstr)
+            raise Exception('consecutive gaps too big for some symbols')
+
 
         return dateGaps
 
@@ -374,7 +399,7 @@ class DatabaseManager(Singleton):
             for c in normalizationColumns:
                 normalizationLists.append(
                     [x['avg(%s)' % c] for x in
-                        [y for y in data if (y.exchange, y.symbol) not in testingSymbols + unusableSymbols]
+                        [y for y in data if (y.exchange, y.symbol) not in unusableSymbols]
                     ]
                 )
 
@@ -1209,6 +1234,7 @@ class DatabaseManager(Singleton):
         # for g in trange(gaps):
             # for t in gaps[g] if ALL else [(exchange, symbol)]:
             for t in tqdm(gaps[g], desc=str(g), leave=False) if ALL else [(exchange, symbol)]:
+                if (t[0], t[1]) in unusableSymbols: continue
                 ## find closest date without going over
                 prevclose = None
                 for d in self.getStockData(t[0], t[1], type):

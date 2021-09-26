@@ -10,7 +10,7 @@ sys.path.append(path)
 from typing import List
 
 from utils.support import Singleton, recdotdict
-from constants.values import testingSymbols, unusableSymbols, vixOffset
+from constants.values import unusableSymbols, vixOffset
 from managers.databaseManager import DatabaseManager
 
 class VIXManager(Singleton):

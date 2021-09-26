@@ -19,7 +19,7 @@ from globalConfig import config as gconfig
 from constants.enums import DataFormType, OutputClass, SeriesType, SetType
 from utils.support import Singleton, flatten, getAdjustedSlidingWindowSize, recdotdict, recdotlist, shortc, multicore_poolIMap, processDBQuartersToDicts
 from utils.other import getInstancesByClass
-from constants.values import testingSymbols, unusableSymbols
+from constants.values import unusableSymbols
 from managers.stockDataManager import StockDataManager
 from managers.databaseManager import DatabaseManager
 from managers.vixManager import VIXManager
@@ -83,7 +83,7 @@ class DataManager():
 
         ## purge invalid tickers
         for s in symbolList:
-            if (s.exchange, s.symbol) in testingSymbols + unusableSymbols:
+            if (s.exchange, s.symbol) in unusableSymbols:
                 symbolList.remove(s)
 
         ## pull and setup financial reports ref
@@ -200,7 +200,7 @@ class DataManager():
 
         else:
             for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):   
-                if (s.exchange, s.symbol) in testingSymbols + unusableSymbols: continue
+                if (s.exchange, s.symbol) in unusableSymbols: continue
                 data = dbm.getStockData(s.exchange, s.symbol, seriesType)
                 if len(data) >= precedingRange + followingRange + 1:
                     self.stockDataHandlers[(s.exchange, s.symbol)] = StockDataHandler(
@@ -245,7 +245,7 @@ class DataManager():
             restotal = []
             if not ANALYZE2:
                 for s in tqdm.tqdm(symbolList, desc='Creating financial handlers'):  
-                    if (s.exchange, s.symbol) in testingSymbols + unusableSymbols: continue
+                    if (s.exchange, s.symbol) in unusableSymbols: continue
                     if not ANALYZE1 and not ANALYZE2 and not ANALYZE3:
                         self.financialDataHandlers[(s.exchange, s.symbol)] = FinancialDataHandler(s, dbm.getFinancialData(s.exchange, s.symbol))
                     else:
@@ -298,7 +298,6 @@ class DataManager():
                 gettingtime += time.time() - startt
 
                 startt = time.time()
-                excludeList = testingSymbols + unusableSymbols
                 ## format results, maybe need new layer
                 createQuarterObj = lambda rw: { 'period': rw.period, 'quarter': rw.quarter, 'filed': rw.filed, 'nums': { rw.tag: rw.value }}
 
@@ -306,11 +305,11 @@ class DataManager():
                 curquarter = createQuarterObj(res[0])
                 curticker = (res[0].exchange, res[0].symbol)
                 for r in res[1:]:
-                    if (r.exchange, r.symbol) in excludeList: continue
+                    if (r.exchange, r.symbol) in unusableSymbols: continue
 
 
                     if (r.exchange, r.symbol) != curticker:
-                        if curticker in excludeList:
+                        if curticker in unusableSymbols:
                             pass
                         else:
                             ret.append(curquarter)

@@ -19,7 +19,7 @@ from typing import Dict, List
 from globalConfig import config as gconfig
 from constants.enums import OutputClass, SeriesType, SetType
 from utils.support import Singleton, recdotdict, shortc
-from constants.values import testingSymbols, unusableSymbols
+from constants.values import unusableSymbols
 from managers.databaseManager import DatabaseManager
 from managers.vixManager import VIXManager
 from managers.inputVectorFactory import InputVectorFactory
@@ -45,7 +45,7 @@ def setupHandlerWorker(
         normalizationMaxes = [x for x in normalizationInfo.values()]
         handlers = {}
         for s in tqdm.tqdm(symbolList, desc='Creating handlers') if processid == 0 else symbolList:   
-            if (s.exchange, s.symbol) in testingSymbols + unusableSymbols: continue
+            if (s.exchange, s.symbol) in unusableSymbols: continue
             data = dbm.getStockData(s.exchange, s.symbol, seriesType)
             if len(data) >= precedingRange + followingRange + 1:
                 handlers[(s.exchange, s.symbol)] = StockDataHandler(
