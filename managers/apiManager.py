@@ -84,16 +84,16 @@ class APIManager(Singleton):
 
         return a.remaining
 
-    def __executeAPIRequest(self, apih, func):
+    def __executeAPIRequest(self, apih, func, verbose=0):
         ret = None
         for i in range(2):
             try:
                 ret = func()
                 break
             except APITimeout:
-                print('API timed out')
+                if verbose == 1: print('API timed out')
                 timer.sleep(60)
-                print('Retrying...')
+                if verbose == 1: print('Retrying...')
         if ret is None:
             if apih.limitType != 'NONE': apih.remaining = 0
             raise APILimitReached
@@ -102,18 +102,19 @@ class APIManager(Singleton):
 
         return ret
 
-    def _executeRequestWrapper(self, api, requestFunc, seriesType=None, queryDate=None):
+    def _executeRequestWrapper(self, api, requestFunc, seriesType=None, queryDate=None, verbose=0):
         apiHandle = self.apis[api]
         self._checkLimits(apiHandle, seriesType, queryDate)
 
-        return recdot(self.__executeAPIRequest(apiHandle, lambda: requestFunc(apiHandle)))
+        return recdot(self.__executeAPIRequest(apiHandle, lambda: requestFunc(apiHandle), verbose))
 
-    def query(self, api, symbol=None, stype=None, qdate=None):
+    def query(self, api, symbol=None, stype=None, qdate=None, verbose=0):
         return self._executeRequestWrapper(
             api,
-            (lambda apih: apih.api.query(stype, symbol)) if not qdate else (lambda apih: apih.api.query(qdate)),
+            (lambda apih: apih.api.query(stype, symbol)) if not qdate else (lambda apih: apih.api.query(qdate, verbose)),
             stype,
-            qdate
+            qdate,
+            verbose
         )
 
     def getTickerDetails(self, api, symbol):

@@ -56,12 +56,13 @@ class Polygon:
 #    "t": 1602705600000,
 #    "n": 31444
 
-    def query(self, date):
+    def query(self, date, verbose=0):
         rjson = self.__responseHandler(
             requests.get(self.url + '/v2/aggs/grouped/locale/us/market/stocks/' + date, params={
                 'apikey': self.apiKey,
                 'unadjusted': True
-            })
+            }),
+            verbose
         )
 
         data = rjson['results'] if rjson['resultsCount'] > 0 else []
@@ -78,11 +79,11 @@ class Polygon:
                 'volume': data[d]['v']
             }
 
-        print(rjson['resultsCount'],'data points retrieved')
+        if verbose == 1: print(rjson['resultsCount'],'data points retrieved')
         return data
 
-    def __responseHandler(self, resp: Response):
-        print('made request', resp.url)
+    def __responseHandler(self, resp: Response, verbose=0):
+        if verbose == 1: print('made request', resp.url)
 
         if resp.ok:
             rjson = resp.json()
@@ -96,7 +97,7 @@ class Polygon:
                 raise APIError
                 # raise APITimeout
 
-            print('got response', rjson)
+            if verbose == 2: print('got response', rjson)
             return rjson
 
         elif resp.status_code == 429:

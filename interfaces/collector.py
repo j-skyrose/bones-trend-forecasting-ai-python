@@ -97,7 +97,7 @@ class Collector:
             try:
                 d = (currentdate - timedelta(days=c)).isoformat()
                 # res = self.apiManager.apis[api].api.query(d)
-                res = self.apiManager.query(api, qdate=d)
+                res = self.apiManager.query(api, qdate=d, verbose=1)
                 if len(res) > 0:
                     batchByDate[d] = res
             except APIError:
