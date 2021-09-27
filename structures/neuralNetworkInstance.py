@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import numpy, importlib, gc
+import numpy, importlib, gc, time
 # from keras import backend as K
 import tensorflow as tf
 from keras import backend as K
@@ -61,16 +61,17 @@ class NeuralNetworkInstance:
     useAllSets = False
     useAllSetsAccumulator = None
 
-    def __init__(self, model: tf.keras.Model, inputVectorFactory, filepath, stats, useAllSets):
-        if model:
+    def __init__(self, model: tf.keras.Model=None, inputVectorFactory=None, factoryConfig=gconfig, filepath=None, stats=None, useAllSets=False):
             self.model = model
         if inputVectorFactory:
-            self.inputVectorFactory = inputVectorFactory
+            self.inputVectorFactory = inputVectorFactory(factoryConfig)
             self.defaultInputVectorFactory = False
         else:
             self.inputVectorFactory = InputVectorFactory()
+        self.config = factoryConfig
         self.filepath = filepath
         self.stats = stats
+        if stats:
         self.id = stats.id
         self.useAllSets = useAllSets
 
@@ -131,7 +132,7 @@ class NeuralNetworkInstance:
         # stats['epochs'] = 0
         # stats = recdotdict(stats)
 
-        return cls(model, None, None, stats, useAllSets)
+        return cls(model=model, stats=stats, useAllSets=useAllSets)
 
     @classmethod
     def fromSave(cls, factoryFile, factoryConfig, modelpath, stats, useAllSets=False):
@@ -139,9 +140,18 @@ class NeuralNetworkInstance:
         id = str(stats.id)
         with open(os.path.join(path, 'managers', folder, id) + '.py', 'wb') as f:
             f.write(factoryFile)
-        factory = importlib.import_module('managers.' + folder + '.' + id).InputVectorFactory
+        # factory = importlib.import_module('managers.' + folder + '.' + id).InputVectorFactory
+        factoryModule = importlib.import_module('managers.' + folder + '.' + id)
+        factory = None
+        for x in range(3):
+            try:
+                factory = factoryModule.InputVectorFactory
+                break
+            except AttributeError:
+                time.sleep(1)
+        if not factory: factory = factoryModule.InputVectorFactory
 
-        return cls(None, factory(factoryConfig), modelpath, NetworkStats.importFrom(stats), useAllSets)
+        return cls(inputVectorFactory=factory, factoryConfig=factoryConfig, filepath=modelpath, stats=NetworkStats.importFrom(stats), useAllSets=useAllSets)
 
     def updateStats(self, threshold=0, precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, highMax=0, volumeMax=0, accuracyType=AccuracyType.OVERALL, normalizationInfo=None, **kwargs):
         if threshold:       self.stats.changeThreshold = threshold
