@@ -1254,8 +1254,28 @@ class DatabaseManager(Singleton):
         if not dryrun: 
             self.dbc.executemany(stmt, tuples)
         else:
+            # for t in tuples:
+            #     print(t)
+
+            sumdict = {}
             for t in tuples:
+                sumdict[(t[0], t[1])] = 0
+            for t in tuples:
+                sumdict[(t[0], t[1])] += 1
+                
+            sumdict = dict(sorted(sumdict.items(), key=lambda item: item[1]))
+            for tk, v in sumdict.items():
+                # if v > 60:
+                print(tk, v)
+                c = 0
+                for t in tuples:
+                    if (t[0], t[1]) == tk:
                 print(t)
+                        c+=1
+                    if c > 4:
+                        break
+
+            
 
 
     ## one time use
@@ -1431,6 +1451,7 @@ if __name__ == '__main__':
     # for d in data: print(d)
 
     # d.fillHistoricalGaps(exchange='BATS', symbol='ACES', type=SeriesType.DAILY)
+    d.fillHistoricalGaps(type=SeriesType.DAILY, dryrun=True)
     # d.fillHistoricalGaps(type=SeriesType.DAILY)
 
     # addLastUpdatesRowsForAllSymbols(d.dbc)
@@ -1555,7 +1576,7 @@ if __name__ == '__main__':
     #     if c > 6: break
 
 
-    print(d.getFinancialData('BATS','CBOE'))
+    # print(d.getFinancialData('BATS','CBOE'))
 
 
     pass
