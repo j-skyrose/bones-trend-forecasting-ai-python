@@ -16,7 +16,7 @@ from tqdm.contrib.concurrent import process_map
 from functools import partial
 
 from globalConfig import config as gconfig
-from constants.enums import DataFormType, OutputClass, SeriesType, SetType
+from constants.enums import DataFormType, OperatorDict, OutputClass, SeriesType, SetType
 from utils.support import Singleton, flatten, getAdjustedSlidingWindowSize, recdotdict, recdotlist, shortc, multicore_poolIMap, processDBQuartersToDicts
 from utils.other import getInstancesByClass
 from constants.values import unusableSymbols
@@ -55,6 +55,9 @@ class DataManager():
     trainingInstances = []
     validationInstances = []
     testingInstances = []
+    trainingSet = []
+    validationSet = []
+    testingSet = []
     inputVectorFactory = None
     setsSlidingWindowSize = 0
     useAllSets = False
@@ -64,6 +67,7 @@ class DataManager():
         setCount=None, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, useAllSets=False,
         inputVectorFactory=InputVectorFactory(), normalizationInfo={}, symbolList:List=[],
         analysis=False, statsOnly=False,
+        anchorDate=None, forPredictor=False,
         **kwargs
         # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
         # neuralNetwork: NeuralNetworkInstance=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[]
@@ -77,7 +81,7 @@ class DataManager():
         # self.threshold = threshold
         # self.setCount = setCount
         self.kerasSetCaches = {}
-        # self.normalizationInfo = recdotdict(normalizationInfo)
+        self.normalizationInfo = recdotdict(normalizationInfo)
         # self.symbolList = symbolList
         self.useAllSets = useAllSets
 
@@ -93,16 +97,16 @@ class DataManager():
             print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
 
         startt2 = time.time()
-        self.initializeStockDataHandlers(symbolList, recdotdict(normalizationInfo), precedingRange, followingRange, seriesType, threshold)
+        self.initializeStockDataHandlers(symbolList, self.normalizationInfo, precedingRange, followingRange, seriesType, threshold)
         print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
-
 
         if setCount is not None:
             self.setupSets(setCount, setSplitTuple, minimumSetsPerSymbol)
-        elif analysis:
-            self.setupSets(len(self.stockDataInstances.values()), (0,1))
+        elif analysis or forPredictor:
+            self.setupSets(len(self.stockDataInstances.values()), (0,1), forPredictor=forPredictor)
         elif statsOnly:
             self.setupSets(1, (1,0), 0)
+
         print('DataManager init complete. Took', time.time() - startt, 'seconds')
 
     @classmethod
@@ -130,6 +134,23 @@ class DataManager():
             analysis=True,
             **kwargs
         )
+
+    @classmethod
+    def forPredictor(cls, nn: NeuralNetworkInstance, **kwargs):
+        normalizationInfo = nn.stats.getNormalizationInfo()
+        qualifyingSymbolList = dbm.getLastUpdatedInfo(nn.stats.seriesType, kwargs['anchorDate'], OperatorDict.LESSTHANOREQUAL, **kwargs)
+
+        symbolList = []
+        for t in qualifyingSymbolList:
+            symbolList.append(dbm.getSymbols(exchange=t.exchange, symbol=t.symbol)[0])
+
+        return cls(
+            precedingRange=nn.stats.precedingRange, followingRange=nn.stats.followingRange, seriesType=nn.stats.seriesType, threshold=nn.stats.changeThreshold, inputVectorFactory=nn.inputVectorFactory,
+            normalizationInfo=normalizationInfo, symbolList=symbolList,
+            forPredictor=True,
+            **kwargs
+        )
+
 
     ## basically just to run through initialization to get all the print() info on pos/neg split counts
     @classmethod
@@ -351,8 +372,8 @@ class DataManager():
                 print('insertingtime',insertingtime,'seconds')
                 print('total',gettingtime+massagingtime+creatingtime+insertingtime,'seconds')
 
-    def setupSets(self, setCount, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0):
-        if self.useAllSets:
+    def setupSets(self, setCount, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, forPredictor=False):
+        if self.useAllSets or forPredictor:
             self.unselectedInstances = []
             self.selectedInstances = list(self.stockDataInstances.values())
 
@@ -360,6 +381,7 @@ class DataManager():
             psints, nsints = getInstancesByClass(self.selectedInstances)
             print('Class split ratio:', len(psints) / len(self.selectedInstances))
             if len(psints) / len(self.selectedInstances) < gconfig.sets.minimumClassSplitRatio: raise ValueError('Positive to negative set ratio below minimum threshold')
+            if not forPredictor:
             self.setsSlidingWindowSize = getAdjustedSlidingWindowSize(len(self.selectedInstances), setCount)
             print('Adjusted sets window size from', setCount, 'to', int(len(self.selectedInstances)*self.setsSlidingWindowSize))
 
@@ -485,9 +507,11 @@ class DataManager():
         else:
             return set[start:end]
 
-    def _getSubset(self, sourceSet, exchange, symbol):
-        ret = [x for x in sourceSet if (exchange == x.handler.symbolData.exchange and (not symbol or symbol == x.handler.symbolData.symbol))]
-        print(exchange, symbol, ':', len(sourceSet), '->', len(ret))
+    def _getSubset(self, sourceSet, exchange=None, symbol=None, verbose=0):
+        ret = [x for x in sourceSet 
+            if (not exchange and not symbol) or (exchange and exchange == x.stockDataHandler.symbolData.exchange and (not symbol or symbol == x.stockDataHandler.symbolData.symbol))
+        ]
+        if verbose >= 1: print(exchange, symbol, ':', len(sourceSet), '->', len(ret))
         # ret = []
         # for x in set:
         #     if exchange == x.handler.symbolData.exchange and (not symbol or symbol == x.handler.symbolData.symbol):
@@ -503,7 +527,7 @@ class DataManager():
         self.actualbuildtime = 0
         def constrList_helper(set: List[DataPointInstance], isInput, showProgress=True):
             retList = []
-            for i in tqdm.tqdm(set, desc='Building input vector array') if showProgress and isInput and verbose != 0 else set:
+            for i in tqdm.tqdm(set, desc='Building input vector array', leave=(verbose > 0.5)) if showProgress and isInput and verbose != 0 else set:
                 retList.append(i.getInputVector() if isInput else i.getOutputVector())
             return retList
 
@@ -522,23 +546,24 @@ class DataManager():
             ]
 
 
+        trainingSet = self.trainingSet
+        validationSet = self.validationSet
+        testingSet = self.testingSet
+        
+        if exchange or symbol:
+            trainingSet = self._getSubset(self.trainingSet, exchange, symbol, verbose)
+            validationSet = self._getSubset(self.validationSet, exchange, symbol, verbose)
+            testingSet = self._getSubset(self.testingSet, exchange, symbol, verbose)
+
         ## only select from certain class if specified
         if classification:
-            trainingSet = self._getSetSlice(getInstancesByClass(self.trainingSet)[classification-1], slice)
-            validationSet = self._getSetSlice(getInstancesByClass(self.validationSet)[classification-1], slice)
-            testingSet = self._getSetSlice(getInstancesByClass(self.testingSet)[classification-1], slice)
+            trainingSet = self._getSetSlice(getInstancesByClass(trainingSet)[classification-1], slice)
+            validationSet = self._getSetSlice(getInstancesByClass(validationSet)[classification-1], slice)
+            testingSet = self._getSetSlice(getInstancesByClass(testingSet)[classification-1], slice)
         elif slice is not None:
-            trainingSet = self._getSetSlice(self.trainingSet, slice)
-            validationSet = self._getSetSlice(self.validationSet, slice)
-            testingSet = self._getSetSlice(self.testingSet, slice)
-        elif exchange or symbol:
-            trainingSet = self._getSubset(self.trainingSet, exchange, symbol)
-            validationSet = self._getSubset(self.validationSet, exchange, symbol)
-            testingSet = self._getSubset(self.testingSet, exchange, symbol)
-        else:
-            trainingSet = self.trainingSet
-            validationSet = self.validationSet
-            testingSet = self.testingSet
+            trainingSet = self._getSetSlice(trainingSet, slice)
+            validationSet = self._getSetSlice(validationSet, slice)
+            testingSet = self._getSetSlice(testingSet, slice)
 
         validationData = constructDataSet(validationSet)
         if validationDataOnly: return validationData

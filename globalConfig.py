@@ -16,6 +16,14 @@ try:
 except:
     TESTING = False
 
+
+TESTING_PREDICTOR = True
+try:
+    if TESTING_PREDICTOR: pass
+except:
+    TESTING_PREDICTOR = False   
+    
+
 trainingConfig = {
     ## master
     'setCount': 500,
@@ -65,6 +73,9 @@ config = recdotdict({
         'positiveSplitRatio': 1/6, # default 0.5,
         'minimumClassSplitRatio': 0.15 if not TESTING else 0.01
     },
+    'predictor': {
+        'ifBinaryUseRaw': True
+    },
     'feature': {
         'exchange': genFeatureObj(False, 'single'),
         'sector': genFeatureObj(True, 'single', True),
@@ -103,8 +114,10 @@ config = recdotdict({
 
     'testing': {
         'enabled': TESTING,
+        'predictor': TESTING_PREDICTOR,
         'exchange': 'NYSE',
-        'stockQueryLimit': 50
+        'stockQueryLimit': 50,
+        'predictorStockQueryLimit': 100
     },
 
     'training': trainingConfig

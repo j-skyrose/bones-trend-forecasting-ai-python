@@ -49,6 +49,11 @@ os.environ["TF_MIN_GPU_MULTIPROCESSOR_COUNT"]= "8" if useMainGPU else "5"
 # tf.test.gpu_device_name()
 # sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 
+## allow keras to use more of the GPU memory, to avoid OOM crashes
+gpu_options = tf.compat.v1.GPUOptions(allow_growth=True)
+sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))
+tf.compat.v1.keras.backend.set_session(sess)
+
 
 class NeuralNetworkInstance:
     model: Model = None
@@ -62,7 +67,7 @@ class NeuralNetworkInstance:
     useAllSetsAccumulator = None
 
     def __init__(self, model: tf.keras.Model=None, inputVectorFactory=None, factoryConfig=gconfig, filepath=None, stats=None, useAllSets=False):
-            self.model = model
+        self.model = model
         if inputVectorFactory:
             self.inputVectorFactory = inputVectorFactory(factoryConfig)
             self.defaultInputVectorFactory = False
@@ -72,7 +77,7 @@ class NeuralNetworkInstance:
         self.filepath = filepath
         self.stats = stats
         if stats:
-        self.id = stats.id
+            self.id = stats.id
         self.useAllSets = useAllSets
 
         self._initializeAccumulatorIfRequired()
@@ -143,7 +148,7 @@ class NeuralNetworkInstance:
         # factory = importlib.import_module('managers.' + folder + '.' + id).InputVectorFactory
         factoryModule = importlib.import_module('managers.' + folder + '.' + id)
         factory = None
-        for x in range(3):
+        for x in range(6):
             try:
                 factory = factoryModule.InputVectorFactory
                 break
@@ -262,11 +267,19 @@ class NeuralNetworkInstance:
 
         return results
 
-    def predict(self, inputData, **kwargs):
+    def predict(self, inputData, raw=False, batchInput=False, **kwargs):
         if not self.model: raise BufferError('Model not loaded')
 
-        inputData = inputData.reshape(-1, inputData.size)
-        return numpy.argmax(self.model.predict(inputData, **kwargs), axis=None, out=None)
+        if not batchInput:
+            inputData = inputData.reshape(-1, inputData.size)
+        p = self.model.predict(inputData, **kwargs)
+        if batchInput:
+            return p
+        if self.config.dataForm.outputVector == DataFormType.BINARY:
+            r = p if raw else numpy.round(p)
+            return r[0][0]
+        elif self.config.dataForm.outputVector == DataFormType.CATEGORICAL:
+            return numpy.argmax(p, axis=None, out=None)
 
     def printAccuracyStats(self):
         print('Positive accuracy: {}\nNegative accuracy: {}\nOverall accuracy: {}\n'.format(

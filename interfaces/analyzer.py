@@ -8,11 +8,12 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import tqdm, math, gc
+import tqdm, math, gc, time
 from numpy.lib.function_base import median
 from tensorflow.keras.optimizers import Adam
 from datetime import datetime
 
+from globalConfig import config as gconfig
 from managers.databaseManager import DatabaseManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
@@ -152,17 +153,36 @@ class Analyzer(Singleton):
     dm: DataManager = None
     maxSliceSize = 200000
 
-    def __init__(self, nn, **kwargs) -> None:
+    def __init__(self, nn, forPredictor=False, **kwargs) -> None:
         super().__init__()
+        self.resetTestTimes()
         self.nn = nn
-        self.dm = DataManager.forAnalysis(nn, **kwargs)
+        self.dm = DataManager.forPredictor(nn, **kwargs) if forPredictor else DataManager.forAnalysis(nn, **kwargs)
+
+    def resetTestTimes(self):
+        self.testing_getKerasSetsTime = 0
+        self.testing_evaluateAllTime = 0
+
+    def printTestTimes(self):
+        print('    testing_getKerasSetsTime', self.testing_getKerasSetsTime, 'seconds')
+        print('    testing_evaluateAllTime', self.testing_evaluateAllTime, 'seconds')
 
     def getStockAccuracy(self, exchange, symbol, nn: NeuralNetworkInstance=None, accuracyType: AccuracyType=AccuracyType.OVERALL, lossAccuracyKey: LossAccuracy=LossAccuracy.ACCURACY) -> EvaluationResultsObj:
+        if gconfig.testing.predictor:
+            startt = time.time()
         validationSet = self.dm.getKerasSets(exchange=exchange, symbol=symbol, validationDataOnly=True, verbose=0.5, classification=[e.value for e in AccuracyType].index(accuracyType.value))
+        if gconfig.testing.predictor:
+            self.testing_getKerasSetsTime += time.time() - startt
         if len(validationSet) > 0:
             vhandler: EvaluationDataHandler = EvaluationDataHandler(**{ accuracyType.value[0].lower() + 'ValidationSet': validationSet})
+
+            if gconfig.testing.predictor:
+                startt = time.time()
             res = vhandler.evaluateAll(getattr(shortc(nn, self.nn), 'model'), verbose=0)
+            if gconfig.testing.predictor:
+                self.testing_evaluateAllTime += time.time() - startt
             # print(exchange, symbol, ':', res[AccuracyType.OVERALL][LossAccuracy.ACCURACY] *100, '%')
+            
             return res[accuracyType][lossAccuracyKey]
         else:
             # print(exchange, symbol, ': no data')

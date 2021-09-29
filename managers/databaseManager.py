@@ -225,13 +225,21 @@ class DatabaseManager(Singleton):
         return self.dbc.execute(stmt).fetchall()
 
     ## get raw data from last_updates
-    def getLastUpdatedInfo(self, stype, dt=None, dateModifier=OperatorDict.EQUAL):
+    def getLastUpdatedInfo(self, stype, dt=None, dateModifier=OperatorDict.EQUAL, exchanges=[], **kwargs):
         stmt = 'SELECT * FROM last_updates WHERE type=? AND api IS NOT NULL'
         args = [stype.function.replace('TIME_SERIES_','')]
         if dt:
             stmt += ' AND date' + dateModifier.sqlsymbol + '? '
             args.append(dt)
-        return self.__purgeUnusableTickers(self.dbc.execute(stmt, tuple(args)).fetchall())
+        if exchanges:
+            stmt += self._andXContainsListStatement('exchange', exchanges)
+
+        stmt += ' ORDER BY date ASC'
+        if gconfig.testing.predictor: 
+            stmt += ' LIMIT ' + str(gconfig.testing.predictorStockQueryLimit)
+            # print(stmt)
+            # print(args)
+        return self.__purgeUnusableTickers(self.dbc.execute(stmt, tuple(args)).fetchall(), **kwargs)
 
     ## used by collector to determine which stocks are more in need of new/updated data
     def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, type=None, api=None):

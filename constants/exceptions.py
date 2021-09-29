@@ -15,3 +15,6 @@ class SufficientlyUpdatedDataNotAvailable(Exception):
 
 class NoData(Exception):
     pass
+
+class AnchorDateAheadOfLastDataDate(Exception):
+    pass
