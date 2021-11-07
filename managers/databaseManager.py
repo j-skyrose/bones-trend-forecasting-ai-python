@@ -230,6 +230,12 @@ class DatabaseManager(Singleton):
         args = [stype.function.replace('TIME_SERIES_','')]
         if dt:
             stmt += ' AND date' + dateModifier.sqlsymbol + '? '
+
+            ## adjust anchor date if on a weekend, so it do not result in an empty symbol list because anchor is ahead of last update date
+            weekday = date.fromisoformat(dt).weekday()
+            if weekday > 4:
+                dt = date.isoformat(date.fromisoformat(dt) - timedelta(days=(weekday % 4)))
+
             args.append(dt)
         if exchanges:
             stmt += self._andXContainsListStatement('exchange', exchanges)
