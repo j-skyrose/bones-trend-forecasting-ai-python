@@ -14,7 +14,7 @@ from functools import reduce
 from tensorflow.python.framework.errors_impl import InternalError
 
 from utils.other import normalizeStockData
-from interfaces.analyzer import Analyzer
+from interfaces.networkAnalyzer import Analyzer
 from managers.databaseManager import DatabaseManager
 from managers.vixManager import VIXManager
 from managers.neuralNetworkManager import NeuralNetworkManager
