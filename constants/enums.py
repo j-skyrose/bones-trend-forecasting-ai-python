@@ -23,6 +23,7 @@ class SeriesType(Enum):
     WEEKLY_ADJUSTED =   'TIME_SERIES_WEEKLY_ADJUSTED', 'Weekly Time Series'
     MONTHLY =           'TIME_SERIES_MONTHLY', 'Monthly Time Series'
     MONTHLY_ADJUSTED =  'TIME_SERIES_MONTHLY_ADJUSTED', 'Monthly Time Series'
+    MINUTE =            'TIME_SERIES_MINUTE', '' ## polygon only
 
 class AccuracyType(Enum):
     def __init__(self, a, b):
@@ -81,6 +82,15 @@ class DataFormType(Enum):
 class OutputClass(Enum):
     POSITIVE = 'POSITIVE'
     NEGATIVE = 'NEGATIVE'
+
+class TimespanType(Enum):
+    MINUTE = 'MINUTE'
+    HOUR = 'HOUR'
+    DAY = 'DAY'
+    WEEK = 'WEEK'
+    MONTH = 'MONTH'
+    QUARTER = 'QUARTER'
+    YEAR = 'YEAR'
 
 class OperatorDict(Enum):
     def __init__(self, a, b, c=None):

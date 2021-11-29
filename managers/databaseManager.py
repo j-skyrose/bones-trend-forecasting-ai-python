@@ -21,7 +21,7 @@ from structures.api.googleTrends.request import GoogleAPI
 from globalConfig import config as gconfig
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from constants.enums import FinancialReportType, OperatorDict, SeriesType, AccuracyType, SetType
-from utils.support import processDBQuartersToDicts, processRawValueToInsertValue, recdot, recdotdict, Singleton, extractDateFromDesc, getMarketHolidays, recdotlist, shortc
+from utils.support import processDBQuartersToDicts, processRawValueToInsertValue, recdot, recdotdict, Singleton, extractDateFromDesc, getMarketHolidays, recdotlist, shortc, shortcdict, unixToDatetime
 from constants.values import unusableSymbols, apiList
 
 def addLastUpdatesRowsForAllSymbols(dbc):
@@ -76,10 +76,19 @@ class DatabaseManager(Singleton):
     def commit(self):
         self.connect.commit()
 
+    ## for SQL transactions
+    def startBatch(self): 
+        self.commit()
+        self.dbc.execute('BEGIN')
+    def commitBatch(self): self.dbc.execute('COMMIT')
+    def rollbackBatch(self): self.dbc.execute('ROLLBACK')
+
     def __dict_factory(self, c, r):
         d = {}
         for idx, col in enumerate(c.description):
-            d[col[0]] = r[idx]
+            if col[0] == 'timestamp' and re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}', shortc(r[idx], '')):
+                d[col[0]] = datetime.strptime(r[idx], '%Y-%m-%d %X')
+            else: d[col[0]] = r[idx]
         return recdotdict(d)
 
 
@@ -223,6 +232,16 @@ class DatabaseManager(Singleton):
         if ftype: substmt += ' AND period = \'' + ftype.name + '\''
         stmt = 'SELECT exchange, symbol FROM symbols WHERE NOT EXISTS (' + substmt + ') AND api_' + api + ' = 1'
         return self.dbc.execute(stmt).fetchall()
+
+    ## get the row for each symbol with the latest datetime from historical_data_minute
+    def getLatestMinuteDataRows(self, api):
+        stmt = '''
+            SELECT s.exchange, s.symbol, MAX(h.timestamp) AS timestamp FROM symbols s LEFT JOIN historical_data_minute h
+            ON s.exchange = h.exchange AND s.symbol = h.symbol
+            WHERE s.api_{api} = 1
+            GROUP BY s.exchange, s.symbol
+        '''.format(api=api)
+        return self.__purgeUnusableTickers(self.dbc.execute(stmt).fetchall())
 
     ## get raw data from last_updates
     def getLastUpdatedInfo(self, stype, dt=None, dateModifier=OperatorDict.EQUAL, exchanges=[], **kwargs):
@@ -574,6 +593,12 @@ class DatabaseManager(Singleton):
         stmt = 'UPDATE last_updates SET date=?, api=? WHERE exchange=? AND symbol=? AND type=?'
         self.dbc.execute(stmt, (str(date.today()), api, exchange, symbol, typeName))
         # print('Data inserted and updated')
+
+    ## insert data in historical_data_minute table
+    def insertMinuteBatchData(self, exchange, symbol, data):
+        stmt = 'INSERT OR REPLACE INTO historical_data_minute VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+        tuples = [(exchange, symbol, unixToDatetime(d.unixTimePeriod), d.open, d.high, d.low, d.close, d.volumeWeightedAverage, d.volume, d.transactions, shortcdict(d, 'artificial', 0, shortcValue=False)) for d in data]
+        self.dbc.executemany(stmt, tuples)  
 
     ## save a data set used by a network
     def saveDataSet(self, id, trainingSet, validationSet, testingSet, setId=None):

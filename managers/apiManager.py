@@ -16,8 +16,8 @@ import atexit
 import time as timer
 
 from constants.exceptions import APILimitReached, APITimeout, APIError
-from constants.enums import FinancialReportType, FinancialStatementType
-from utils.support import Singleton, recdot, recdotdict
+from constants.enums import FinancialReportType, FinancialStatementType, TimespanType
+from utils.support import Singleton, recdot, recdotdict, shortc
 
 class APIManager(Singleton):
     def __init__(self):
@@ -115,6 +115,13 @@ class APIManager(Singleton):
             stype,
             qdate,
             verbose
+        )
+
+    def getAggregates(self, api='polygon', symbol=None, multipler=None, timespan=None, fromDate=None, toDate=None, limit=50000, verbose=0):
+        return self._executeRequestWrapper(
+            api,
+            lambda apih: apih.api.getAggregates(symbol, shortc(multipler, 1), shortc(timespan, TimespanType.MINUTE), fromDate, toDate, limit, verbose),
+            verbose=verbose
         )
 
     def getTickerDetails(self, api, symbol):

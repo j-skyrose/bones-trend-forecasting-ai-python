@@ -7,9 +7,9 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import tqdm, queue, atexit, traceback, math, requests, csv, codecs
+import tqdm, queue, atexit, traceback, math, requests, csv, codecs, optparse
 import time as timer
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from threading import Thread
 from contextlib import closing
 
@@ -17,8 +17,8 @@ from managers.databaseManager import DatabaseManager
 from managers.apiManager import APIManager
 
 from constants.exceptions import APILimitReached, APIError
-from utils.support import recdotdict
-from constants.enums import FinancialReportType, FinancialStatementType, SeriesType
+from utils.support import getPreviousMarketDay, getLastMarketDay, recdotdict
+from constants.enums import FinancialReportType, FinancialStatementType, SeriesType, TimespanType
 import json
 
 dbm: DatabaseManager = DatabaseManager()
@@ -28,7 +28,7 @@ DEBUG = True
 class Collector:
     def __init__(self):
         atexit.register(self.close)
-        self.apiManager = APIManager()
+        self.apiManager: APIManager = APIManager()
         self.apiErrors = []
 
     def close(self):
@@ -136,6 +136,65 @@ class Collector:
         print('Updated', api, 'data for', counter, 'symbols')
         localDBM.close()
 
+    ## polygon only right now
+    ## pre market is 4am-open, after market is close-8pm
+    def __mixedSymbolDateTimespanCollect(self, api, symbols, timespan=TimespanType.MINUTE):
+        ## polygon limit is 50000, each day is ~960 (~500 - max 1440)
+        chunkSize = 34
+
+        print('collecting for {c} symbols'.format(c=len(symbols)))
+        for t in symbols:
+            if t.timestamp:
+                print(t)
+                print('passing')
+                pass
+            ## no data, need to collect from current day back as far as there is data
+            else:
+                try:
+                    ## use batch in case of any interupts
+                    dbm.startBatch()
+                    toDate = datetime.today()
+
+                    anyData = False
+                    multipler = 1
+                    while True:
+                        while True:
+                            # print('multipler', multipler, int(chunkSize*multipler))
+                            try: fromDate = toDate - timedelta(days=int(chunkSize*multipler))
+                            except OverflowError: fromDate = datetime.min + timedelta(days=1)
+                            try: 
+                                data = self.apiManager.getAggregates(api, t.symbol, fromDate=fromDate.date().isoformat(), toDate=toDate.date().isoformat(), verbose=1)
+                                ## aim for ~40k results
+                                if len(data) > 0: multipler *= 40000 / len(data)
+                                break
+                            except OverflowError:
+                                multipler /= 2
+                        
+                        if len(data) == 0: break
+                        anyData = True
+
+                        dbm.insertMinuteBatchData(t.exchange, t.symbol, data)
+
+                        toDate = fromDate
+
+                    if not anyData: dbm.insertMinuteBatchData(t.exchange, t.symbol, [recdotdict({
+                        'unixTimePeriod': 2147385600,
+                        'open': 0,
+                        'high': 0,
+                        'low': 0,
+                        'close': 0,
+                        'volumeWeightedAverage': 0,
+                        'volume': 0,
+                        'transactions': 0,
+                        'artificial': True
+                    })])
+                    dbm.commitBatch()
+                except Exception as e:
+                    print(e)
+                    dbm.rollbackBatch()
+                    raise e
+            # break # do one at a time
+
     def _collectFromAPI(self, api, symbols=None, type=None):
         if type:
             print(api,'collector started',len(symbols))
@@ -147,13 +206,27 @@ class Collector:
         self.activeThreads -= 1
         print(api,'collector complete','\nThreads remaining',self.activeThreads)
 
-    def startAPICollection(self, api, stype: SeriesType):
+    def startAPICollection(self, api, stype: SeriesType=SeriesType.DAILY):
         typeAPIs = ['alphavantage'] #self.apiManager.getAPIList(sort=True)
         nonTypeAPIs = ['polygon']
 
         try:
 
             if api in nonTypeAPIs:
+                if stype == SeriesType.MINUTE:
+                    tickerlist = dbm.getLatestMinuteDataRows(api)
+
+                    debugc = 0
+                    for t in tickerlist[:]:
+                        debugc += 1
+                        # if debugc < 20: print(t, t.timestamp.date() if t.timestamp else None, datetime.now().date(), t.timestamp.date() >= datetime.now().date() if t.timestamp else False)
+                        ## purge any up-to-date tickers or ones that would return partial data
+                        if t.timestamp and ((t.timestamp.date() == getPreviousMarketDay() or t.timestamp.date() == getLastMarketDay() or t.timestamp.date() > date.today()) and datetime.now().hour <= 19):
+                            # print('removing {e}-{s}'.format(e=t.exchange, s=t.symbol))
+                            tickerlist.remove(t)
+
+                    self.__mixedSymbolDateTimespanCollect(api, tickerlist)
+                else:
                 self.__singleDateBatchCollect(api)
                 
             else:
@@ -466,19 +539,32 @@ class Collector:
             # break
 
 if __name__ == '__main__':
+    parser = optparse.OptionParser()
+    parser.add_option('-a', '--api',
+        action='store', dest='api', default=None
+        )
+    
+    options, args = parser.parse_args()
 
     print('starting')
     c = Collector()
 
-    try:
-        fl, arg1, *argv = sys.argv
-    except ValueError:
-        arg1 = ''
-        pass
-    if arg1.lower() == 'api':
-        c.startAPICollection(argv[0].lower(), SeriesType[argv[1].upper()] if len(argv) > 1 else None)
-    elif arg1.lower() == 'vix':
+    def massageVariable(k: str, v: str):
+        if v.lower() in ['true', 'false']:
+            return v.lower() == 'true'
+        elif k.lower() == 'stype':
+            return SeriesType[v.upper()]
+        return v
+    if options.api:
+        kwargs = {}
+        for arg in args:
+            key, val = arg.split('=')
+            kwargs[key] = massageVariable(key, val)
+
+        if options.api == 'vix':
         c.collectVIX()
+        else:
+            c.startAPICollection(options.api, **kwargs)
     else:
 
 
@@ -496,6 +582,7 @@ if __name__ == '__main__':
             # dbm.staging_condenseSector()
             # dbm.symbols_pullStagedFounded()
             # dbm.symbols_pullStagedSector()
+            c.startAPICollection('polygon', SeriesType.MINUTE)
             pass
         except KeyboardInterrupt:
             # dbm.staging_condenseFounded()

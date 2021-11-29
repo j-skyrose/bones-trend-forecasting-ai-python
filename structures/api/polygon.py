@@ -1,4 +1,3 @@
-from constants.enums import FinancialReportType
 import os, sys
 path = os.path.dirname(os.path.abspath(__file__))
 while ".vscode" not in os.listdir(path):
@@ -11,6 +10,8 @@ sys.path.append(path)
 import requests
 from requests.models import Response
 from constants.exceptions import APIError, APITimeout
+from constants.enums import FinancialReportType, TimespanType
+from utils.support import shortcdict
 
 # import codecs
 # w=codecs.getwriter("utf-8")(sys.stdout.buffer)
@@ -80,6 +81,40 @@ class Polygon:
             }
 
         if verbose == 1: print(rjson['resultsCount'],'data points retrieved')
+        return data
+
+    def getAggregates(self, symbol: str, multipler: int, timespan: TimespanType, fromDate, toDate, limit, verbose=0):
+        rjson = self.__responseHandler(
+            requests.get(
+                # self.url + '/v2/aggs/ticker/' + symbol.upper() + '/range/' + multipler + '/' + timespan.value + '/' + fromDate + '/' + toDate
+                '{url}/v2/aggs/ticker/{symbol}/range/{multipler}/{timespan}/{fromDate}/{toDate}'.format(
+                    url=self.url, symbol=symbol.upper(), multipler=multipler, timespan=timespan.value.lower(), fromDate=fromDate, toDate=toDate
+                ), params={
+                'apikey': self.apiKey,
+                'adjusted': False,
+                'sort': 'asc',
+                'limit': limit ## one day is ~900
+            }),
+            verbose
+        )
+
+        data = rjson['results'] if rjson['resultsCount'] > 0 else []
+
+        for d in range(len(data)):
+            tempvar = data[d]
+            data[d] = {
+                'open': data[d]['o'],
+                'high': data[d]['h'],
+                'low': data[d]['l'],
+                'close': data[d]['c'],
+                'volumeWeightedAverage': shortcdict(data[d], 'vw', 0, False),
+                'volume': data[d]['v'],
+                'transactions': shortcdict(data[d], 'n', 0, False),
+                'unixTimePeriod': data[d]['t']
+            }
+
+        if verbose == 1: print(rjson['resultsCount'],'data points retrieved')
+        if rjson['resultsCount'] == 50000: raise OverflowError ## API limit is 50000, we may have gotten partial or entirely missed days
         return data
 
     def __responseHandler(self, resp: Response, verbose=0):

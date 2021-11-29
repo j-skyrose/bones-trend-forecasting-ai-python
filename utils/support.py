@@ -1,4 +1,4 @@
-import os, sys, json
+import os, sys
 path = os.path.dirname(os.path.abspath(__file__))
 while ".vscode" not in os.listdir(path):
     if path == os.path.dirname(path):
@@ -8,7 +8,7 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 
-import numpy, re, math
+import numpy, re, math, calendar, json
 from datetime import date, datetime, timedelta
 from multiprocessing import Pool, cpu_count
 
@@ -90,6 +90,13 @@ def shortc(val, e):
     return val if val != '' and val != None else e
     # except:
 
+def shortcdict(dict, key, e, shortcValue=True):
+    try:
+        if shortcValue: return shortc(dict[key], e)
+        else: return dict[key]
+    except KeyError:
+        return e
+
 def flatten(li: list):
     return list(_flattenGen(li))
 
@@ -110,6 +117,16 @@ def _isoformatd(d) -> date:
 def _edgarformatd(d) -> date:
     return date(int(d[:4]), int(d[4:6]), int(d[6:]))
 
+def getLastMarketDay(d: date=date.today()) -> date:
+    if d.weekday() > 4:
+        d = d - timedelta(days=(d.weekday() % 4))
+    holidays = getMarketHolidays(d.year)
+    while d in holidays:
+        d = d - timedelta(days=1)
+    return d
+
+def getPreviousMarketDay(d: date=date.today() - timedelta(days=1)) -> date:
+    return getLastMarketDay(d)
 
 def getMarketHolidays(yr):
     holidays = []
@@ -186,6 +203,10 @@ def getMarketHolidays(yr):
     return holidays
 
 
+def unixToDatetime(u): 
+    if u > 9999999999: u /= 1000
+    return datetime.utcfromtimestamp(u)
+def datetimeToUnix(d): return calendar.timegm(d.timetuple()) 
 
 ## attempt to parse a date out of a description string, otherwise return the description for later analysis, or 'e' if its empty
 ## expects a date in the format: december 12, 2000
@@ -321,4 +342,6 @@ if __name__ == '__main__':
     # print(processRawValueToInsertValue(['4', 4, None]))
     # print(processRawValueToInsertValue(True))
     # print(flatten([1,[3,'dave',[6,[0,6,0],6],2],3,{'key':'value'}]))
-    print(getAdjustedSlidingWindowSize(5000, 600))
+    # print(getAdjustedSlidingWindowSize(5000, 600))
+    print(getLastMarketDay(date.fromisoformat('2021-11-04')).isoformat())
+    print(getLastMarketDay())
