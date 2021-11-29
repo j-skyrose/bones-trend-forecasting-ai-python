@@ -26,17 +26,14 @@ from managers.inputVectorFactory import InputVectorFactory
 from structures.EvaluationDataHandler import EvaluationDataHandler
 from globalConfig import config as gconfig
 
-useMainGPU = True
-try: useMainGPU
-except NameError: useMainGPU = False
 
 # -1 - integrated
 # 0 - 960
 # 1 - 750 Ti
-os.environ["CUDA_VISIBLE_DEVICES"]= "0" if useMainGPU else "1"
+os.environ["CUDA_VISIBLE_DEVICES"]= ("0" if gconfig.useMainGPU else "1") if gconfig.useGPU else "-1"
 
 # 5 allows for 750 Ti; default 8
-os.environ["TF_MIN_GPU_MULTIPROCESSOR_COUNT"]= "8" if useMainGPU else "5"
+os.environ["TF_MIN_GPU_MULTIPROCESSOR_COUNT"]= "8" if gconfig.useMainGPU else "5"
 
 # might help with memory fragmentation apparently --program fails to run if set
 # os.environ["TF_GPU_ALLOCATOR"]= "cuda_malloc_async"

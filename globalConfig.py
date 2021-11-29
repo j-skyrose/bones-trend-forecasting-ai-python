@@ -23,6 +23,13 @@ try:
 except:
     TESTING_PREDICTOR = False   
     
+useGPU = True
+try: useGPU
+except NameError: useGPU = False
+    
+useMainGPU = True
+try: useMainGPU
+except NameError: useMainGPU = False
 
 trainingConfig = {
     ## master
@@ -58,7 +65,9 @@ def genFeatureObj(enabled, extype, dataRequired=True):
     return { 'enabled': enabled, 'extype': extype, 'dataRequired': dataRequired }
 
 config = recdotdict({
-    'multicore': True,
+    'useGPU': useGPU,
+    'useMainGPU': useMainGPU,
+    'multicore': False,
     'dataForm': {
         'dayOfWeek': DataFormType.VECTOR,
         'dayOfMonth': DataFormType.VECTOR,
