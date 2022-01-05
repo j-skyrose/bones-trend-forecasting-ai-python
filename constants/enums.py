@@ -111,3 +111,5 @@ if __name__ == '__main__':
     print(FinancialReportType.getNameFor('Q'))
 
     print(AccuracyType.getOpposite(AccuracyType.POSITIVE))
+
+    print([e.value for e in AccuracyType].index(AccuracyType.NEGATIVE.value))
