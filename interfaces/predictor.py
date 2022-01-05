@@ -23,12 +23,12 @@ from managers.inputVectorFactory import InputVectorFactory
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from constants.enums import AccuracyType, LossAccuracy, OperatorDict, SeriesType
 from constants.exceptions import AnchorDateAheadOfLastDataDate, NoData, SufficientlyUpdatedDataNotAvailable
-from utils.support import shortc
+from utils.support import Singleton, shortc
 from globalConfig import config as gconfig
 
 ivf: InputVectorFactory = InputVectorFactory()
 
-class Predictor:
+class Predictor(Singleton):
     analyzer: Analyzer = None
     vixm: VIXManager = VIXManager()
     dbc: DatabaseManager = DatabaseManager()
@@ -36,6 +36,8 @@ class Predictor:
 
     def __init__(self):
         self.resetTestTimes()
+        self.exchanges = []
+        self.symbols = []
         pass
 
     def _getNeuralNetwork(self, networkid, **kwargs) -> NeuralNetworkInstance:
@@ -53,20 +55,31 @@ class Predictor:
         except KeyError:
             print('Network ID not found')
 
-    def __initialize(self, **kwargs):
+    def _initialize(self, exchanges=[], symbols=[], **kwargs):
         nn = self.nnm.get(kwargs['networkid']) if 'networkid' in kwargs.keys() else kwargs['network']
         nn.load()
 
-        if 'exchange' in kwargs.keys():
-            if kwargs['exchange']:
-                kwargs['exchanges'] = [kwargs['exchange']]
-            del kwargs['exchange']
+        needNewAnalyzer = False
+        if len(self.symbols) == 0:
+            for e in exchanges:
+                if e not in self.exchanges:
+                    needNewAnalyzer = True
+                    break
+        else:
+            for s in symbols:
+                if s not in self.symbols:
+                    needNewAnalyzer = True
+                    break
             
-        if not self.analyzer:
+        if needNewAnalyzer or not self.analyzer:
             self.analyzer = Analyzer(nn, forPredictor=True, **kwargs)
+            
+        self.exchanges = exchanges
+        self.symbols = symbols
 
         return nn, self.dbc.getLastUpdatedInfo(nn.stats.seriesType, kwargs['anchorDate'], dateModifier=OperatorDict.LESSTHANOREQUAL, **kwargs)
 
+    @classmethod
     def resetTestTimes(self):
         ## prediction
         self.testing_getSymbolsTime = 0
@@ -78,12 +91,12 @@ class Predictor:
         self.wt_testing_getSymbolsTime = 0
         self.wt_testing_getStockAccuracyTime = 0
 
-
-    def predict(self, exchange, symbol, anchorDate=date.today().isoformat(), networkid=None, network=None, **kwargs):
+    @classmethod
+    def predict(cls, exchange, symbol, anchorDate=date.today().isoformat(), networkid=None, network=None, **kwargs):
         if network:
             networkid = network.id
 
-        return self.predictAll(networkid, anchorDate, exchanges=[exchange], symbol=symbol, **kwargs)
+        return Predictor.predictAll(networkid, anchorDate, exchanges=[exchange], symbols=[symbol], **kwargs)
 
     def __buildPredictInputTuple(self, network, exchange, symbol, anchorDate=date.today().isoformat()):
         if gconfig.testing.predictor:
@@ -101,7 +114,7 @@ class Predictor:
             financialData = self.analyzer.dm.financialDataHandlers[(exchange, symbol)].getPrecedingReports(anchorDate, network.stats.precedingRange)
         if gconfig.testing.predictor:
             self.testing_getPrecedingReportsTime += time.time() - startt
-        
+
         ## check if there is data for the desired anchor date (with some massaging if it was a weekend)
         anchorDate = date.fromisoformat(anchorDate)
         lastdd = date.fromisoformat(data[-1].date)
@@ -132,14 +145,17 @@ class Predictor:
         )
         if gconfig.testing.predictor:
             self.testing_inputVectorBuildTime += time.time() - startt
-
+        
         return inputVector
 
+    @classmethod
+    def predictAll(cls, networkid, anchorDate=None, #date.today().isoformat(), 
         withWeighting=True,
         # exchange=None, exchanges=[], excludeExchanges=[]
         **kwargs
     ):
-        nn, tickers = self.__initialize(networkid=networkid, anchorDate=shortc(anchorDate, date.today().isoformat()), needInstanceSetup=withWeighting, **kwargs)
+        self = cls()
+        nn, tickers = self._initialize(networkid=networkid, anchorDate=shortc(anchorDate, date.today().isoformat()), needInstanceSetup=withWeighting, **kwargs)
         if len(tickers) == 0:
             print('No tickers available for anchor date of', anchorDate)
             return
@@ -200,30 +216,30 @@ class Predictor:
         networkFactor = getattr(nn.stats, key.statsName)
 
         try:
-        for s in tqdm.tqdm(pcl, desc='Weighting...'):
+            for s in tqdm.tqdm(pcl, desc='Weighting...'):
                 exchange, symbol, prediction = s
                 
                 if gconfig.testing.predictor:
                     startt = time.time()
-            symbolInfo = self.dbc.getSymbols(exchange=exchange, symbol=symbol)[0]
+                symbolInfo = self.dbc.getSymbols(exchange=exchange, symbol=symbol)[0]
                 if gconfig.testing.predictor:
                     self.wt_testing_getSymbolsTime += time.time() - startt
 
-            sectorFactor = 1
-            if symbolInfo.sector:
-                pass
-            
+                sectorFactor = 1
+                if symbolInfo.sector:
+                    pass
+                
                 
                 if gconfig.testing.predictor:
                     startt = time.time()
-            try:
-                    symbolFactor = self.analyzer.getStockAccuracy(exchange, symbol, nn, key, LossAccuracy.ACCURACY)
-            except NoData:
-                symbolFactor = -1
-                if gconfig.testing.predictor:
-                    self.wt_testing_getStockAccuracyTime += time.time() - startt
+                try:
+                        symbolFactor = self.analyzer.getStockAccuracy(exchange, symbol, nn, key, LossAccuracy.ACCURACY)
+                except NoData:
+                    symbolFactor = -1
+                    if gconfig.testing.predictor:
+                        self.wt_testing_getStockAccuracyTime += time.time() - startt
 
-                weightedAccuracies[s] = (prediction, networkFactor, sectorFactor, symbolFactor)
+                    weightedAccuracies[s] = (prediction, networkFactor, sectorFactor, symbolFactor)
 
         except (InternalError, KeyboardInterrupt):
             pass
@@ -245,8 +261,10 @@ class Predictor:
 
         ## todo, show final date
 
+        return self
+
 if __name__ == '__main__':
-    p: Predictor = Predictor()
+    # p: Predictor = Predictor()
 
     # fl, arg1, *argv = sys.argv
     # if arg1.lower() == 'predict':
@@ -256,14 +274,30 @@ if __name__ == '__main__':
 
 
     # print(p.predict('nyse', 'gme', '2021-03-12', networkid='1617767788',))
-    p.predictAll('1623156322', '2021-05-30', exchange=gconfig.testing.exchange) ## 0.05
+    # print(Predictor.predict('NASDAQ', 'PROG', '2021-09-26', networkid='1633809914'))
+    # p.predictAll('1623156322', '2021-05-30', exchange=gconfig.testing.exchange) ## 0.05
     # p.predictAll('1623009648', '2021-05-30', exchange='NYSE') ## 0.1
     # p.predictAll('1623013426', '2021-05-30', exchange='NYSE') ## 0.15
     # p.predictAll('1623016597', '2021-05-30', exchange='NYSE') ## 0.2
     # p.predictAll('1623018727', '2021-05-30', exchange='NYSE') ## 0.25
+    Predictor.predictAll('1633809914', '2021-12-11', exchanges=['NYSE', 'NASDAQ']) ## 0.05 - 10d
+    # Predictor.predictAll('1631423638', '2021-11-20', exchanges=['NYSE', 'NASDAQ'], numberOfWeightingsLimit=200) ## 0.1 - 30d
+    # p.predictAll('1631423638', exchanges=['NYSE', 'NASDAQ']) ## 0.1 - 30d
+
+    # for x in range(365):
+    #     dt = date.today() - timedelta(days=x+1)
+    #     p.predictAll('1631423638', dt.isoformat(), exchanges=['NYSE', 'NASDAQ']) ## 0.1 - 30d
 
     # c.start(SeriesType.DAILY)
     # c.start()
     # c._collectFromAPI('polygon', [recdotdict({'symbol':'KRP'})], None)
+
+    # nn, _ = p._initialize(networkid='1633809914', anchorDate='2021-10-29')
+    # exchange='NASDAQ'
+    # symbol='MRIN'
+    # key = AccuracyType.OVERALL
+    # print('Weighted', p.analyzer.getStockAccuracy(exchange, symbol, nn, key, LossAccuracy.ACCURACY, timeWeighted=gconfig.predictor.timeWeightedStockAccuracy))
+    # print('Unweighted', p.analyzer.getStockAccuracy(exchange, symbol, nn, key, LossAccuracy.ACCURACY, timeWeighted=gconfig.predictor.timeWeightedStockAccuracy))
+
     print('done')
 
