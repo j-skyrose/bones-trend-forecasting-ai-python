@@ -112,17 +112,13 @@ config = recdotdict({
             'low': genFeatureObj(True, 'vixkey'),
             'close': genFeatureObj(True, 'vixkey')
         },
-        'financials': {
-            'enabled': False,
-            'extype': 'financials',
-            'dataRequired': True,
-            
+        'financials': {**genFeatureObj(False, 'financials'), **{
             'includeDates': True,
             'maxTierIndex': 1,
             'tierTags': [
                 ['Assets', 'Liabilities', 'StockholdersEquity']
             ],
-        },
+        }},
         'googleInterests': genFeatureObj(False, 'interest')
     },
 
