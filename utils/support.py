@@ -117,92 +117,6 @@ def _isoformatd(d) -> date:
 def _edgarformatd(d) -> date:
     return date(int(d[:4]), int(d[4:6]), int(d[6:]))
 
-def getLastMarketDay(d: date=date.today()) -> date:
-    if d.weekday() > 4:
-        d = d - timedelta(days=(d.weekday() % 4))
-    holidays = getMarketHolidays(d.year)
-    while d in holidays:
-        d = d - timedelta(days=1)
-    return d
-
-def getPreviousMarketDay(d: date=date.today() - timedelta(days=1)) -> date:
-    return getLastMarketDay(d)
-
-def getMarketHolidays(yr):
-    holidays = []
-    yr = int(yr)
-
-    # new years day
-    dt = date(yr, 1, 1)
-    if dt.weekday() == 6: dt = dt + timedelta(days=1)
-    holidays.append(dt)
-
-    # martin luther king jr day (third monday of jan)
-    if yr > 1997:
-        mondaycounter = 0
-        dt = date(yr-1, 12, 31)
-        while mondaycounter < 3:
-            dt = dt + timedelta(days=1)
-            if dt.weekday() == 0: mondaycounter += 1
-        holidays.append(dt)
-
-    # presidents day (third monday of feb)
-    mondaycounter = 0
-    dt = date(yr, 1, 31)
-    while mondaycounter < 3:
-        dt = dt + timedelta(days=1)
-        if dt.weekday() == 0: mondaycounter += 1
-    holidays.append(dt)
-
-    # good Friday
-    a = yr % 19
-    b = yr // 100
-    c = yr % 100
-    d = (19 * a + b - b // 4 - ((b - (b + 8) // 25 + 1) // 3) + 15) % 30
-    e = (32 + 2 * (b % 4) + 2 * (c // 4) - d - (c % 4)) % 7
-    f = d + e - 7 * ((a + 11 * d + 22 * e) // 451) + 114
-    month = f // 31
-    day = f % 31 + 1
-    holidays.append(date(yr, month, day) - timedelta(days=2))
-
-    # memorial day us (last monday of may)
-    lastmonday = date(yr, 5, 20)
-    dt = lastmonday
-    while dt.month == 5:
-        if dt.weekday() == 0: lastmonday = dt
-        dt = dt + timedelta(days=1)
-    holidays.append(lastmonday)
-
-    # independence day (july 4)
-    dt = date(yr, 7, 4)
-    if dt.weekday() == 5: dt = dt - timedelta(days=1)
-    if dt.weekday() == 6: dt = dt + timedelta(days=1)
-    holidays.append(dt)
-
-    # labor day (first monday in sept)
-    dt = date(yr, 9, 1)
-    for i in range(8):
-        if dt.weekday() == 0: break
-        dt = dt + timedelta(days=1)
-    holidays.append(dt)
-
-    # thanksgiving day (us - fourth thursday of nov)
-    dt = date(yr, 10, 31)
-    thursdaycounter = 0
-    while thursdaycounter < 4:
-        dt = dt + timedelta(days=1)
-        if dt.weekday() == 3: thursdaycounter += 1
-    holidays.append(dt)
-
-    # christmas day
-    dt = date(yr, 12, 25)
-    if dt.weekday() == 5: dt = dt - timedelta(days=1)
-    if dt.weekday() == 6: dt = dt + timedelta(days=1)
-    holidays.append(dt)
-
-    return holidays
-
-
 def unixToDatetime(u): 
     if u > 9999999999: u /= 1000
     return datetime.utcfromtimestamp(u)
@@ -332,10 +246,9 @@ def containsAllKeys(dict, *args, throwSomeError=None, throwAllError=None):
         if throwAllError: raise throwAllError
         else: return False
 
-    return True  
+    return True
 
 if __name__ == '__main__':
-    # print(getMarketHolidays(2021))
     # print(processRawValueToInsertValue(44))
     # print(processRawValueToInsertValue('dave'))
     # print(processRawValueToInsertValue(None))
@@ -343,5 +256,3 @@ if __name__ == '__main__':
     # print(processRawValueToInsertValue(True))
     # print(flatten([1,[3,'dave',[6,[0,6,0],6],2],3,{'key':'value'}]))
     # print(getAdjustedSlidingWindowSize(5000, 600))
-    print(getLastMarketDay(date.fromisoformat('2021-11-04')).isoformat())
-    print(getLastMarketDay())

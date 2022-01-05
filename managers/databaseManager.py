@@ -20,6 +20,7 @@ from structures.api.googleTrends.request import GoogleAPI
 
 from globalConfig import config as gconfig
 from structures.neuralNetworkInstance import NeuralNetworkInstance
+from managers.marketDayManager import MarketDayManager
 from constants.enums import FinancialReportType, OperatorDict, SeriesType, AccuracyType, SetType
 from utils.support import processDBQuartersToDicts, processRawValueToInsertValue, recdot, recdotdict, Singleton, extractDateFromDesc, getMarketHolidays, recdotlist, shortc, shortcdict, unixToDatetime
 from constants.values import unusableSymbols, apiList
@@ -374,7 +375,7 @@ class DatabaseManager(Singleton):
 
                 ## holiday checker
                 if cyear != cdate.year:
-                    holidays = getMarketHolidays(cdate.year)
+                    holidays = MarketDayManager.getMarketHolidays(cdate.year)
                     cyear = cdate.year
                     if DEBUG: print('holidays for', cyear, holidays)
                 if cdate in holidays:
@@ -1232,7 +1233,7 @@ class DatabaseManager(Singleton):
 
             ## holiday checker
             if cyear != cdate.year:
-                holidays = getMarketHolidays(cdate.year)
+                holidays = MarketDayManager.getMarketHolidays(cdate.year)
                 cyear = cdate.year
                 if DEBUG: print('holidays for', cyear, holidays)
             if cdate in holidays:

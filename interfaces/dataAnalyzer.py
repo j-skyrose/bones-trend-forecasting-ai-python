@@ -12,7 +12,8 @@ import tqdm
 from datetime import date, datetime
 
 from managers.databaseManager import DatabaseManager
-from utils.support import Singleton, getLastMarketDay, recdotdict, shortc
+from managers.marketDayManager import MarketDayManager
+from utils.support import Singleton, recdotdict, shortc
 from constants.enums import OperatorDict, SeriesType
 
 dbm: DatabaseManager = DatabaseManager()
@@ -70,7 +71,7 @@ class DataAnalzer:
             anchorDate = date.today()
         if type(anchorDate) == str:
             anchorDate = date.fromisoformat(anchorDate)
-        return getLastMarketDay(anchorDate).isoformat()
+        return MarketDayManager.getLastMarketDay(anchorDate).isoformat()
 
     def andPriceMoving(self, **kwargs):
         return self.getStocksWithPriceMoving(**kwargs)

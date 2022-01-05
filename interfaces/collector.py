@@ -15,9 +15,10 @@ from contextlib import closing
 
 from managers.databaseManager import DatabaseManager
 from managers.apiManager import APIManager
+from managers.marketDayManager import MarketDayManager
 
 from constants.exceptions import APILimitReached, APIError
-from utils.support import getPreviousMarketDay, getLastMarketDay, recdotdict
+from utils.support import recdotdict
 from constants.enums import FinancialReportType, FinancialStatementType, SeriesType, TimespanType
 import json
 
@@ -221,7 +222,7 @@ class Collector:
                         debugc += 1
                         # if debugc < 20: print(t, t.timestamp.date() if t.timestamp else None, datetime.now().date(), t.timestamp.date() >= datetime.now().date() if t.timestamp else False)
                         ## purge any up-to-date tickers or ones that would return partial data
-                        if t.timestamp and ((t.timestamp.date() == getPreviousMarketDay() or t.timestamp.date() == getLastMarketDay() or t.timestamp.date() > date.today()) and datetime.now().hour <= 19):
+                        if t.timestamp and ((t.timestamp.date() == MarketDayManager.getPreviousMarketDay() or t.timestamp.date() == MarketDayManager.getLastMarketDay() or t.timestamp.date() > date.today()) and datetime.now().hour <= 19):
                             # print('removing {e}-{s}'.format(e=t.exchange, s=t.symbol))
                             tickerlist.remove(t)
 
