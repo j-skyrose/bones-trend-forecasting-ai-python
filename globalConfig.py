@@ -16,6 +16,11 @@ try:
 except:
     TESTING = False
 
+# REDUCED_SCOPE = True
+try:
+    if REDUCED_SCOPE: pass
+except:
+    REDUCED_SCOPE = False    
 
 TESTING_PREDICTOR = True
 try:
@@ -123,6 +128,7 @@ config = recdotdict({
 
     'testing': {
         'enabled': TESTING,
+        'reducedScope': REDUCED_SCOPE,
         'predictor': TESTING_PREDICTOR,
         'exchange': 'NYSE',
         'stockQueryLimit': 50,

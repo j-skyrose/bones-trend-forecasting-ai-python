@@ -94,7 +94,7 @@ class DatabaseManager(Singleton):
 
     def _getHistoricalDataCount(self):
         if not self.historicalDataCount:
-            self.historicalDataCount = self.dbc.execute('SELECT count(1) FROM historical_data').fetchone()
+            self.historicalDataCount = self.dbc.execute('SELECT MAX(rowid) FROM historical_data').fetchone()
         return self.historicalDataCount
 
     def _queryOrGetCache(self, query, qarg, validationObj, tag):
@@ -245,7 +245,7 @@ class DatabaseManager(Singleton):
         return self.__purgeUnusableTickers(self.dbc.execute(stmt).fetchall())
 
     ## get raw data from last_updates
-    def getLastUpdatedInfo(self, stype, dt=None, dateModifier=OperatorDict.EQUAL, exchanges=[], **kwargs):
+    def getLastUpdatedInfo(self, stype, dt=None, dateModifier=OperatorDict.EQUAL, exchanges=[], symbols=[], **kwargs):
         stmt = 'SELECT * FROM last_updates WHERE type=? AND api IS NOT NULL'
         args = [stype.function.replace('TIME_SERIES_','')]
         if dt:
@@ -259,6 +259,8 @@ class DatabaseManager(Singleton):
             args.append(dt)
         if exchanges:
             stmt += self._andXContainsListStatement('exchange', exchanges)
+        if symbols:
+            stmt += self._andXContainsListStatement('symbol', symbols)
 
         stmt += ' ORDER BY date ASC'
         if gconfig.testing.predictor: 
@@ -304,23 +306,6 @@ class DatabaseManager(Singleton):
         # return self._queryOrGetCache(stmt, (exchange, symbol, type.name), self._getHistoricalDataCount(), exchange+';'+symbol+';'+type.name)
 
         data = self.dbc.execute(stmt, (exchange.upper(), symbol.upper(), type.name)).fetchall()
-
-        # if fillGaps:
-        #     dateGaps = self.getDailyHistoricalGaps(exchange, symbol)
-        #     gapCovers = []
-        #     for g in dateGaps:
-        #         ## find closest date without going over
-        #         prevclose = None
-        #         for d in data:
-        #             if date.fromisoformat(d.date) > g: break
-        #             prevclose = d.close
-        #
-        #         gapCovers.append(recdotdict({ 'date': g.isoformat(), 'open': prevclose, 'high': prevclose, 'low': prevclose, 'close': prevclose, 'volume': 0 }))
-        #
-        #
-        #     data.extend(gapCovers)
-        #     data.sort(key=lambda e: e.date)
-        #     # for i in gapCovers: print(i)
 
         return data
 
@@ -452,7 +437,7 @@ class DatabaseManager(Singleton):
                     for d in normalizationLists[i]:
                         if lowerlimit <= d and d <= upperlimit:
                             pinside += 1
-                    if DEBUG: print(sdc, 'standard deviations of range will include', pinside / len(normalizationLists[i]), '% of symbols')
+                    if DEBUG: print(sdc, 'standard deviations of range will include', pinside / len(normalizationLists[i]) * 100, '% of symbols')
 
 
         ## get symbols data that meet normalization and other criteria        
@@ -499,6 +484,7 @@ class DatabaseManager(Singleton):
 
         stmt += ' GROUP BY h.exchange, h.symbol'
         if gconfig.testing.enabled: stmt += ' LIMIT ' + str(gconfig.testing.stockQueryLimit)
+        elif gconfig.testing.reducedScope: stmt += ' LIMIT 100'
 
         symbolList = self._queryOrGetCache(stmt, tuple, self._getHistoricalDataCount(), 'getnormsymbolist')
         # symbolList = self.dbc.execute(stmt, tuple).fetchall()
@@ -561,11 +547,6 @@ class DatabaseManager(Singleton):
             self.assetTypes = self.dbc.execute(stmt).fetchall()
         return [r.type for r in self.assetTypes]
 
-    def getListingDates(self, stype):
-        stmt = 'SELECT exchange, symbol, min(date) FROM historical_data WHERE type=? GROUP BY exchange, symbol'
-        tpl = (stype.name,)
-
-        return self.dbc.execute(stmt, tpl).fetchall()
 
     def getSectors(self, asRowDict=False):
         stmt = 'SELECT * FROM sectors ORDER BY rowid'
@@ -1303,7 +1284,7 @@ class DatabaseManager(Singleton):
                 c = 0
                 for t in tuples:
                     if (t[0], t[1]) == tk:
-                print(t)
+                        print(t)
                         c+=1
                     if c > 4:
                         break
