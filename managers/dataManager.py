@@ -66,7 +66,7 @@ class DataManager():
         precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, threshold=0,
         setCount=None, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, useAllSets=False,
         inputVectorFactory=InputVectorFactory(), normalizationInfo={}, symbolList:List=[],
-        analysis=False, statsOnly=False,
+        analysis=False, statsOnly=False, 
         anchorDate=None, forPredictor=False,
         **kwargs
         # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
@@ -111,7 +111,9 @@ class DataManager():
 
     @classmethod
     def forTraining(cls, seriesType=SeriesType.DAILY, **kwargs):
+        print('forTraining starting')
         normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType)
+        print('got normalization data')
         
         normalizationInfo = {}
         for c in range(len(normalizationColumns)):
@@ -139,6 +141,8 @@ class DataManager():
     def forPredictor(cls, nn: NeuralNetworkInstance, **kwargs):
         normalizationInfo = nn.stats.getNormalizationInfo()
         qualifyingSymbolList = dbm.getLastUpdatedInfo(nn.stats.seriesType, kwargs['anchorDate'], OperatorDict.LESSTHANOREQUAL, **kwargs)
+
+        print('qualifying list length', len(qualifyingSymbolList))
 
         symbolList = []
         for t in qualifyingSymbolList:
@@ -192,7 +196,11 @@ class DataManager():
 
         return ret
 
-    def initializeStockDataHandlers(self, symbolList, normalizationInfo, precedingRange, followingRange, seriesType, threshold):
+    def initializeStockDataHandlers(self, symbolList: List, normalizationInfo, precedingRange, followingRange, seriesType, threshold):
+        ## purge unusable symbols
+        for s in symbolList:
+            if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
+
         if gconfig.multicore:
             for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockDataTickerTuples, seriesType=seriesType), symbolList, chunksize=1, desc='Getting stock data'), desc='Creating stock handlers'):
                 if len(data) >= precedingRange + followingRange + 1:
@@ -380,10 +388,10 @@ class DataManager():
             ## determine window size for iterating through all sets            
             psints, nsints = getInstancesByClass(self.selectedInstances)
             print('Class split ratio:', len(psints) / len(self.selectedInstances))
-            if len(psints) / len(self.selectedInstances) < gconfig.sets.minimumClassSplitRatio: raise ValueError('Positive to negative set ratio below minimum threshold')
             if not forPredictor:
-            self.setsSlidingWindowSize = getAdjustedSlidingWindowSize(len(self.selectedInstances), setCount)
-            print('Adjusted sets window size from', setCount, 'to', int(len(self.selectedInstances)*self.setsSlidingWindowSize))
+                if len(psints) / len(self.selectedInstances) < gconfig.sets.minimumClassSplitRatio: raise ValueError('Positive to negative set ratio below minimum threshold')
+                self.setsSlidingWindowSize = getAdjustedSlidingWindowSize(len(self.selectedInstances), setCount) 
+                print('Adjusted sets window size from', setCount, 'to', int(len(self.selectedInstances)*self.setsSlidingWindowSize))
 
         else:
             self.unselectedInstances = list(self.stockDataInstances.values())
@@ -549,7 +557,7 @@ class DataManager():
         trainingSet = self.trainingSet
         validationSet = self.validationSet
         testingSet = self.testingSet
-        
+
         if exchange or symbol:
             trainingSet = self._getSubset(self.trainingSet, exchange, symbol, verbose)
             validationSet = self._getSubset(self.validationSet, exchange, symbol, verbose)
@@ -570,9 +578,10 @@ class DataManager():
         trainingData = constructDataSet(trainingSet)
         testingData = constructDataSet(testingSet)
 
-        print('Stock data handler build time', self.getprecstocktime)
-        print('Financial reports build time', self.getprecfintime)
-        print('Total vector build time', self.actualbuildtime)
+        if gconfig.testing.enabled:
+            print('Stock data handler build time', self.getprecstocktime)
+            print('Financial reports build time', self.getprecfintime)
+            print('Total vector build time', self.actualbuildtime)
 
         return [trainingData, validationData, testingData]
 
