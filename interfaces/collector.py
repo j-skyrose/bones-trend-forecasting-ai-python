@@ -424,6 +424,34 @@ class Collector:
                 # print('inserted', row)
             print('done')
 
+        ## if on weekend or after close on Friday, the excel will not contain that Friday's data so it must be retrieved specifically
+        if date.today().weekday() > 4 or (date.today() == 4 and timer.localtime()[3] >= 18):
+            url = 'https://www.cboe.com/indices/data/?symbol=VIX&timeline=1M'
+            
+            resp = requests.get(url)
+            if resp.ok:
+                rjson = resp.json()
+                friday = MarketDayManager.getLastMarketDay()
+                topen = None
+                tclose = None
+                thigh = 0
+                tlow = sys.maxsize
+                for d in rjson['data']:
+                    dt, open, high, low, close = d
+                    if friday.isoformat() == dt[:10]:
+                        if not topen: topen = open
+                        if high > thigh: thigh = high
+                        if low < tlow : tlow = low
+                        tclose = close
+
+                print(topen, thigh, tlow, tclose)
+
+                dbm.insertVIXRow(point=(friday.isoformat(), topen, thigh, tlow, tclose, True))
+                print('inserted Friday data')
+
+            else:
+                print('Unable to get Friday data')
+
     def collectAPIDump_symbolInfo(self, api):
         substmt = 'SELECT * FROM dump_symbol_info WHERE dump_symbol_info.exchange = staging_symbol_info.exchange AND dump_symbol_info.symbol = staging_symbol_info.symbol AND ' + api + ' IS NOT NULL'
         # stmt = 'SELECT exchange, symbol FROM symbols WHERE NOT EXISTS (' + substmt + ') AND api_' + api + ' = 1'

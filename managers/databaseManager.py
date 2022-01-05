@@ -1,6 +1,5 @@
 import json
 import os, sys
-from typing import List
 path = os.path.dirname(os.path.abspath(__file__))
 while ".vscode" not in os.listdir(path):
     if path == os.path.dirname(path):
@@ -9,7 +8,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import math, re, dill, operator, shutil
+from typing import List
 import sqlite3, atexit, numpy as np, xlrd
 from datetime import date, timedelta, datetime
 from tqdm import tqdm
@@ -110,7 +109,7 @@ class DatabaseManager(Singleton):
             self.cacheManager.addInstance(tag, query, validationObj, data)
         return data
 
-    def _convertVIXDataPoint(self, data):
+    def _convertVIXDataPoint(self, data: List):
         if '/' in str(data[0]):
             data[0] = datetime.strptime(data[0], "%m/%d/%Y").date().isoformat()
         else:
@@ -118,6 +117,7 @@ class DatabaseManager(Singleton):
             data[0] = date(year, month, day).isoformat()
         for i in range (1, 5):
             data[i] = data[i] if data[i] != 'n/a' else 0
+        data.append(False) ## artificial
         return data
 
     def __purgeUnusableTickers(self, data, raw=False, **kwargs):
@@ -690,9 +690,10 @@ class DatabaseManager(Singleton):
         self.dbc.execute(stmt, tpl)
 
 
-    def insertVIXRow(self, row):
-        stmt = 'INSERT OR REPLACE INTO cboe_volatility_index(date, open, high, low, close) VALUES (?,?,?,?,?)'
-        self.dbc.execute(stmt, (*self._convertVIXDataPoint(row),))
+    def insertVIXRow(self, row=None, point=None):
+        stmt = 'INSERT OR REPLACE INTO cboe_volatility_index(date, open, high, low, close, artificial) VALUES (?,?,?,?,?,?)'
+        val = self._convertVIXDataPoint(row) if row else point
+        self.dbc.execute(stmt, (*val,))
 
 
     ## for updating symbol details like sector, industry, founded
