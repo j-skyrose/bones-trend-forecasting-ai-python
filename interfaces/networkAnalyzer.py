@@ -1,4 +1,3 @@
-
 import os, sys
 path = os.path.dirname(os.path.abspath(__file__))
 while ".vscode" not in os.listdir(path):
@@ -167,7 +166,7 @@ class Analyzer(Singleton):
         print('    testing_getKerasSetsTime', self.testing_getKerasSetsTime, 'seconds')
         print('    testing_evaluateAllTime', self.testing_evaluateAllTime, 'seconds')
 
-    def getStockAccuracy(self, exchange, symbol, nn: NeuralNetworkInstance=None, accuracyType: AccuracyType=AccuracyType.OVERALL, lossAccuracyKey: LossAccuracy=LossAccuracy.ACCURACY) -> EvaluationResultsObj:
+    def getStockAccuracy(self, exchange, symbol, nn: NeuralNetworkInstance=None, accuracyType: AccuracyType=AccuracyType.OVERALL, lossAccuracyKey: LossAccuracy=LossAccuracy.ACCURACY, timeWeighted=False) -> EvaluationResultsObj:
         if gconfig.testing.predictor:
             startt = time.time()
         validationSet = self.dm.getKerasSets(exchange=exchange, symbol=symbol, validationDataOnly=True, verbose=0.5, classification=[e.value for e in AccuracyType].index(accuracyType.value))
@@ -178,7 +177,7 @@ class Analyzer(Singleton):
 
             if gconfig.testing.predictor:
                 startt = time.time()
-            res = vhandler.evaluateAll(getattr(shortc(nn, self.nn), 'model'), verbose=0)
+            res = vhandler.evaluateAll(getattr(shortc(nn, self.nn), 'model'), timeWeighted=timeWeighted, verbose=0)
             if gconfig.testing.predictor:
                 self.testing_evaluateAllTime += time.time() - startt
             # print(exchange, symbol, ':', res[AccuracyType.OVERALL][LossAccuracy.ACCURACY] *100, '%')
@@ -214,17 +213,22 @@ if __name__ == '__main__':
 
     ## breakdown by symbol
     maxSize = 200000
-    nn = nnm.get(1623156322)
-    dm: DataManager = DataManager.forAnalysis(nn, exchanges=['NYSE'])
+    nn = nnm.get(1633809914)
+    nn.load()
+    dm: DataManager = DataManager.forAnalysis(nn, exchanges=['NASDAQ'])
     
-    for s in dm.symbolList:
-        _, validationSet, _ = dm.getKerasSets(exchange=s.exchange, symbol=s.symbol, verbose=0)
+    for exchange, symbol in dm.stockDataHandlers:
+        _, validationSet, _ = dm.getKerasSets(exchange=exchange, symbol=symbol, verbose=0)
         if len(validationSet[0]) > 0:
             vhandler: EvaluationDataHandler = EvaluationDataHandler(validationSet)
-            res = vhandler.evaluateAll(nn.model, verbose=0)
-            print(s.exchange, s.symbol, ':', res[AccuracyType.OVERALL][LossAccuracy.ACCURACY] *100, '%')
+            resunweighted = vhandler.evaluateAll(nn.model, verbose=0)
+            resweighted = vhandler.evaluateAll(nn.model, timeWeighted=True, verbose=0)
+            # print(s.exchange, s.symbol, ':', res[AccuracyType.OVERALL][LossAccuracy.ACCURACY] *100, '%')
+            print(exchange, symbol)
+            print('Unweighted:', resunweighted[AccuracyType.OVERALL][LossAccuracy.ACCURACY] *100, '%')
+            print('Weighted:', resweighted[AccuracyType.OVERALL][LossAccuracy.ACCURACY] *100, '%')
         else:
-            print(s.exchange, s.symbol, ': no data')
+            print(exchange, symbol, ': no data')
 
 
     ## breakdown by sector?

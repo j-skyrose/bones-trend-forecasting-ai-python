@@ -83,7 +83,8 @@ config = recdotdict({
         'minimumClassSplitRatio': 0.15 if not TESTING else 0.01
     },
     'predictor': {
-        'ifBinaryUseRaw': True
+        'ifBinaryUseRaw': True,
+        'timeWeightedStockAccuracy': False
     },
     'feature': {
         'exchange': genFeatureObj(False, 'single'),
