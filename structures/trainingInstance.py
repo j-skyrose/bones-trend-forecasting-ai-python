@@ -21,7 +21,7 @@ from structures.EvaluationDataHandler import EvaluationDataHandler
 from structures.EarlyStoppingWithCustomValidationCallback import EarlyStoppingWithCustomValidation
 from constants.enums import SeriesType, AccuracyType
 from utils.support import recdotdict, shortc
-from globalConfig import trainingConfig
+from globalConfig import trainingConfig, config as gconfig
 
 
 class TimeBasedEarlyStoppingCallback(keras.callbacks.Callback):
@@ -57,12 +57,14 @@ class TrainingInstance():
         self.validationSet = shortc(validationSet, self.validationSet)
         self.testingSet = shortc(testingSet, self.testingSet)
 
-        if (type(validationSet) is list and len(validationSet[0])) or (validationPSet and validationNSet):
+        vsetlen = len(validationSet[0][0] if gconfig.network.recurrent else validationSet[0])
+        if (type(validationSet) is list and vsetlen) or (validationPSet and validationNSet):
             self.validationDataHandler: EvaluationDataHandler = EvaluationDataHandler(validationSet)
             self.validationDataHandler[AccuracyType.POSITIVE] = validationPSet
             self.validationDataHandler[AccuracyType.NEGATIVE] = validationNSet
 
-        if (type(testingSet) is list and len(testingSet[0])) or (testingPSet and testingNSet):
+        tsetlen = len(testingSet[0][0] if gconfig.network.recurrent else testingSet[0])
+        if (type(testingSet) is list and tsetlen) or (testingPSet and testingNSet):
             self.testingDataHandler: EvaluationDataHandler = EvaluationDataHandler(testingSet)
             self.testingDataHandler[AccuracyType.POSITIVE] = testingPSet
             self.testingDataHandler[AccuracyType.NEGATIVE] = testingNSet

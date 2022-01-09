@@ -90,6 +90,9 @@ config = recdotdict({
     'predictor': {
         'ifBinaryUseRaw': True
     },
+    'network': {
+        'recurrent': True
+    },
     'feature': {
         'exchange': genFeatureObj(False, 'single'),
         'sector': genFeatureObj(True, 'single', True),

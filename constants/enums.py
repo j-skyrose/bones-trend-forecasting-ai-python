@@ -79,6 +79,11 @@ class DataFormType(Enum):
     BINARY = 'BINARY'
     CATEGORICAL = 'CATEGORICAL'
 
+class InputVectorDataType(Enum):
+    STATIC = 'STATIC'
+    SEMISERIES = 'SEMISERIES'
+    SERIES = 'SERIES'
+
 class OutputClass(Enum):
     POSITIVE = 'POSITIVE'
     NEGATIVE = 'NEGATIVE'

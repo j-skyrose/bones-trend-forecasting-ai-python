@@ -186,20 +186,37 @@ if __name__ == '__main__':
             minimumSetsPerSymbol = 10
 
         ## network
-        inputSize = InputVectorFactory().getInputSize(precrange)
         optimizer = Adam(amsgrad=True)
-        layers = [
-            # { 'units': math.floor(inputSize / 0.85), 'dropout': False, 'dropoutRate': 0.001 },
-            # { 'units': math.floor(inputSize / 1), 'dropout': False, 'dropoutRate': 0.001 },
-            { 'units': math.floor(inputSize / 1.3), 'dropout': False, 'dropoutRate': 0.001 },
-            { 'units': math.floor(inputSize / 1.7), 'dropout': False, 'dropoutRate': 0.001 },
-            { 'units': math.floor(inputSize / 2), 'dropout': False, 'dropoutRate': 0.001 },
-            { 'units': math.floor(inputSize / 2.5), 'dropout': False, 'dropoutRate': 0.001 },
-        ]
+        if gconfig.network.recurrent:
+            staticSize, semiseriesSize, seriesSize = InputVectorFactory().getInputSize()
+            layers = [
+                [
+                    { 'units': math.floor(staticSize / 1), 'dropout': False, 'dropoutRate': 0.001 }
+                ],
+                [
+                    { 'units': math.floor(semiseriesSize / 2), 'dropout': False, 'dropoutRate': 0.001 }
+                ],
+                [
+                    { 'units': math.floor(seriesSize / 1), 'dropout': False, 'dropoutRate': 0.001 }
+                ]
+            ]
+        else:
+            inputSize = InputVectorFactory().getInputSize(precrange)
+            layers = [
+                # { 'units': math.floor(inputSize / 0.85), 'dropout': False, 'dropoutRate': 0.001 },
+                # { 'units': math.floor(inputSize / 1), 'dropout': False, 'dropoutRate': 0.001 },
+                # { 'units': math.floor(inputSize / 1.3), 'dropout': False, 'dropoutRate': 0.001 },
+                # { 'units': math.floor(inputSize / 1.7), 'dropout': False, 'dropoutRate': 0.001 },
+                { 'units': math.floor(inputSize / 2), 'dropout': False, 'dropoutRate': 0.001 },
+                # { 'units': math.floor(inputSize / 2.5), 'dropout': False, 'dropoutRate': 0.001 },
+            ]
 
         t = Trainer(
             network=nnm.createNetworkInstance(
-                optimizer, layers, inputSize, accuracyType=AccuracyType.NEGATIVE, useAllSets=useAllSets
+                optimizer, layers, 
+                None if gconfig.network.recurrent else inputSize, 
+                accuracyType=AccuracyType.NEGATIVE, useAllSets=useAllSets,
+                precedingRange=precrange
             ),
             precedingRange=precrange, 
             followingRange=folrange,
@@ -231,9 +248,8 @@ if __name__ == '__main__':
 
 
     p.train(validationType=AccuracyType.NEGATIVE, 
-        # patience=7, 
-        initialPatience=10, finalPatience=30
-        # patience=4
+        patience=30, 
+        # initialPatience=10, finalPatience=30
         
     # stopTime=getTimestamp(hour=22, minute=0)
     )

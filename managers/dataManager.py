@@ -18,7 +18,7 @@ from functools import partial
 from globalConfig import config as gconfig
 from constants.enums import DataFormType, OperatorDict, OutputClass, SeriesType, SetType
 from utils.support import Singleton, flatten, getAdjustedSlidingWindowSize, recdotdict, recdotlist, shortc, multicore_poolIMap, processDBQuartersToDicts
-from utils.other import getInstancesByClass
+from utils.other import getInstancesByClass, maxQuarters
 from constants.values import unusableSymbols
 from managers.stockDataManager import StockDataManager
 from managers.databaseManager import DatabaseManager
@@ -442,7 +442,7 @@ class DataManager():
                 psints, nsints = getInstancesByClass(self.selectedInstances)
                 print('All instances selected\nFinal balance:', len(psints), '/', len(nsints))
 
-            if len(self.selectedInstances) < setCount: raise IndexError('Not enough sets available: %d vs %d' % (len(self.selectedInstances) + len(self.unselectedInstances), setCount))
+            if len(self.selectedInstances) < setCount: raise IndexError('Not enough sets available: %d vs %d' % (len(self.selectedInstances), setCount))
             ## instance selection done
 
         ## retrieve Google interests for each selected set
@@ -533,23 +533,47 @@ class DataManager():
         self.getprecstocktime = 0
         self.getprecfintime = 0
         self.actualbuildtime = 0
+
+        staticSize, semiseriesSize, seriesSize = self.inputVectorFactory.getInputSize()
         def constrList_helper(set: List[DataPointInstance], isInput, showProgress=True):
             retList = []
-            for i in tqdm.tqdm(set, desc='Building input vector array', leave=(verbose > 0.5)) if showProgress and isInput and verbose != 0 else set:
+            for i in tqdm.tqdm(set, desc='Building {} vector array'.format('input' if isInput else 'output'), leave=(verbose > 0.5)) if showProgress and isInput and verbose != 0 else set:
                 retList.append(i.getInputVector() if isInput else i.getOutputVector())
             return retList
 
         def constrList(set: List, isInput: bool) -> numpy.array:
             return numpy.asarray(constrList_helper(set, isInput))
 
+        def constrList_recurrent(set: List[DataPointInstance], showProgress=True) -> List:
+            staticList = []
+            semiseriesList = []
+            seriesList = []
+            for i in tqdm.tqdm(set, desc='Building input vector array', leave=(verbose > 0.5)) if showProgress and verbose != 0 else set:
+                staticArr, semiseriesArr, seriesArr = i.getInputVector()
+                staticList.append(staticArr)
+                semiseriesList.append(numpy.reshape(semiseriesArr, (maxQuarters(self.precedingRange), semiseriesSize)))
+                seriesList.append(numpy.reshape(seriesArr, (self.precedingRange, seriesSize)))
+
+            return [
+                numpy.array(staticList),
+                *([numpy.array(semiseriesList)] if gconfig.feature.financials.enabled else []),
+                numpy.array(seriesList)
+            ]
+
+
         def constructDataSet(lst):
             # inp = constrList(lst, True)
             # ouplist = constrList(lst, False)
             # oup = keras.utils.to_categorical(ouplist, num_classes=numOutputClasses)
             # return [inp, oup]
+            if gconfig.network.recurrent:
+                # inp = numpy.reshape(inp, (len(inp), self.precedingRange, self.inputVectorFactory.getInputSize()[2])) ## rows, time_steps, features
+                inp = constrList_recurrent(lst)
+            else:
+                inp = constrList(lst, True)
             oup = constrList(lst, False)
             return [
-                constrList(lst, True), 
+                inp, 
                 keras.utils.to_categorical(oup, num_classes=OutputClass.__len__()) if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL else oup
             ]
 

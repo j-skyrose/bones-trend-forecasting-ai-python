@@ -1,4 +1,3 @@
-
 import os, sys
 path = os.path.dirname(os.path.abspath(__file__))
 while ".vscode" not in os.listdir(path):
@@ -13,7 +12,7 @@ from calendar import monthrange
 from datetime import date, datetime, timedelta
 
 from globalConfig import config as gconfig
-from constants.enums import DataFormType
+from constants.enums import DataFormType, InputVectorDataType
 from constants.values import interestColumn
 from utils.support import Singleton, flatten, recdotdict, _isoformatd, shortc, _edgarformatd
 from utils.other import maxQuarters
@@ -67,10 +66,16 @@ class InputVectorFactory(Singleton):
 
     def build(self, stockDataSet, vixData, financialDataSet, googleInterests, foundedDate, ipoDate, sector, exchange, getSplitStat=False):
         global loggedonce
-        ivs = {}
+        if gconfig.network.recurrent:
+            ivs = {e: {} for e in InputVectorDataType}
+        else:
+            ivs = {}
         # spcl = speclog()
 
         retarr = []
+        seriesarr = []
+        semiseriesarr = []
+        staticarr = []
         for kprime, vprime in self.config.feature.items():
             for k,v in vprime.items() if 'enabled' not in vprime.keys() else [(kprime, vprime)]:
                 if not v['enabled']: continue
@@ -99,18 +104,21 @@ class InputVectorFactory(Singleton):
                 ##############################################################################################################################
                 ## daily "instances"
                 if extype == 'key':
+                    vlisttype = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
                     vlist = [d[k] for d in stockDataSet]
                     fk = kprime + k
                     if collectStats: sm.extypekeytime += time.time() - startt
 
                 elif extype == 'vixkey':
+                    vlisttype = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
                     vlist = [(vixData[d.date])[k] for d in stockDataSet]
                     fk = kprime + k
                     if collectStats: sm.extypevixkeytime += time.time() - startt
 
                 elif k == 'dayOfWeek':
+                    vlisttype = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
                     # vlist = [_isoformatd(d).weekday()/6 - 0.5 for d in stockDataSet]
                     # if self.config.dataForm.dayOfWeek in [DataFormType.INTEGER, DataFormType.NATURAL]:
@@ -127,6 +135,7 @@ class InputVectorFactory(Singleton):
                     if collectStats: sm.ktypedayofweektime += time.time() - startt
 
                 elif k == 'dayOfMonth':
+                    vlisttype = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
                     # # vlist = [(dt.day - 1)/monthrange(dt.year, dt.month)[1] - 0.5 for dt in [_isoformatd(d) for d in stockDataSet]]
 
@@ -146,6 +155,7 @@ class InputVectorFactory(Singleton):
                     if collectStats: sm.ktypedayofmonthtime += time.time() - startt
 
                 elif k == 'monthOfYear':
+                    vlisttype = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
                     # vlist = [(_isoformatd(d).month - 1)/12 - 0.5 for d in stockDataSet]
 
@@ -163,6 +173,7 @@ class InputVectorFactory(Singleton):
                     if collectStats: sm.ktypemonthofyeartime += time.time() - startt
 
                 elif k == 'googleInterests':
+                    vlisttype = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
                     vlist = [googleInterests.at[_isoformatd(d), interestColumn] for d in stockDataSet]
                     if collectStats: sm.ktypegoogleintereststime += time.time() - startt
@@ -170,6 +181,7 @@ class InputVectorFactory(Singleton):
                 ##############################################################################################################################
                 ## non-daily, semi-repeated "instances"
                 elif k == 'financials':
+                    vlisttype = InputVectorDataType.SEMISERIES
                     if collectStats: startt = time.time()
                     tags = flatten([v['tierTags'][t] for t in range(v['maxTierIndex'])]) ## combine all tags from tiers upto and including v['maxTierIndex']
 
@@ -234,41 +246,46 @@ class InputVectorFactory(Singleton):
                         return retvector
                     ## done createReportVector
 
+                    vlist = [[],[]]
                     try:
                         reportNotFiledYetForCurrentPeriod = [1 if _isoformatd(stockDataSet[-1]).month - _edgarformatd(financialDataSet[-1].period).month > 3 else 0]
                     except IndexError:
                         reportNotFiledYetForCurrentPeriod = [0]
-                    reportPresenceVector = [1 for x in range(len(financialDataSet))]
+
                     reportVector = []
-                    for m in range(maxQuarters(len(stockDataSet)) - len(reportPresenceVector)):
-                        reportPresenceVector = [0] + reportPresenceVector
-                        reportVector += createReportVector(blank=True)
+                    # first index = report presence flag
+                    for m in range(maxQuarters(len(stockDataSet)) - len(financialDataSet)):
+                        reportVector += [0] + createReportVector(blank=True)
 
                     for r in financialDataSet:
-                        reportVector += createReportVector(r)
+                        reportVector += [1] + createReportVector(r)
 
                     if logstuff: 
                         print('maxq', maxQuarters(len(stockDataSet)))
                         print('fdset', len(financialDataSet))
-                        print('presvec',len(reportPresenceVector))
                         print('reportvec',len(reportVector))
-                    vlist = reportNotFiledYetForCurrentPeriod + reportPresenceVector + reportVector
+
+                    vlist[0] = reportNotFiledYetForCurrentPeriod
+                    vlist[1] = reportVector
 
                     if collectStats: sm.ktypefinancialstime += time.time() - startt
 
                 ##############################################################################################################################
                 # non-daily, single "instances"
                 elif k == 'exchange':
+                    vlisttype = InputVectorDataType.STATIC
                     if collectStats: startt = time.time()
                     vlist = self._getCategoricalVector(exchange, lookupList=self.dbm.getExchanges(), topBuffer=3)
 
                     if collectStats: sm.ktypeexchangetime += time.time() - startt
                 elif k == 'sector':
+                    vlisttype = InputVectorDataType.STATIC
                     if collectStats: startt = time.time()
                     vlist = self._getCategoricalVector(sector, lookupList=self.dbm.getSectors(), topBuffer=3)
 
                     if collectStats: sm.ktypesectortime += time.time() - startt
                 elif k == 'companyAge':
+                    vlisttype = InputVectorDataType.STATIC
                     if collectStats: startt = time.time()
                     if foundedDate:
                         year = month = day = None
@@ -296,6 +313,7 @@ class InputVectorFactory(Singleton):
 
                     if collectStats: sm.ktypecompanyagetime += time.time() - startt
                 elif k == 'ipoAge':
+                    vlisttype = InputVectorDataType.STATIC
                     if collectStats: startt = time.time()
                     vlist = [((_isoformatd(stockDataSet[-1]) - date.fromisoformat(ipoDate)).days) / 40 / 365] if ipoDate else [0]
 
@@ -307,8 +325,23 @@ class InputVectorFactory(Singleton):
                 # ivs.addStatFromList(fk, vlist)
 
                 if collectStats: startt = time.time()
-                ivs[fk] = len(vlist)
-                retarr += vlist
+                if gconfig.network.recurrent:
+                    if k == 'financials':
+                        ivs[InputVectorDataType.STATIC][fk + InputVectorDataType.STATIC.value] = len(vlist[0])
+                        ivs[InputVectorDataType.SEMISERIES][fk] = len(vlist[1])
+                        staticarr += vlist[0]
+                        semiseriesarr += vlist[1]
+                    else:
+                        ivs[vlisttype][fk] = len(vlist)
+                        if vlisttype == InputVectorDataType.STATIC:
+                            staticarr += vlist
+                        elif vlisttype == InputVectorDataType.SEMISERIES:
+                            semiseriesarr += vlist
+                        else:
+                            seriesarr += vlist
+                else:
+                    ivs[fk] = len(vlist)
+                    retarr += vlist
                 if collectStats: sm.ivsretarrtime += time.time() - startt
         
         # if not loggedonce and not getSplitStat:
@@ -322,9 +355,12 @@ class InputVectorFactory(Singleton):
             if collectStats: startt = time.time()
             if logstuff: print(len(retarr),len(financialDataSet))
 
-            retnparr = numpy.array(retarr)
+            if gconfig.network.recurrent:
+                ret = (numpy.array(staticarr), numpy.array(semiseriesarr), numpy.array(seriesarr))
+            else:
+                ret = numpy.array(retarr)
             if collectStats: sm.finalnparraytime += time.time() - startt
-            return retnparr
+            return ret
 
 
 
@@ -366,7 +402,11 @@ class InputVectorFactory(Singleton):
         return self.stats
 
     def getInputSize(self, precedingRange=1):
-        return sum(self.getStats(precedingRange).values())
+        if gconfig.network.recurrent:
+            stats = self.getStats(precedingRange)
+            return [sum(stats[t].values()) for t in InputVectorDataType]
+        else:
+            return sum(self.getStats(precedingRange).values())
 
     # def build(self, *args):
     #     return self._inputVector(*args)

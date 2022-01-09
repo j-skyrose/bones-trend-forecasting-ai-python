@@ -13,7 +13,7 @@ import tensorflow as tf
 from keras import backend as K
 from tensorflow.keras import utils as kutils, Model
 from tensorflow.keras.models import Sequential, load_model
-from tensorflow.keras.layers import Dense, Dropout, Activation, AlphaDropout
+from tensorflow.keras.layers import Dense, Dropout, Activation, AlphaDropout, GRU, Input, Flatten, Concatenate
 from tensorflow.keras.optimizers import SGD, Nadam, Adam
 from typing import Dict
 
@@ -22,6 +22,7 @@ from structures.EvaluationResultsObj import EvaluationResultsObj
 from constants.exceptions import LocationNotSpecificed
 from constants.enums import AccuracyType, DataFormType, LossAccuracy, SeriesType
 from utils.support import recdotdict, shortc
+from utils.other import maxQuarters
 from managers.inputVectorFactory import InputVectorFactory
 from structures.EvaluationDataHandler import EvaluationDataHandler
 from globalConfig import config as gconfig
@@ -84,26 +85,82 @@ class NeuralNetworkInstance:
         cls, id, optimizer, layers, inputSize,
         threshold=0, precedingRange=1, followingRange=1, seriesType=SeriesType.DAILY, highMax=0, volumeMax=0, accuracyType=AccuracyType.OVERALL, useAllSets=False
     ):
-        model = Sequential()
 
-        model.add(Dense(int(layers[0]['units']),
-                # activation=layers[0]['activation'],
-                activation='selu',
-                input_dim=inputSize,
-                kernel_initializer='lecun_normal'))
-        for l in layers[1:]:
-            model.add(Dense(int(l['units']),
-                            # activation=l['activation']),
-                            activation='selu',
-                            kernel_initializer='lecun_normal'))
-            if l['dropout']:
-                # model.add(Dropout(l['dropoutRate']))
-                model.add(AlphaDropout(l['dropoutRate']))
-        model.add(
-            Dense(2, activation='softmax')
-            if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL else
-            Dense(1, activation='sigmoid')
-        )
+        if gconfig.network.recurrent:
+            static_features, semiseries_features, series_features = InputVectorFactory().getInputSize()
+
+            static_input = Input(shape=(static_features,))
+            ## todo: add input layer to GRU layer for this, update inputvectorfactory to conform to timeseries and static components, function to determine how many time steps vs features should be given as shape, etc.
+            semiseries_input = Input(shape=(maxQuarters(precedingRange), semiseries_features)) 
+            series_input = Input(shape=(precedingRange, series_features))
+
+            print('series input', series_input)
+
+            static_x = Dense(
+                    int(layers[0][0]['units']),
+                    # activation=layers[0]['activation'],
+                    activation='selu',
+                    # input_dim=inputSize,
+                    kernel_initializer='lecun_normal'
+            )(static_input)
+            semiseries_x = GRU(
+                int(layers[1][0]['units']),
+                # activation='selu',
+                kernel_initializer='lecun_normal'
+            )(semiseries_input)
+            semiseries_x = Activation('selu')(semiseries_x)
+            series_x = GRU(
+                int(layers[2][0]['units']),
+                # input_shape=inputSize,  ## (time_steps, features) ...i.e. (days, datapoints per day)
+                # activation='selu',
+                kernel_initializer='lecun_normal'
+            )(series_input)
+            series_x = Activation('selu')(series_x)
+
+            x_combined = Concatenate()([
+                static_x, 
+                *([semiseries_x] if gconfig.feature.financials.enabled else []),
+                series_x
+            ])
+            if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL:
+                xc_units = 2
+                xc_activation = 'softmax'
+            else:
+                xc_units = 1
+                xc_activation = 'sigmoid'
+
+            x_combined = Dense(
+                xc_units,
+                activation=xc_activation
+            )(x_combined)
+
+            model = Model([
+                static_input,
+                *([semiseries_input] if gconfig.feature.financials.enabled else []),
+                series_input
+            ], x_combined)
+
+        else:
+            model = Sequential()
+            model.add(Dense(int(layers[0]['units']),
+                    # activation=layers[0]['activation'],
+                    activation='selu',
+                    input_dim=inputSize,
+                    kernel_initializer='lecun_normal'))
+            for l in layers[1:]:
+                model.add(Dense(int(l['units']),
+                                # activation=l['activation']),
+                                activation='selu',
+                                kernel_initializer='lecun_normal'))
+                if l['dropout']:
+                    # model.add(Dropout(l['dropoutRate']))
+                    model.add(AlphaDropout(l['dropoutRate']))
+
+            model.add(
+                Dense(2, activation='softmax')
+                if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL else
+                Dense(1, activation='sigmoid')
+            )
 
         model.compile(
             loss='categorical_crossentropy' if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL else 'binary_crossentropy',
@@ -268,7 +325,11 @@ class NeuralNetworkInstance:
         if not self.model: raise BufferError('Model not loaded')
 
         if not batchInput:
-            inputData = inputData.reshape(-1, inputData.size)
+            if gconfig.network.recurrent:
+                inputData = numpy.array([inputData])
+            else:
+                inputData = inputData.reshape(-1, inputData.size)
+        
         p = self.model.predict(inputData, **kwargs)
         if batchInput:
             return p
@@ -284,8 +345,42 @@ class NeuralNetworkInstance:
         ))
 
 if __name__ == '__main__':
-    inp = numpy.array([[0,1],[1,0]])
-    oup = kutils.to_categorical([0,1], num_classes=2)
+    ## standard neural network
+    # inp = numpy.array([[0,1],[1,0]])
+    # oup = kutils.to_categorical([0,1], num_classes=2)
+    # n = NeuralNetworkInstance.new(
+    #     '1',
+    #     Adam(amsgrad=True),
+    #     [
+    #         { 'units': 100, 'dropout': False, 'dropoutRate':0.001 },
+    #         # { 'units': 250, 'dropout': True, 'dropoutRate':0.005 },
+    #         # { 'units': 200, 'dropout': True, 'dropoutRate':0.0025 },
+    #         # { 'units': 100, 'dropout': False, 'dropoutRate':0.0025 }
+    #     ],
+    #     2
+    # )
+
+    # n.fit(inp, oup, epochs=5, batch_size=1, verbose=1)
+    # # n.evaluate([inp, inp, inp], [oup, oup, oup], batch_size=1, verbose=1)
+    # print(numpy.argmax(n.predict(inp[0]), axis=None, out=None))
+    # print(n.predict(inp[0]))
+    # print(numpy.argmax(n.predict(inp[1]), axis=None, out=None))
+    # print(n.predict(inp[1]))
+    # n.printAccuracyStats()
+
+    ## recurrent neural network
+    # time_steps = 
+    inp = numpy.array([
+        [0,1,2,4],[1,0,0,3]
+    ])
+    ## convert to rnn format
+    # yind = np.arange()
+    print(inp)
+    inp = numpy.reshape(inp, (2, 2, 2)) ## rows, time_steps, features
+    print(inp)
+    print(inp.shape)
+    # oup = kutils.to_categorical([0,1], num_classes=2)
+    oup = numpy.array([0,1])
     n = NeuralNetworkInstance.new(
         '1',
         Adam(amsgrad=True),
@@ -295,13 +390,17 @@ if __name__ == '__main__':
             # { 'units': 200, 'dropout': True, 'dropoutRate':0.0025 },
             # { 'units': 100, 'dropout': False, 'dropoutRate':0.0025 }
         ],
-        2
+        (2, 2) ## teimsteps, features, 
+        # inp.shape
     )
 
     n.fit(inp, oup, epochs=5, batch_size=1, verbose=1)
+
+    print(inp[0])
+    print(inp[0].shape)
     # n.evaluate([inp, inp, inp], [oup, oup, oup], batch_size=1, verbose=1)
     print(numpy.argmax(n.predict(inp[0]), axis=None, out=None))
-    print(n.predict(inp[0]))
-    print(numpy.argmax(n.predict(inp[1]), axis=None, out=None))
-    print(n.predict(inp[1]))
-    n.printAccuracyStats()
+    # print(n.predict(inp))
+    # print(numpy.argmax(n.predict(inp), axis=None, out=None))
+    # print(n.predict(inp))
+    # n.printAccuracyStats()
