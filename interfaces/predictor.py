@@ -152,6 +152,7 @@ class Predictor(Singleton):
     def predictAll(cls, networkid, anchorDate=None, #date.today().isoformat(), 
         withWeighting=True,
         # exchange=None, exchanges=[], excludeExchanges=[]
+        numberofWeightingsLimit=0,
         **kwargs
     ):
         self = cls()
@@ -214,9 +215,11 @@ class Predictor(Singleton):
         #     key = AccuracyType.POSITIVE
 
         networkFactor = getattr(nn.stats, key.statsName)
-
+        weightedAccuracyLambda = lambda v: reduce(operator.mul, list(v), 1) * 100
+        weightingsCount = 0
         try:
-            for s in tqdm.tqdm(pcl, desc='Weighting...'):
+            tqdmhandle = tqdm.tqdm(sorted(pcl, key=lambda x: x[2], reverse=True), desc='Weighting...')
+            for s in tqdmhandle:
                 exchange, symbol, prediction = s
                 
                 if gconfig.testing.predictor:
@@ -233,13 +236,28 @@ class Predictor(Singleton):
                 if gconfig.testing.predictor:
                     startt = time.time()
                 try:
-                        symbolFactor = self.analyzer.getStockAccuracy(exchange, symbol, nn, key, LossAccuracy.ACCURACY)
+                    symbolFactor = self.analyzer.getStockAccuracy(exchange, symbol, nn, key, LossAccuracy.ACCURACY, timeWeighted=gconfig.predictor.timeWeightedStockAccuracy)
                 except NoData:
                     symbolFactor = -1
-                    if gconfig.testing.predictor:
-                        self.wt_testing_getStockAccuracyTime += time.time() - startt
+                if gconfig.testing.predictor:
+                    self.wt_testing_getStockAccuracyTime += time.time() - startt
 
-                    weightedAccuracies[s] = (prediction, networkFactor, sectorFactor, symbolFactor)
+                weightedAccuracies[s] = (prediction, networkFactor, sectorFactor, symbolFactor)
+                weightingsCount += 1
+                if numberofWeightingsLimit and weightingsCount >= numberofWeightingsLimit:
+                    break
+
+                c = 0
+                postfixstr = ''
+                for k, v in sorted(weightedAccuracies.items(), key=lambda x: weightedAccuracyLambda(x[1]), reverse=True):
+                    if c > 2: break
+                    if c > 0:
+                        postfixstr += ' || '
+                    c += 1
+                    postfixstr += k[0] + ';' + k[1] + ': {:.3f}%'.format(float(weightedAccuracyLambda(v)))
+                    
+                tqdmhandle.set_postfix_str(postfixstr)
+
 
         except (InternalError, KeyboardInterrupt):
             pass
@@ -249,7 +267,6 @@ class Predictor(Singleton):
             print('wt_testing_getStockAccuracyTime', self.wt_testing_getStockAccuracyTime, 'seconds::')
             self.analyzer.printTestTimes()
 
-        weightedAccuracyLambda = lambda v: reduce(operator.mul, list(v), 1) * 100
         for k, v in sorted(weightedAccuracies.items(), key=lambda x: weightedAccuracyLambda(x[1])):
             print(k, ':', weightedAccuracyLambda(v), '%  <-', v)
         print('Factors: predictions, network, sector, symbol')
