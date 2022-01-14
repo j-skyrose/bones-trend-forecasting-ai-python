@@ -18,25 +18,12 @@ from managers.dataManager import DataManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.EvaluationDataHandler import EvaluationDataHandler
-from structures.EarlyStoppingWithCustomValidationCallback import EarlyStoppingWithCustomValidation
+from structures.callbacks.EarlyStoppingWithCustomValidationCallback import EarlyStoppingWithCustomValidation
+from structures.callbacks.TimeBasedEarlyStoppingCallback import TimeBasedEarlyStopping
+from structures.callbacks.DeviationFromBasedEarlyStoppingCallback import DeviationFromBasedEarlyStopping
 from constants.enums import SeriesType, AccuracyType
 from utils.support import recdotdict, shortc
 from globalConfig import trainingConfig, config as gconfig
-
-
-class TimeBasedEarlyStoppingCallback(keras.callbacks.Callback):
-    def __init__(self, stopTime=None, timeDuration=None):
-        super(TimeBasedEarlyStoppingCallback, self).__init__()
-        self.stopTime = stopTime
-        self.timeDuration = timeDuration
-    
-    def on_train_begin(self, logs=None):
-        self.startTime = time.time()
-
-    def on_epoch_end(self, epoch, logs=None):
-        if (self.stopTime and time.time() > self.stopTime) or (self.timeDuration and time.time() - self.startTime > self.timeDuration):
-            self.stopped_epoch = epoch
-            self.model.stop_training = True
 
 
 class TrainingInstance():
@@ -96,23 +83,26 @@ class TrainingInstance():
         try:
             validation_data = self.validationDataHandler.getTuple(validationType) if validationType else None
             self.network.fit(*self.trainingSet, 
-                epochs=minEpochs, 
+                epochs=sys.maxsize, 
                 batch_size=self.config.batchSize, verbose=verbose, 
-                validation_data=validation_data
+                validation_data=validation_data,
+                callbacks=[DeviationFromBasedEarlyStopping(minEpochs=minEpochs, validation_accuracy=1)]
             )
             
             ## train for a few epochs without any callbacks?
 
-            callbacks = [TimeBasedEarlyStoppingCallback(stopTime=stopTime, timeDuration=timeDuration)]
+            callbacks = [TimeBasedEarlyStopping(stopTime=stopTime, timeDuration=timeDuration)]
             if patience: callbacks.append(EarlyStoppingWithCustomValidation(
                 network = self.network, batchSize=self.config.batchSize, 
-                    custom_validation_data= None if validationType == AccuracyType.OVERALL else [
-                        self.validationDataHandler.getTuple(AccuracyType.POSITIVE),
-                        self.validationDataHandler.getTuple(AccuracyType.NEGATIVE)
-                    ], 
-                    custom_validation_data_values=[1/3, 2/3] if validationType != AccuracyType.OVERALL else None,
+                custom_validation_data= None if validationType == AccuracyType.OVERALL else [
+                    self.validationDataHandler.getTuple(AccuracyType.POSITIVE),
+                    self.validationDataHandler.getTuple(AccuracyType.NEGATIVE)
+                ], 
+                custom_validation_data_values=[gconfig.trainer.customValidationClassValueRatio, 1 - gconfig.trainer.customValidationClassValueRatio] if validationType != AccuracyType.OVERALL else None,
                 monitor='val_accuracy', mode='max', 
                 # monitor='val_loss', mode='min', 
+                override_stops_on_value=(1-gconfig.trainer.customValidationClassValueRatio),
+
                 verbose=verbose, patience=patience, restore_best_weights=True))
 
             if stopTime: 

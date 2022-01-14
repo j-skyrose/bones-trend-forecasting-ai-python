@@ -94,6 +94,10 @@ config = recdotdict({
     'network': {
         'recurrent': True
     },
+    'trainer': {
+        'customValidationClassValueRatio': 0.15, ## positive : negative
+
+    },
     'feature': {
         'exchange': genFeatureObj(False, 'single'),
         'sector': genFeatureObj(True, 'single', True),
