@@ -256,6 +256,9 @@ class NeuralNetworkInstance:
             self.useAllSetsAccumulator = {
                 actype: [] for actype in AccuracyType
             }
+            self.useAllSetsAccumulator['last'] = {
+                actype: 0 for actype in AccuracyType
+            }
 
     def fit(self, inputVectors, outputVectors, **kwargs):
         if not self.model: raise BufferError('Model not loaded')
@@ -299,6 +302,7 @@ class NeuralNetworkInstance:
                 iterationCount = len(self.useAllSetsAccumulator[AccuracyType.OVERALL]) + 1
 
                 for actype in AccuracyType:
+                    self.useAllSetsAccumulator['last'][actype] = self.stats.__getattribute__(actype.statsName)
                     self.useAllSetsAccumulator[actype].append(results[actype][LossAccuracy.ACCURACY])
                     self.stats.__setattr__(actype.statsName, sum(self.useAllSetsAccumulator[actype]) / iterationCount)
 
@@ -324,12 +328,11 @@ class NeuralNetworkInstance:
     def predict(self, inputData, raw=False, batchInput=False, **kwargs):
         if not self.model: raise BufferError('Model not loaded')
 
-        if not batchInput:
-            if gconfig.network.recurrent:
-                inputData = numpy.array([inputData])
-            else:
-                inputData = inputData.reshape(-1, inputData.size)
-        
+        if not batchInput and not gconfig.network.recurrent:
+            inputData = inputData.reshape(-1, inputData.size)
+        else:
+            inputData = [tf.experimental.numpy.vstack(inputData[0]), tf.experimental.numpy.vstack(inputData[1])]
+
         p = self.model.predict(inputData, **kwargs)
         if batchInput:
             return p
@@ -340,9 +343,13 @@ class NeuralNetworkInstance:
             return numpy.argmax(p, axis=None, out=None)
 
     def printAccuracyStats(self):
-        print('Positive accuracy: {}\nNegative accuracy: {}\nOverall accuracy: {}\n'.format(
-            self.stats.positiveAccuracy, self.stats.negativeAccuracy, self.stats.overallAccuracy
-        ))
+        for actype in AccuracyType:
+            currentval = self.stats.__getattribute__(actype.statsName)
+            lastval = self.useAllSetsAccumulator['last'][actype]
+            print('{} accuracy:'.format(actype.name).ljust(19) + '{}'.format(currentval).ljust(22) + ('' if not True else '({} {})'.format(
+                '+' if currentval >= lastval else '-', '{:.20f}'.format(abs(currentval - lastval))
+            )))
+        print()
 
 if __name__ == '__main__':
     ## standard neural network

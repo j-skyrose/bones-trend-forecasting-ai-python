@@ -44,17 +44,11 @@ class TrainingInstance():
         self.validationSet = shortc(validationSet, self.validationSet)
         self.testingSet = shortc(testingSet, self.testingSet)
 
-        vsetlen = len(validationSet[0][0] if gconfig.network.recurrent else validationSet[0])
-        if (type(validationSet) is list and vsetlen) or (validationPSet and validationNSet):
-            self.validationDataHandler: EvaluationDataHandler = EvaluationDataHandler(validationSet)
-            self.validationDataHandler[AccuracyType.POSITIVE] = validationPSet
-            self.validationDataHandler[AccuracyType.NEGATIVE] = validationNSet
+        if (type(validationSet) is list and (len(validationSet[0][0] if gconfig.network.recurrent else validationSet[0]))) or (validationPSet and validationNSet):
+            self.validationDataHandler: EvaluationDataHandler = EvaluationDataHandler(validationSet, validationPSet, validationNSet)
 
-        tsetlen = len(testingSet[0][0] if gconfig.network.recurrent else testingSet[0])
-        if (type(testingSet) is list and tsetlen) or (testingPSet and testingNSet):
-            self.testingDataHandler: EvaluationDataHandler = EvaluationDataHandler(testingSet)
-            self.testingDataHandler[AccuracyType.POSITIVE] = testingPSet
-            self.testingDataHandler[AccuracyType.NEGATIVE] = testingNSet
+        if (type(testingSet) is list and (len(testingSet[0][0] if gconfig.network.recurrent else testingSet[0]))) or (testingPSet and testingNSet):
+            self.testingDataHandler: EvaluationDataHandler = EvaluationDataHandler(testingSet, testingPSet, testingNSet)
 
     def setTrainingConfig(self, config=None, epochs=None, batchSize=None):
         if config:
@@ -78,7 +72,9 @@ class TrainingInstance():
         return self.evaluate(verbose)
 
     def train(self, epochs=None, minEpochs=5, validationType: AccuracyType=AccuracyType.OVERALL, patience=None, stopTime=None, timeDuration=None, verbose=1, **kwargs):
-        print('split:', len(self.validationDataHandler[AccuracyType.POSITIVE][0]), ':', len(self.validationDataHandler[AccuracyType.NEGATIVE][0]))
+        pos = self.validationDataHandler[AccuracyType.POSITIVE][0]
+        neg = self.validationDataHandler[AccuracyType.NEGATIVE][0]
+        print('split:', len(pos[0] if gconfig.network.recurrent else pos), ':', len(neg[0] if gconfig.network.recurrent else pos))
 
         try:
             validation_data = self.validationDataHandler.getTuple(validationType) if validationType else None
@@ -88,22 +84,22 @@ class TrainingInstance():
                 validation_data=validation_data,
                 callbacks=[DeviationFromBasedEarlyStopping(minEpochs=minEpochs, validation_accuracy=1)]
             )
-            
-            ## train for a few epochs without any callbacks?
 
             callbacks = [TimeBasedEarlyStopping(stopTime=stopTime, timeDuration=timeDuration)]
-            if patience: callbacks.append(EarlyStoppingWithCustomValidation(
-                network = self.network, batchSize=self.config.batchSize, 
-                custom_validation_data= None if validationType == AccuracyType.OVERALL else [
-                    self.validationDataHandler.getTuple(AccuracyType.POSITIVE),
-                    self.validationDataHandler.getTuple(AccuracyType.NEGATIVE)
-                ], 
-                custom_validation_data_values=[gconfig.trainer.customValidationClassValueRatio, 1 - gconfig.trainer.customValidationClassValueRatio] if validationType != AccuracyType.OVERALL else None,
-                monitor='val_accuracy', mode='max', 
-                # monitor='val_loss', mode='min', 
-                override_stops_on_value=(1-gconfig.trainer.customValidationClassValueRatio),
+            if patience: 
+                callbacks.append(EarlyStoppingWithCustomValidation(
+                    network = self.network, batchSize=self.config.batchSize,
+                    custom_validation_data= None if validationType == AccuracyType.OVERALL else [
+                        self.validationDataHandler.getTuple(AccuracyType.POSITIVE),
+                        self.validationDataHandler.getTuple(AccuracyType.NEGATIVE)
+                    ],
+                    custom_validation_data_values=[gconfig.trainer.customValidationClassValueRatio, 1 - gconfig.trainer.customValidationClassValueRatio] if validationType != AccuracyType.OVERALL else None,
+                    monitor='val_accuracy', mode='max',
+                    # monitor='val_loss', mode='min',
+                    override_stops_on_value=(1-gconfig.trainer.customValidationClassValueRatio),
 
-                verbose=verbose, patience=patience, restore_best_weights=True))
+                    verbose=verbose, patience=patience, restore_best_weights=True
+                ))
 
             if stopTime: 
                 print('Stopping at', stopTime)

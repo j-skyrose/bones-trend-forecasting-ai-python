@@ -35,9 +35,9 @@ class AccuracyType(Enum):
         if a == cls.NEGATIVE: return cls.POSITIVE
         return a
 
-    OVERALL = 'OVERALL', 'overallAccuracy'
-    NEGATIVE = 'NEGATIVE', 'negativeAccuracy'
     POSITIVE = 'POSITIVE', 'positiveAccuracy'
+    NEGATIVE = 'NEGATIVE', 'negativeAccuracy'
+    OVERALL = 'OVERALL', 'overallAccuracy'
 
 class SetType(Enum):
     TRAINING = 'TRAINING'
