@@ -40,16 +40,29 @@ class MarketDayManager(Singleton):
         if d.weekday() > 4:
             d = d - timedelta(days=(d.weekday() % 4))
         holidays = cls().getMarketHolidays(d.year)
-        while d in holidays:
+        while d in holidays or d.weekday() > 4:
             d = d - timedelta(days=1)
         return d
 
     @classmethod
-    def getPreviousMarketDay(cls, d: date=date.today() - timedelta(days=1)) -> date:
+    def getPreviousMarketDay(cls, d: date=date.today()) -> date:
+        d = d - timedelta(days=1)
         return cls().getLastMarketDay(d)
 
     @classmethod
-    def getMarketDays(cls, year=None, startingYear=None, startingFrom: datetime=None) -> List[date]:
+    def getMarketDayDiff(cls, fromDate: date, toDate: date) -> int:
+        holidays1 = cls().getMarketHolidays(fromDate.year)
+        holidays2 = cls().getMarketHolidays(toDate.year)
+        if fromDate.weekday() > 4 or toDate.weekday() > 4 or fromDate in holidays1 or toDate in holidays2:
+            raise ValueError('One of the dates is not a market day')
+        if fromDate == toDate:
+            return 0
+        
+        marketdays = cls().getMarketDays(startingYear=min(fromDate.year, toDate.year))
+        return marketdays.index(toDate) - marketdays.index(fromDate)
+
+    @classmethod
+    def getMarketDays(cls, year=None, startingYear: int=None, startingFrom: datetime=None) -> List[date]:
         if gconfig.testing.enabled:
             # print('year:', year, 'startingYear:', startingYear, 'startingFrom:', startingFrom)
             pass
@@ -57,7 +70,7 @@ class MarketDayManager(Singleton):
         if year:
             days = self._getMarketDaysForYear(year)
         elif startingYear:
-            days = self._getMarketDaysStartingFromYear(year)
+            days = self._getMarketDaysStartingFromYear(startingYear)
         elif startingFrom:
             # return [d for d in self._getMarketDaysStartingFromYear(startingFrom.year) if d >= startingFrom]
             days = self._getMarketDaysStartingFromYear(startingFrom.year)
@@ -76,7 +89,7 @@ class MarketDayManager(Singleton):
     def _getMarketDaysStartingFromYear(self, year):
         year = int(year)
         days = []
-        for y in range(datetime.now().year - year):
+        for y in range(datetime.now().year - year + 1):
             days.extend(self._getMarketDaysForYear(year + y))
         return days
 
@@ -176,4 +189,7 @@ if __name__ == '__main__':
     # print(MarketDayManager.getMarketHolidays(2021))
     # print(MarketDayManager.getMarketHolidays(2021))
     # print(MarketDayManager.getMarketHolidays(2020))
-    print(MarketDayManager.getMarketDays(startingFrom=datetime(2019, 12, 2, 8, 0)))
+    # print(MarketDayManager.getMarketDays(startingFrom=datetime(2019, 12, 2, 8, 0)))
+    # print(MarketDayManager.getMarketDayDiff(date(2022, 1, 14), date(2021, 12, 28)))
+    # print(MarketDayManager.getMarketDayDiff(date(2021, 1, 25), date(2000, 1, 25)))
+    print(MarketDayManager.getPreviousMarketDay(date(2000, 2, 22)))
