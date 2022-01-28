@@ -122,6 +122,16 @@ def unixToDatetime(u):
     return datetime.utcfromtimestamp(u)
 def datetimeToUnix(d): return calendar.timegm(d.timetuple()) 
 
+def asDate(dt: Union[date, datetime, str]):
+    if type(dt) == date:
+        return dt
+    elif type(dt) == datetime:
+        return dt.date()
+    elif type(dt) == str:
+        return date.fromisoformat(dt)
+    
+    raise ValueError('Unrecognized type')
+
 ## attempt to parse a date out of a description string, otherwise return the description for later analysis, or 'e' if its empty
 ## expects a date in the format: december 12, 2000
 def extractDateFromDesc(desc):

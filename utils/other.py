@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta
 from structures.inputVectorStats import InputVectorStats
 from utils.support import recdotdict, shortc, _isoformatd
 from constants.values import interestColumn, stockOffset
-from constants.enums import OutputClass
+from constants.enums import OutputClass, PrecedingRangeType
 
 from globalConfig import config
 
@@ -185,7 +185,35 @@ def getInstancesByClass(instances):
             else: nclass.append(i)
         except:
             print(i)
-    return pclass, nclass  
+    return pclass, nclass
+
+def determinePrecedingRangeType(data):
+    open = data[0].open
+    close = data[0].close
+    high = 0
+    low = sys.maxsize
+    for d in data:
+        if d.high > high:
+            high = d.high
+        if d.low < low:
+            low = d.low
+
+    if open > close:
+        if high > open and low < close:
+            return PrecedingRangeType.DECREASINGWITHBETTERHIGHANDWORSELOW
+        if high > open:
+            return PrecedingRangeType.DECREASINGWITHBETTERHIGH
+        if low < close:
+            return PrecedingRangeType.DECREASINGWITHWORSELOW
+        return PrecedingRangeType.DECREASING
+    else:
+        if high > close and low < open:
+            return PrecedingRangeType.INCREASINGWITHBETTERHIGHANDWORSELOW
+        if high > close:
+            return PrecedingRangeType.INCREASINGWITHBETTERHIGH
+        if low < open:
+            return PrecedingRangeType.INCREASINGWITHWORSELOW
+        return PrecedingRangeType.INCREASING
 
 
 if __name__ == '__main__':

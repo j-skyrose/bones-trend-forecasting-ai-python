@@ -37,8 +37,8 @@ dbm: DatabaseManager = DatabaseManager()
 def multicore_getFinancialDataTickerTuples(ticker):
     return (ticker, DatabaseManager().getFinancialData(ticker.exchange, ticker.symbol))
 
-def multicore_getStockDataTickerTuples(ticker, seriesType):
-    return (ticker, DatabaseManager().getStockData(ticker.exchange, ticker.symbol, seriesType))
+def multicore_getStockDataTickerTuples(ticker, seriesType, minDate):
+    return (ticker, DatabaseManager().getStockData(ticker.exchange, ticker.symbol, seriesType, minDate))
 
 ## each session should only rely on one (precedingRange, followingRange) combination due to the way the handlers are setup
 ## not sure how new exchange/symbol handler setups would work with normalization info, if not initialized when datamanager is created
@@ -68,6 +68,7 @@ class DataManager():
         inputVectorFactory=InputVectorFactory(), normalizationInfo={}, symbolList:List=[],
         analysis=False, statsOnly=False, 
         anchorDate=None, forPredictor=False,
+        minDate=None,
         **kwargs
         # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
         # neuralNetwork: NeuralNetworkInstance=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[]
@@ -97,13 +98,13 @@ class DataManager():
             print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
 
         startt2 = time.time()
-        self.initializeStockDataHandlers(symbolList, self.normalizationInfo, precedingRange, followingRange, seriesType, threshold)
+        self.initializeStockDataHandlers(symbolList, self.normalizationInfo, precedingRange, followingRange, seriesType, threshold, minDate)
         print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
 
         if setCount is not None:
             self.setupSets(setCount, setSplitTuple, minimumSetsPerSymbol)
         elif analysis or forPredictor:
-            self.setupSets(len(self.stockDataInstances.values()), (0,1), forPredictor=forPredictor)
+            self.setupSets(len(self.stockDataInstances.values()), (0,1), selectAll=True)
         elif statsOnly:
             self.setupSets(1, (1,0), 0)
 
@@ -196,13 +197,13 @@ class DataManager():
 
         return ret
 
-    def initializeStockDataHandlers(self, symbolList: List, normalizationInfo, precedingRange, followingRange, seriesType, threshold):
+    def initializeStockDataHandlers(self, symbolList: List, normalizationInfo, precedingRange, followingRange, seriesType, threshold, minDate):
         ## purge unusable symbols
         for s in symbolList:
             if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
 
         if gconfig.multicore:
-            for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockDataTickerTuples, seriesType=seriesType), symbolList, chunksize=1, desc='Getting stock data'), desc='Creating stock handlers'):
+            for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockDataTickerTuples, seriesType=seriesType, minDate=minDate), symbolList, chunksize=1, desc='Getting stock data'), desc='Creating stock handlers'):
                 if len(data) >= precedingRange + followingRange + 1:
                     self.stockDataHandlers[(ticker.exchange, ticker.symbol)] = StockDataHandler(
                         ticker,
@@ -230,7 +231,7 @@ class DataManager():
         else:
             for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):   
                 if (s.exchange, s.symbol) in unusableSymbols: continue
-                data = dbm.getStockData(s.exchange, s.symbol, seriesType)
+                data = dbm.getStockData(s.exchange, s.symbol, seriesType, minDate=minDate)
                 if len(data) >= precedingRange + followingRange + 1:
                     self.stockDataHandlers[(s.exchange, s.symbol)] = StockDataHandler(
                         s,
@@ -380,15 +381,15 @@ class DataManager():
                 print('insertingtime',insertingtime,'seconds')
                 print('total',gettingtime+massagingtime+creatingtime+insertingtime,'seconds')
 
-    def setupSets(self, setCount, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, forPredictor=False):
-        if self.useAllSets or forPredictor:
+    def setupSets(self, setCount, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, selectAll=False):
+        if self.useAllSets or selectAll:
             self.unselectedInstances = []
             self.selectedInstances = list(self.stockDataInstances.values())
 
             ## determine window size for iterating through all sets            
             psints, nsints = getInstancesByClass(self.selectedInstances)
             print('Class split ratio:', len(psints) / len(self.selectedInstances))
-            if not forPredictor:
+            if not selectAll:
                 if len(psints) / len(self.selectedInstances) < gconfig.sets.minimumClassSplitRatio: raise ValueError('Positive to negative set ratio below minimum threshold')
                 self.setsSlidingWindowSize = getAdjustedSlidingWindowSize(len(self.selectedInstances), setCount) 
                 print('Adjusted sets window size from', setCount, 'to', int(len(self.selectedInstances)*self.setsSlidingWindowSize))

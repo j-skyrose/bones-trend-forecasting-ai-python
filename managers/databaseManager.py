@@ -8,7 +8,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-from typing import List
+from typing import Dict, List, Union
 import sqlite3, atexit, numpy as np, xlrd
 from datetime import date, timedelta, datetime
 from tqdm import tqdm
@@ -20,8 +20,7 @@ from structures.api.googleTrends.request import GoogleAPI
 from globalConfig import config as gconfig
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from managers.marketDayManager import MarketDayManager
-from constants.enums import FinancialReportType, OperatorDict, SeriesType, AccuracyType, SetType
-from utils.support import processDBQuartersToDicts, processRawValueToInsertValue, recdot, recdotdict, Singleton, extractDateFromDesc, getMarketHolidays, recdotlist, shortc, shortcdict, unixToDatetime
+from constants.enums import AccuracyAnalysisTypes, CorrBool, FinancialReportType, OperatorDict, PrecedingRangeType, SeriesType, AccuracyType, SetType
 from constants.values import unusableSymbols, apiList
 
 def addLastUpdatesRowsForAllSymbols(dbc):
@@ -94,7 +93,7 @@ class DatabaseManager(Singleton):
 
     def _getHistoricalDataCount(self):
         if not self.historicalDataCount:
-            self.historicalDataCount = self.dbc.execute('SELECT MAX(rowid) FROM historical_data').fetchone()
+            self.historicalDataCount = self.dbc.execute('SELECT MAX(rowid) FROM historical_data').fetchone()['MAX(rowid)']
         return self.historicalDataCount
 
     def _queryOrGetCache(self, query, qarg, validationObj, tag):
@@ -301,9 +300,11 @@ class DatabaseManager(Singleton):
 
     ## get all historical data for ticker and seriesType
     ## sorted date ascending
-    def getStockData(self, exchange: str, symbol: str, type: SeriesType, fillGaps=False):
-        stmt = 'SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ORDER BY date'
+    def getStockData(self, exchange: str, symbol: str, type: SeriesType, minDate=None, fillGaps=False):
+        stmt = 'SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ' 
         # return self._queryOrGetCache(stmt, (exchange, symbol, type.name), self._getHistoricalDataCount(), exchange+';'+symbol+';'+type.name)
+        if minDate:    stmt += 'AND date > \'' + minDate + '\''
+        stmt += ' ORDER BY date'
 
         data = self.dbc.execute(stmt, (exchange.upper(), symbol.upper(), type.name)).fetchall()
 
@@ -553,6 +554,35 @@ class DatabaseManager(Singleton):
         res = self.dbc.execute(stmt).fetchall()
         return res if asRowDict else [r['sector'] for r in res]
 
+    def getMostRecentNetworkAccuracyUpdateRows(self, nnid):
+        stmt = 'SELECT * FROM accuracy_last_updates WHERE network_id=?'
+        return self.dbc.execute(stmt, (str(nnid),)).fetchall()
+
+    def getNetworkAccuracy(self, nnid, acctype: AccuracyAnalysisTypes, arg1: Union[PrecedingRangeType, str], arg2=None):
+        stmt = 'SELECT subtype2, sum, count FROM network_accuracies WHERE network_id=? AND accuracy_type=? AND subtype1=?'
+        tple = [str(nnid), acctype.value]
+        if acctype == AccuracyAnalysisTypes.STOCK:
+            stmt += ' AND subtype2=?'
+            tple += [arg1, arg2]
+        elif acctype == AccuracyAnalysisTypes.PRECEDING_RANGE:
+            tple.append(arg1.value)
+        
+        res = self.dbc.execute(stmt, tuple(tple)).fetchall()
+
+        if acctype == AccuracyAnalysisTypes.STOCK:
+            count = res[0]['count']
+            if count == 0: return 0
+            return res[0]['sum']/count
+        elif acctype == AccuracyAnalysisTypes.PRECEDING_RANGE:
+            r1type = res[0]['subtype2']
+            r1count = res[0]['count']
+            r2count = res[1]['count']
+            total = r1count + r2count
+            if CorrBool(r1type) == CorrBool.CORRECT:
+                correct = r1count
+            else:
+                correct = r2count
+            return correct/total
 
     ## end gets ####################################################################################################################################################################
     ####################################################################################################################################################################
@@ -957,6 +987,37 @@ class DatabaseManager(Singleton):
             print('Transaction error', e)
             self.dbc.execute('ROLLBACK')
             raise e
+
+    def updateStockAccuracyForNetwork(self, nnid, exchange, symbol, acc, count):
+        wherestmt = ' WHERE network_id=? AND accuracy_type=? AND subtype1=? and subtype2=?'
+        stmt = 'SELECT * FROM network_accuracies' + wherestmt
+        tple = [nnid, AccuracyAnalysisTypes.STOCK.value, exchange, symbol]
+        currentrow = self.dbc.execute(stmt, tuple(tple)).fetchone()
+
+        stmt = 'UPDATE network_accuracies SET sum=?, count=?' + wherestmt
+        tple = [currentrow.sum + acc * count, currentrow.count + count] + tple
+        self.dbc.execute(stmt, tuple(tple))
+
+    def updatePrecedingRangeAccuraciesForNetwork(self, nnid, accs: Dict[PrecedingRangeType, Dict[CorrBool, int]]):
+        wherestmt = ' WHERE network_id=? AND accuracy_type=? AND subtype1=? and subtype2=?'
+        stmt = 'SELECT * FROM network_accuracies' + wherestmt
+        stmt2 = 'UPDATE network_accuracies SET count=?' + wherestmt
+        tple = [nnid, AccuracyAnalysisTypes.PRECEDING_RANGE.value]
+
+        for k,v in accs.items():
+            tple2 = tple + [k.value]
+            for cb in CorrBool:
+                tple3 = tple2 + [cb.value]
+                currentrow = self.dbc.execute(stmt, tuple(tple3)).fetchone()
+                self.dbc.execute(stmt2, tuple([currentrow.count + v[cb]] + tple3))
+
+    def updateAccuraciesLastUpdated(self, nnid, acctype: AccuracyAnalysisTypes, dataCount, minDate=None, lastExchange=None, lastSymbol=None):
+        if not minDate and not lastExchange and not lastSymbol: raise ValueError
+        stmt = 'UPDATE accuracy_last_updates SET data_count=?{} WHERE network_id=? AND accuracy_type=?'.format(
+            (', min_date=?' if minDate else '') + ', last_exchange=?, last_symbol=?'
+        )
+        tpl = [dataCount] + ([minDate] if minDate else []) + [lastExchange, lastSymbol, nnid, acctype.value]
+        self.dbc.execute(stmt, tuple(tpl))
 
     ## end sets ####################################################################################################################################################################
     ####################################################################################################################################################################
@@ -1372,6 +1433,34 @@ class DatabaseManager(Singleton):
     #      columnnames = [r[0] for r in self.dbc.execute('SELECT * FROM ' + tablename).description]
     #      for c in columnnames:
     #          print(c)
+
+    ## generates initial rows for accuracy_last_updates and network_accuracies tables to track accuracy stats
+    def setupAccuracyTables(self, nnid=None):
+        lastupdates_stmt = 'INSERT OR IGNORE INTO accuracy_last_updates VALUES (?,?,?,?,?,?)'
+        networkacc_stmt = 'INSERT OR IGNORE INTO network_accuracies(network_id, accuracy_type, subtype1, subtype2) VALUES (?,?,?,?)'
+        tickers = self.getSymbols()
+        for nn in self.getNetworks():
+            if nnid and nnid != nn.id: continue
+            for acctype in AccuracyAnalysisTypes:
+                self.dbc.execute(lastupdates_stmt, (nn.id, acctype.value, 0, '0000-01-01', None, None))
+
+            for t in tqdm(tickers):
+                if t.symbol == '0E13': print(t)
+                self.dbc.execute(networkacc_stmt, (nn.id, AccuracyAnalysisTypes.STOCK.value, t.exchange, t.symbol))
+
+            for prectype in PrecedingRangeType:
+                for cb in CorrBool:
+                    self.dbc.execute(networkacc_stmt, (nn.id, AccuracyAnalysisTypes.PRECEDING_RANGE.value, prectype.value, cb.value))
+
+    ## set all values back to defaults in the accuracy tracking related tables
+    def resetAccuracyTables(self, nnid=None):
+        lastupdates_stmt = 'UPDATE accuracy_last_updates SET data_count=0, min_date=\'0000-01-01\', last_exchange=NULL, last_symbol=NULL'
+        networkacc_stmt = 'UPDATE network_accuracies SET sum=0, count=0'
+        if nnid:
+            lastupdates_stmt += ' WHERE network_id=' + str(nnid)
+            networkacc_stmt += ' WHERE network_id=' + str(nnid)
+        self.dbc.execute(lastupdates_stmt)
+        self.dbc.execute(networkacc_stmt)
 
     ## end limited use utility ####################################################################################################################################################################
     ####################################################################################################################################################################

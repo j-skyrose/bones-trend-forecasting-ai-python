@@ -12,24 +12,26 @@ import tensorflow as tf
 from datetime import date, timedelta
 from functools import reduce
 from tensorflow.python.framework.errors_impl import InternalError
+from typing import Tuple
 
-from utils.other import normalizeStockData
-from interfaces.networkAnalyzer import Analyzer
+from utils.other import determinePrecedingRangeType
 from managers.databaseManager import DatabaseManager
 from managers.vixManager import VIXManager
+from managers.marketDayManager import MarketDayManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from managers.dataManager import DataManager
+from managers.networkAnalysisManager import NetworkAnalysisManager
 from managers.inputVectorFactory import InputVectorFactory
 from structures.neuralNetworkInstance import NeuralNetworkInstance
-from constants.enums import AccuracyType, LossAccuracy, OperatorDict, SeriesType
+from constants.enums import AccuracyType, InputVectorDataType, OperatorDict, SeriesType
 from constants.exceptions import AnchorDateAheadOfLastDataDate, NoData, SufficientlyUpdatedDataNotAvailable
-from utils.support import Singleton, shortc
+from utils.support import Singleton, asDate, shortc, shortcdict
 from globalConfig import config as gconfig
 
 ivf: InputVectorFactory = InputVectorFactory()
 
 class Predictor(Singleton):
-    analyzer: Analyzer = None
+    dm: DataManager = None
     vixm: VIXManager = VIXManager()
     dbc: DatabaseManager = DatabaseManager()
     nnm: NeuralNetworkManager = NeuralNetworkManager()
@@ -40,40 +42,30 @@ class Predictor(Singleton):
         self.symbols = []
         pass
 
-    def _getNeuralNetwork(self, networkid, **kwargs) -> NeuralNetworkInstance:
-        try:
-            nn = self.nnm.get(networkid)
-            nn.load()
+    def _initialize(self, **kwargs
+    # exchanges=[], symbols=[]
+    ) -> Tuple[NeuralNetworkInstance, list]:
+        exchanges = shortcdict(kwargs, 'exchanges', [])
+        symbols = shortcdict(kwargs, 'symbols', [])
 
-            if 'exchange' in kwargs.keys() and kwargs['exchange']:
-                kwargs['exchanges'] = [kwargs['exchange']]
-            del kwargs['exchange']
-
-            self.analyzer = Analyzer(nn, **kwargs)
-
-            return nn
-        except KeyError:
-            print('Network ID not found')
-
-    def _initialize(self, exchanges=[], symbols=[], **kwargs):
         nn = self.nnm.get(kwargs['networkid']) if 'networkid' in kwargs.keys() else kwargs['network']
         nn.load()
 
-        needNewAnalyzer = False
+        needNewDataManager = False
         if len(self.symbols) == 0:
             for e in exchanges:
                 if e not in self.exchanges:
-                    needNewAnalyzer = True
+                    needNewDataManager = True
                     break
         else:
             for s in symbols:
                 if s not in self.symbols:
-                    needNewAnalyzer = True
+                    needNewDataManager = True
                     break
             
-        if needNewAnalyzer or not self.analyzer:
-            self.analyzer = Analyzer(nn, forPredictor=True, **kwargs)
-            
+        if needNewDataManager or not self.dm:
+            self.dm = DataManager.forPredictor(nn, **kwargs)
+
         self.exchanges = exchanges
         self.symbols = symbols
 
@@ -95,8 +87,20 @@ class Predictor(Singleton):
     def predict(cls, exchange, symbol, anchorDate=date.today().isoformat(), networkid=None, network=None, **kwargs):
         if network:
             networkid = network.id
+        if 'anchorDates' in kwargs:
+            anchorDate = None
 
         return Predictor.predictAll(networkid, anchorDate, exchanges=[exchange], symbols=[symbol], **kwargs)
+
+    def __getPrecedingRangeData(self, network, exchange, symbol, anchorDate):
+        data = self.dm.stockDataHandlers[(exchange, symbol)].data
+        d = MarketDayManager.getPreviousMarketDay(asDate(anchorDate))
+        ind = None
+        for index, item in enumerate(data):
+            if item.date == d.isoformat():
+                ind = index + 1
+                break
+        return data[ind - network.stats.precedingRange:ind]
 
     def __buildPredictInputTuple(self, network, exchange, symbol, anchorDate=date.today().isoformat()):
         if gconfig.testing.predictor:
@@ -105,42 +109,16 @@ class Predictor(Singleton):
         if gconfig.testing.predictor:
             self.testing_getSymbolsTime += time.time() - startt
 
-        data = self.analyzer.dm.stockDataHandlers[(exchange, symbol)].data
-
         if gconfig.testing.predictor:
             startt = time.time()
         financialData = []
-        if (exchange, symbol) in self.analyzer.dm.financialDataHandlers.keys():
-            financialData = self.analyzer.dm.financialDataHandlers[(exchange, symbol)].getPrecedingReports(anchorDate, network.stats.precedingRange)
+        if (exchange, symbol) in self.dm.financialDataHandlers.keys():
+            financialData = self.dm.financialDataHandlers[(exchange, symbol)].getPrecedingReports(anchorDate, network.stats.precedingRange)
         if gconfig.testing.predictor:
             self.testing_getPrecedingReportsTime += time.time() - startt
 
-        ## check if there is data for the desired anchor date (with some massaging if it was a weekend)
-        anchorDate = date.fromisoformat(anchorDate)
-        lastdd = date.fromisoformat(data[-1].date)
-        ddiff = (anchorDate - lastdd).days
-        offset = 0
-        if anchorDate == lastdd:
-            offset = 1
-        elif ddiff < 0:
-            offset = -ddiff
-        elif ddiff > 1:
-            # print('anchor', anchorDate, '\nlastdd', lastdd, ddiff)
-            if anchorDate.weekday() in [5,6]:
-                if ddiff > 2:
-                    # raise Exception('Data is not recent enough for given anchor date', anchorDate.isoformat())
-                    raise SufficientlyUpdatedDataNotAvailable(anchorDate.isoformat())
-            elif anchorDate.weekday() == 0:
-                offset = 3
-            else:
-                raise AnchorDateAheadOfLastDataDate()
-        elif ddiff == 1:
-            pass
-
-        if gconfig.testing.predictor:
-            startt = time.time()
         inputVector = network.inputVectorFactory.build(
-            data[-(network.stats.precedingRange + offset):len(data) - offset], 
+            self.__getPrecedingRangeData(network, exchange, symbol, anchorDate),
             self.vixm.data, financialData, None, symbolinfo.founded, None, symbolinfo.sector, exchange
         )
         if gconfig.testing.predictor:
@@ -149,33 +127,76 @@ class Predictor(Singleton):
         return inputVector
 
     @classmethod
-    def predictAll(cls, networkid, anchorDate=None, #date.today().isoformat(), 
+    def predictAll(cls, networkid, 
+        anchorDate=None, #date.today().isoformat(),
+        anchorDates=[],
         withWeighting=True,
         # exchange=None, exchanges=[], excludeExchanges=[]
         numberofWeightingsLimit=0,
+        verbose=1,
         **kwargs
     ):
         self = cls()
-        nn, tickers = self._initialize(networkid=networkid, anchorDate=shortc(anchorDate, date.today().isoformat()), needInstanceSetup=withWeighting, **kwargs)
+        singleSymbol = 'symbols' in kwargs and len(kwargs['symbols']) == 1
+
+
+        if anchorDate:
+            anchorDates = [anchorDate]
+        elif len(anchorDates) == 0:
+            anchorDates = [date.today()]
+        anchorDates = [asDate(dt) for dt in anchorDates]
+
+        anchorDateArg = max(*anchorDates)
+        nn, tickers = self._initialize(networkid=networkid, anchorDate=anchorDateArg, needInstanceSetup=withWeighting, **kwargs)
         if len(tickers) == 0:
-            print('No tickers available for anchor date of', anchorDate)
+            print('No tickers available for anchor date of', anchorDateArg)
             return
 
-        print('Starting predictions for', len(tickers), 'tickers') ## starting on', anchorDate)
+        if verbose == 1:
+            if singleSymbol:
+                print('Starting prediction{} for'.format('' if len(anchorDates) < 2 else 's'), kwargs['exchanges'][0], ':', kwargs['symbols'][0])
+            else:
+                print('Starting predictions for', len(tickers), 'tickers') ## starting on', anchorDate)
 
         pc = 0
         pc_exceptions = 0
         pcl = []
-        predictionInputVectors = []
+        predictionInputVectors = {e: [] for e in InputVectorDataType} if gconfig.network.recurrent else []
         predictionTickers = []
-        for t in tqdm.tqdm(tickers, desc='Building...'):
-            dt = date.fromisoformat(anchorDate) if anchorDate else date.fromisoformat(t.date) + timedelta(days=1)
+        if gconfig.network.recurrent:
+            staticsize, semiseriessize, seriessize = InputVectorFactory().getInputSize()
+
+        loopingTickers = True
+        loopHandle = tickers
+        if len(anchorDates) > 1:
+            loopingTickers = False
+            loopHandle = anchorDates
+        if verbose > 0:
+            loopHandle = tqdm.tqdm(loopHandle, desc='Building...')
+        
+        for tkrORdt in loopHandle:
+            if loopingTickers:  
+                dt = date.fromisoformat(anchorDates[0]) if anchorDate else date.fromisoformat(t.date) + timedelta(days=1)
+                texchange = tkrORdt.exchange
+                tsymbol = tkrORdt.symbol
+            else:               
+                dt = tkrORdt
+                texchange = kwargs['exchanges'][0]
+                tsymbol = kwargs['symbols'][0]
             try:
-                predictionInputVectors.append(self.__buildPredictInputTuple(nn, t.exchange, t.symbol, anchorDate=dt.isoformat()))
-                predictionTickers.append(t)
+                inptpl = self.__buildPredictInputTuple(nn, texchange, tsymbol, anchorDate=dt.isoformat())
+                if gconfig.network.recurrent:
+                    predictionInputVectors[InputVectorDataType.STATIC].append(inptpl[0].reshape(-1, staticsize))
+                    if gconfig.feature.financials.enabled:
+                        predictionInputVectors[InputVectorDataType.SEMISERIES].append(inptpl[1].reshape(-1, nn.stats.precedingRange, semiseriessize))
+                    predictionInputVectors[InputVectorDataType.SERIES].append(inptpl[2].reshape(-1, nn.stats.precedingRange, seriessize))
+                else:
+                    predictionInputVectors.append(inptpl)
+                
+                predictionTickers.append(tkrORdt)
             except (ValueError, tf.errors.InvalidArgumentError, SufficientlyUpdatedDataNotAvailable, KeyError, AnchorDateAheadOfLastDataDate) as e:
             # except IndexError:
-                # print(e)
+                print(e)
 
                 pc_exceptions += 1
 
@@ -184,20 +205,36 @@ class Predictor(Singleton):
             if gconfig.testing.enabled and pc > 2:
                 break
 
-        print('Predicting...')
+        if gconfig.network.recurrent:
+            predictionInputVectors = [
+                predictionInputVectors[InputVectorDataType.STATIC],
+                *([predictionInputVectors[InputVectorDataType.SEMISERIES]] if gconfig.feature.financials.enabled else []),
+                predictionInputVectors[InputVectorDataType.SERIES]
+            ]
+
+        if verbose == 1: print('Predicting...')
         if gconfig.testing.predictor:
             startt = time.time()
-        res = nn.predict(
-            tf.experimental.numpy.vstack(predictionInputVectors), batchInput=True,
-            raw=gconfig.predictor.ifBinaryUseRaw, verbose=1)
+
+        res = nn.predict(predictionInputVectors, batchInput=True, raw=gconfig.predictor.ifBinaryUseRaw, verbose=verbose)
         if gconfig.testing.predictor:
             self.testing_predictTime += time.time() - startt
-        
-        for ti in tqdm.trange(len(predictionTickers), desc='Unpacking...'):
-            p = res[ti][0]
-            t = predictionTickers[ti]
-            if (numpy.round(p) if gconfig.predictor.ifBinaryUseRaw else p) == 1:
-                pcl.append((t.exchange, t.symbol, p))
+
+        if singleSymbol and len(anchorDates) < 2:
+            p = res[0][0]
+            res = numpy.round(p) if gconfig.predictor.ifBinaryUseRaw else p
+        else:
+            lstlength = len(predictionTickers) if len(anchorDates) < 2 else len(anchorDates)
+            loopHandle = tqdm.trange(lstlength, desc='Unpacking...') if verbose > 0 else range(lstlength)
+            for ti in loopHandle:
+                p = res[ti][0] #.numpy()
+                t = predictionTickers[ti]
+                val = numpy.round(p) if gconfig.predictor.ifBinaryUseRaw else p
+                if singleSymbol:
+                    pcl.append((anchorDates[ti], val))
+                elif val == 1:
+                    pcl.append((t.exchange, t.symbol, p))
+            if singleSymbol: res = pcl
 
         if gconfig.testing.predictor:
             print('testing_getSymbolsTime', self.testing_getSymbolsTime, 'seconds')
@@ -205,80 +242,76 @@ class Predictor(Singleton):
             print('testing_inputVectorBuildTime', self.testing_inputVectorBuildTime, 'seconds')
             print('testing_predictTime', self.testing_predictTime, 'seconds')
 
-        ## weight the prediction accuracy
-        weightedAccuracies = {}
+        if verbose > 0 and len(anchorDates) < 2:
+            ## weight the prediction accuracy
+            weightedAccuracies = {}
 
-        key = AccuracyType.OVERALL
-        # if nn.stats.accuracyType == AccuracyType.POSITIVE:
-        #     key = AccuracyType.NEGATIVE
-        # elif nn.stats.accuracyType == AccuracyType.NEGATIVE:
-        #     key = AccuracyType.POSITIVE
+            key = AccuracyType.OVERALL
+            # if nn.stats.accuracyType == AccuracyType.POSITIVE:
+            #     key = AccuracyType.NEGATIVE
+            # elif nn.stats.accuracyType == AccuracyType.NEGATIVE:
+            #     key = AccuracyType.POSITIVE
 
-        networkFactor = getattr(nn.stats, key.statsName)
-        weightedAccuracyLambda = lambda v: reduce(operator.mul, list(v), 1) * 100
-        weightingsCount = 0
-        try:
-            tqdmhandle = tqdm.tqdm(sorted(pcl, key=lambda x: x[2], reverse=True), desc='Weighting...')
-            for s in tqdmhandle:
-                exchange, symbol, prediction = s
+            networkFactor = getattr(nn.stats, key.statsName)
+            weightedAccuracyLambda = lambda v: reduce(operator.mul, list(v), 1) * 100
+            weightingsCount = 0
+            try:
+                tqdmhandle = tqdm.tqdm(sorted(pcl, key=lambda x: x[2], reverse=True), desc='Weighting...')
+                for s in tqdmhandle:
+                    exchange, symbol, prediction = s
                 
-                if gconfig.testing.predictor:
-                    startt = time.time()
-                symbolInfo = self.dbc.getSymbols(exchange=exchange, symbol=symbol)[0]
-                if gconfig.testing.predictor:
-                    self.wt_testing_getSymbolsTime += time.time() - startt
+                    if gconfig.testing.predictor:
+                        startt = time.time()
+                    symbolInfo = self.dbc.getSymbols(exchange=exchange, symbol=symbol)[0]
+                    if gconfig.testing.predictor:
+                        self.wt_testing_getSymbolsTime += time.time() - startt
 
-                sectorFactor = 1
-                if symbolInfo.sector:
-                    pass
+                    sectorFactor = 1
+                    if symbolInfo.sector:
+                        pass
                 
-                
-                if gconfig.testing.predictor:
-                    startt = time.time()
-                try:
-                    symbolFactor = self.analyzer.getStockAccuracy(exchange, symbol, nn, key, LossAccuracy.ACCURACY, timeWeighted=gconfig.predictor.timeWeightedStockAccuracy)
-                except NoData:
-                    symbolFactor = -1
-                if gconfig.testing.predictor:
-                    self.wt_testing_getStockAccuracyTime += time.time() - startt
+                    ## network analysis factors
+                    nanm = NetworkAnalysisManager(nn)
+                    symbolFactor = nanm.getStockAccuracy(exchange, symbol)
+                    precedingRangeFactor = nanm.getStockPrecedingRangeTypesAccuracy(determinePrecedingRangeType(self.__getPrecedingRangeData(nn, exchange, symbol, anchorDates[0])))
 
-                weightedAccuracies[s] = (prediction, networkFactor, sectorFactor, symbolFactor)
-                weightingsCount += 1
-                if numberofWeightingsLimit and weightingsCount >= numberofWeightingsLimit:
-                    break
 
-                c = 0
-                postfixstr = ''
-                for k, v in sorted(weightedAccuracies.items(), key=lambda x: weightedAccuracyLambda(x[1]), reverse=True):
-                    if c > 2: break
-                    if c > 0:
-                        postfixstr += ' || '
-                    c += 1
-                    postfixstr += k[0] + ';' + k[1] + ': {:.3f}%'.format(float(weightedAccuracyLambda(v)))
+                    weightedAccuracies[s] = (prediction, networkFactor, sectorFactor, symbolFactor, precedingRangeFactor)
+                    weightingsCount += 1
+                    if numberofWeightingsLimit and weightingsCount >= numberofWeightingsLimit:
+                        break
+
+                    c = 0
+                    postfixstr = ''
+                    for k, v in sorted(weightedAccuracies.items(), key=lambda x: weightedAccuracyLambda(x[1]), reverse=True):
+                        if c > 2: break
+                        if c > 0:
+                            postfixstr += ' || '
+                        c += 1
+                        postfixstr += k[0] + ';' + k[1] + ': {:.3f}%'.format(float(weightedAccuracyLambda(v)))
                     
-                tqdmhandle.set_postfix_str(postfixstr)
+                    tqdmhandle.set_postfix_str(postfixstr)
 
 
-        except (InternalError, KeyboardInterrupt):
-            pass
+            except (InternalError, KeyboardInterrupt):
+                pass
 
-        if gconfig.testing.predictor:
-            print('wt_testing_getSymbolsTime', self.wt_testing_getSymbolsTime, 'seconds')
-            print('wt_testing_getStockAccuracyTime', self.wt_testing_getStockAccuracyTime, 'seconds::')
-            self.analyzer.printTestTimes()
+            if gconfig.testing.predictor:
+                print('wt_testing_getSymbolsTime', self.wt_testing_getSymbolsTime, 'seconds')
+                print('wt_testing_getStockAccuracyTime', self.wt_testing_getStockAccuracyTime, 'seconds::')
 
-        for k, v in sorted(weightedAccuracies.items(), key=lambda x: weightedAccuracyLambda(x[1])):
-            print(k, ':', weightedAccuracyLambda(v), '%  <-', v)
-        print('Factors: predictions, network, sector, symbol')
-
+            for k, v in sorted(weightedAccuracies.items(), key=lambda x: weightedAccuracyLambda(x[1])):
+                print(k, ':', weightedAccuracyLambda(v), '%  <-', v)
+            print('Factors: predictions, network, sector, symbol, precrange')
 
 
-        print(pc_exceptions, '/', len(tickers), 'had exceptions')
-        print(pc, '/', len(tickers) - pc_exceptions, 'predicted to exceed threshold from anchor of', dt.isoformat())
+
+            print(pc_exceptions, '/', len(tickers), 'had exceptions')
+            print(pc, '/', len(tickers) - pc_exceptions, 'predicted to exceed threshold from', dt.isoformat(), 'to', (dt + timedelta(days=nn.stats.precedingRange)).isoformat())
 
         ## todo, show final date
 
-        return self
+        return res if singleSymbol else weightedAccuracies
 
 if __name__ == '__main__':
     # p: Predictor = Predictor()
@@ -297,9 +330,13 @@ if __name__ == '__main__':
     # p.predictAll('1623013426', '2021-05-30', exchange='NYSE') ## 0.15
     # p.predictAll('1623016597', '2021-05-30', exchange='NYSE') ## 0.2
     # p.predictAll('1623018727', '2021-05-30', exchange='NYSE') ## 0.25
-    Predictor.predictAll('1633809914', '2021-12-11', exchanges=['NYSE', 'NASDAQ']) ## 0.05 - 10d
+    # Predictor.predictAll('1633809914', '2021-12-11', exchanges=['NYSE', 'NASDAQ']) ## 0.05 - 10d
     # Predictor.predictAll('1631423638', '2021-11-20', exchanges=['NYSE', 'NASDAQ'], numberOfWeightingsLimit=200) ## 0.1 - 30d
     # p.predictAll('1631423638', exchanges=['NYSE', 'NASDAQ']) ## 0.1 - 30d
+    # Predictor.predictAll('1641959005', '2021-12-28', exchanges=['NYSE', 'NASDAQ']) ## 0.05 - 10d - recurrent
+    # Predictor.predict('NYSE', 'GME', '2021-12-28', '1641959005') ## 0.05 - 10d - recurrent
+    Predictor.predict('NYSE', 'GME', networkid='1641959005', anchorDates=['2021-12-28', '2021-12-31']) ## 0.05 - 10d - recurrent
+
 
     # for x in range(365):
     #     dt = date.today() - timedelta(days=x+1)
@@ -313,8 +350,6 @@ if __name__ == '__main__':
     # exchange='NASDAQ'
     # symbol='MRIN'
     # key = AccuracyType.OVERALL
-    # print('Weighted', p.analyzer.getStockAccuracy(exchange, symbol, nn, key, LossAccuracy.ACCURACY, timeWeighted=gconfig.predictor.timeWeightedStockAccuracy))
-    # print('Unweighted', p.analyzer.getStockAccuracy(exchange, symbol, nn, key, LossAccuracy.ACCURACY, timeWeighted=gconfig.predictor.timeWeightedStockAccuracy))
 
     print('done')
 
