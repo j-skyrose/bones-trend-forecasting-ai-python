@@ -11,6 +11,7 @@ sys.path.append(path)
 import numpy, re, math, calendar, json
 from datetime import date, datetime, timedelta
 from multiprocessing import Pool, cpu_count
+from typing import Union
 
 from constants.values import months, foundedSynonyms
 
@@ -122,6 +123,16 @@ def unixToDatetime(u):
     return datetime.utcfromtimestamp(u)
 def datetimeToUnix(d): return calendar.timegm(d.timetuple()) 
 
+def asISOFormat(dt: Union[date, datetime, str]):
+    if type(dt) == date:
+        return dt.isoformat()
+    elif type(dt) == datetime:
+        return dt.date().isoformat()
+    elif type(dt) == str:
+        return datetime.fromisoformat(dt).date().isoformat()
+    
+    raise ValueError('Unrecognized type')
+
 def asDate(dt: Union[date, datetime, str]):
     if type(dt) == date:
         return dt
@@ -129,6 +140,16 @@ def asDate(dt: Union[date, datetime, str]):
         return dt.date()
     elif type(dt) == str:
         return date.fromisoformat(dt)
+    
+    raise ValueError('Unrecognized type')
+
+def asDatetime(dt: Union[date, datetime, str]):
+    if type(dt) == date:
+        return datetime(dt.year, dt.month, dt.day)
+    elif type(dt) == datetime:
+        return dt
+    elif type(dt) == str:
+        return datetime.fromisoformat(dt)
     
     raise ValueError('Unrecognized type')
 
@@ -266,3 +287,4 @@ if __name__ == '__main__':
     # print(processRawValueToInsertValue(True))
     # print(flatten([1,[3,'dave',[6,[0,6,0],6],2],3,{'key':'value'}]))
     # print(getAdjustedSlidingWindowSize(5000, 600))
+    pass

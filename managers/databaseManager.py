@@ -21,6 +21,7 @@ from globalConfig import config as gconfig
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from managers.marketDayManager import MarketDayManager
 from constants.enums import AccuracyAnalysisTypes, CorrBool, FinancialReportType, OperatorDict, PrecedingRangeType, SeriesType, AccuracyType, SetType
+from utils.support import asISOFormat, processDBQuartersToDicts, processRawValueToInsertValue, recdot, recdotdict, Singleton, extractDateFromDesc, recdotlist, shortc, shortcdict, unixToDatetime
 from constants.values import unusableSymbols, apiList
 
 def addLastUpdatesRowsForAllSymbols(dbc):
@@ -251,7 +252,7 @@ class DatabaseManager(Singleton):
             stmt += ' AND date' + dateModifier.sqlsymbol + '? '
 
             ## adjust anchor date if on a weekend, so it do not result in an empty symbol list because anchor is ahead of last update date
-            weekday = date.fromisoformat(dt).weekday()
+            weekday = date.fromisoformat(asISOFormat(dt)).weekday()
             if weekday > 4:
                 dt = date.isoformat(date.fromisoformat(dt) - timedelta(days=(weekday % 4)))
 
