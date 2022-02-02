@@ -233,7 +233,7 @@ def multicore_poolIMap(func, iter, chuckSize=1):
     pool.join()
     return ret
 
-def getAdjustedSlidingWindowSize(total, desired):
+def getAdjustedSlidingWindowPercentage(total, desired):
     DEBUG = False
 
     numofsets = total / desired
@@ -286,5 +286,5 @@ if __name__ == '__main__':
     # print(processRawValueToInsertValue(['4', 4, None]))
     # print(processRawValueToInsertValue(True))
     # print(flatten([1,[3,'dave',[6,[0,6,0],6],2],3,{'key':'value'}]))
-    # print(getAdjustedSlidingWindowSize(5000, 600))
+    # print(getAdjustedSlidingWindowPercentage(5000, 600))
     pass

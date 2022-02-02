@@ -17,7 +17,7 @@ from functools import partial
 
 from globalConfig import config as gconfig
 from constants.enums import DataFormType, OperatorDict, OutputClass, SeriesType, SetType
-from utils.support import Singleton, flatten, getAdjustedSlidingWindowSize, recdotdict, recdotlist, shortc, multicore_poolIMap, processDBQuartersToDicts
+from utils.support import Singleton, flatten, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, processDBQuartersToDicts
 from utils.other import getInstancesByClass, maxQuarters
 from constants.values import unusableSymbols
 from managers.stockDataManager import StockDataManager
@@ -59,7 +59,7 @@ class DataManager():
     validationSet = []
     testingSet = []
     inputVectorFactory = None
-    setsSlidingWindowSize = 0
+    setsSlidingWindowPercentage = 0
     useAllSets = False
 
     def __init__(self,
@@ -391,8 +391,8 @@ class DataManager():
             print('Class split ratio:', len(psints) / len(self.selectedInstances))
             if not selectAll:
                 if len(psints) / len(self.selectedInstances) < gconfig.sets.minimumClassSplitRatio: raise ValueError('Positive to negative set ratio below minimum threshold')
-                self.setsSlidingWindowSize = getAdjustedSlidingWindowSize(len(self.selectedInstances), setCount) 
-                print('Adjusted sets window size from', setCount, 'to', int(len(self.selectedInstances)*self.setsSlidingWindowSize))
+                self.setsSlidingWindowPercentage = getAdjustedSlidingWindowPercentage(len(self.selectedInstances), setCount) 
+                print('Adjusted sets window size from', setCount, 'to', int(len(self.selectedInstances)*self.setsSlidingWindowPercentage))
 
         else:
             self.unselectedInstances = list(self.stockDataInstances.values())
@@ -497,7 +497,7 @@ class DataManager():
         # return trainingSet, validationSet, testingSet
 
     def getNumberOfWindowIterations(self):
-        return math.ceil(1 / self.setsSlidingWindowSize)
+        return math.ceil(1 / self.setsSlidingWindowPercentage)
 
     def _checkSelectedBalance(self):
         pclass, nclass = getInstancesByClass(self.selectedInstances)
@@ -507,7 +507,7 @@ class DataManager():
         if index is None:
             return set
 
-        sz = len(set) * self.setsSlidingWindowSize
+        sz = len(set) * self.setsSlidingWindowPercentage
         start = min(int(sz * index), len(set))
         end = min(int(sz * (index + 1)), len(set))
 
@@ -528,8 +528,7 @@ class DataManager():
         return ret
 
     def getKerasSets(self, classification=0, validationDataOnly=False, exchange=None, symbol=None, slice=None, verbose=1):
-        if self.useAllSets and slice > self.getNumberOfWindowIterations() - 1: raise IndexError()
-        if self.setsSlidingWindowSize and slice is None: raise ValueError('Keras set setup will overload memory, useAllSets set but not slice indicated')
+        # if self.setsSlidingWindowPercentage and slice is None: raise ValueError('Keras set setup will overload memory, useAllSets set but not slice indicated')
 
         self.getprecstocktime = 0
         self.getprecfintime = 0

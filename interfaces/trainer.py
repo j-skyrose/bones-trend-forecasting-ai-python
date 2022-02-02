@@ -255,7 +255,7 @@ if __name__ == '__main__':
     )
 
 
-    ## debugging getAdjustedSlidingWindowSize on real data
+    ## debugging getAdjustedSlidingWindowPercentage on real data
     # for i in range(p.dm.getNumberOfWindowIterations()):
     #     trsize = len(p.dm._getSetSlice(p.dm.trainingSet, i))
     #     vsize = len(p.dm._getSetSlice(p.dm.validationSet, i))
