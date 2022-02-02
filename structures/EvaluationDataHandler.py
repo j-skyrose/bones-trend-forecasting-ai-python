@@ -9,6 +9,7 @@ sys.path.append(path)
 
 from utils.support import recdotdict
 import tensorflow as tf
+from tensorflow.keras import Model
 from constants.enums import AccuracyType, LossAccuracy
 from structures.EvaluationResultsObj import EvaluationResultsObj
 from structures.evaluateObj import EvaluateObj
@@ -55,7 +56,7 @@ class EvaluationDataHandler:
     def getTuple(self, key):
         return (self.internal[key][0], self.internal[key][1])
 
-    def evaluateAll(self, model: tf.keras.Model, timeWeighted=False, **kwargs) -> EvaluationResultsObj:
+    def evaluateAll(self, model: Model, timeWeighted=False, **kwargs) -> EvaluationResultsObj:
         DEBUG = False
         # for s in range(len(inputVectorSets)):
         #     if len(inputVectorSets[s]) > 0:

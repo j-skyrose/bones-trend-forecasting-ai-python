@@ -6,6 +6,7 @@ while ".vscode" not in os.listdir(path):
     path = os.path.dirname(path)
 sys.path.append(path)
 ## done boilerplate "package"
+from globalConfig import config as gconfig
 
 import tqdm, math, gc, time
 from numpy.lib.function_base import median
@@ -24,8 +25,7 @@ from managers.statsManager import StatsManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from constants.enums import AccuracyType, LossAccuracy, OperatorDict, SeriesType
 from constants.exceptions import SufficientlyUpdatedDataNotAvailable
-from utils.support import containsAllKeys, shortc
-from globalConfig import config as gconfig
+from utils.support import containsAllKeys, shortc, shortcdict
 
 nnm: NeuralNetworkManager = NeuralNetworkManager()
 
@@ -59,7 +59,15 @@ class Trainer:
 
     def _getSetKWParams(self, **kwargs):
         print('Building KWParams object')
-        t, v, ts = self.dm.getKerasSets(**kwargs)
+        sets = self.dm.getKerasSets(**kwargs)
+        if shortcdict(kwargs, 'validationDataOnly', False):
+            t = None
+            v = sets
+            ts = None
+            del kwargs['validationDataOnly']
+        else: 
+            t, v, ts = sets
+        print('KWParams class sets')
         class1set = self.dm.getKerasSets(1, True, **kwargs)
         class2set = self.dm.getKerasSets(2, True, **kwargs)
         print('Keras sets built')
@@ -89,72 +97,14 @@ class Trainer:
                 self.instance.updateSets(**self._getSetKWParams(slice=s))
                 self.instance.train(**kwargs)
                 gc.collect()
-
-    ## outddated with incorporation of validationSet, EarlyStopping, ModelCheckpoint in model.fit
-    def train_old(self, stopTime=None, trainingDuration=0, iterations=None, evaluateEveryXIterations=0, lossIterationTolerance=0):
-        if iterations:
-            epochs = 1
-            periodicValidation = False
-            if evaluateEveryXIterations:
-                iterations, remainderIterations = divmod(iterations, evaluateEveryXIterations)
-                epochs = evaluateEveryXIterations
-                periodicValidation = True
-
-            self.instance.train(iterations, epochs=epochs, validatePeriodically=periodicValidation)
-            if remainderIterations: self.instance.train(1, epochs=remainderIterations)
-        else:
-
-            stopTime = shortc(stopTime, time.time() + trainingDuration)
-
-            iterationTimeRequired = time.time()
-            self.instance.train(1)
-            iterationTimeRequired = time.time() - iterationTimeRequired
-
-            previousLoss = self.instance.evaluate()[self.instance.network.stats.accuracyType][LossAccuracy.LOSS] if lossIterationTolerance else 0
-            lossIterationToleranceCounter = 0
-
-            batchingIterations = 1
-            if not lossIterationTolerance:
-                if evaluateEveryXIterations:
-                        batchingIterations = evaluateEveryXIterations
-                        iterationTimeRequired = iterationTimeRequired * evaluateEveryXIterations
-                else:
-                    batchingIterations = int((stopTime - time.time()) / iterationTimeRequired)
-                    print(stopTime - time.time(), iterationTimeRequired, batchingIterations)
-
-            itcount = 0
-            while lossIterationTolerance or time.time() + iterationTimeRequired < stopTime:
-                if itcount % 5 == 0:
-                    # K.clear_session()
-                    gc.collect()
-                itcount += 1
-                try:
-                    print('Iterating...')
-                    # self.instance.train(1, epochs=batchingIterations)
-                    self.instance.train(batchingIterations)
-
-                    if lossIterationTolerance:
-                        loss = self.instance.evaluate()[self.instance.network.stats.accuracyType][LossAccuracy.LOSS]
-
-                        if previousLoss < loss:
-                            lossIterationToleranceCounter += 1
-                            if lossIterationToleranceCounter > lossIterationTolerance:
-                                break
-                        else:
-                            lossIterationToleranceCounter = 0
-                            
-                        previousLoss = loss
-
-                    else:
-                        if evaluateEveryXIterations:
-                            self.instance.evaluate()
-                        else:
-                            batchingIterations = 1
-                except KeyboardInterrupt:
-                    break
-
-
-        self.instance.evaluate()
+            
+            ## re-evaluating
+            for s in range(maxIterations):
+                print('Slice', s+1, '/', maxIterations)
+                self.instance.updateSets(**self._getSetKWParams(slice=s, validationDataOnly=True))
+                self.instance.evaluate(reEvaluate=True)
+                gc.collect()
+            self.instance.network.printAccuracyStats()
 
     def saveNetwork(self, withSets=False):
         nnm.save(self.network)

@@ -123,9 +123,9 @@ class TrainingInstance():
             raise KeyboardInterrupt
             pass
     
-    def evaluate(self, verbose=1):
+    def evaluate(self, verbose=1, **kwargs):
         if not self.validationDataHandler: raise AttributeError
-        return self.network.evaluate(self.validationDataHandler, batch_size=self.config.batchSize, verbose=verbose)
+        return self.network.evaluate(self.validationDataHandler, batch_size=self.config.batchSize, verbose=verbose, **kwargs)
 
 
     def test(self, verbose=1):

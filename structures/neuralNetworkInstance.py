@@ -63,6 +63,7 @@ class NeuralNetworkInstance:
     id = None
     useAllSets = False
     useAllSetsAccumulator = None
+    reEvaluating = False
 
     def __init__(self, model: tf.keras.Model=None, inputVectorFactory=None, factoryConfig=gconfig, filepath=None, stats=None, useAllSets=False):
         self.model = model
@@ -271,45 +272,33 @@ class NeuralNetworkInstance:
             # self.stats.epochs += kwargs['epochs']
             self.stats.epochs += len(hist.epoch)
     
-    def evaluate(self, evaluationDataHandler: EvaluationDataHandler, **kwargs) -> EvaluationResultsObj:
+    def evaluate(self, evaluationDataHandler: EvaluationDataHandler, reEvaluate=False, **kwargs) -> EvaluationResultsObj:
+        firstreevaluate = False
         if not self.model: raise BufferError('Model not loaded')
-
-        # if len(inputVectorSets) != 3: raise IndexError
-        print('Evaluating...')
-        # losses = []
-        # accuracies = []
-        # for s in range(len(inputVectorSets)):
-        #     if len(inputVectorSets[s]) > 0:
-        #         l, a = self.model.evaluate(inputVectorSets[s], outputVectorSets[s], **kwargs)
-        #         losses.append(l)
-        #         accuracies.append(a)
+        if reEvaluate and not self.reEvaluating:
+            firstreevaluate = True
+            self.reEvaluating = True
+        print('{}valuating...'.format('Re-e' if self.reEvaluating else 'E'))
         
         results = evaluationDataHandler.evaluateAll(self.model, **kwargs)
 
         if evaluationDataHandler.accuracyTypesCount() == 3:
-            ## update stats
-            # if (
-            #     (self.stats.accuracyType == AccuracyType.OVERALL and accuracies[0] > self.stats.overallAccuracy) or
-            #     (self.stats.accuracyType == AccuracyType.POSITIVE and accuracies[1] > self.stats.positiveAccuracy) or
-            #     (self.stats.accuracyType == AccuracyType.NEGATIVE and accuracies[2] > self.stats.negativeAccuracy)
-            # ):
-            #     self.stats.overallAccuracy = accuracies[0]
-            #     self.stats.positiveAccuracy = accuracies[1]
-            #     self.stats.negativeAccuracy = accuracies[2]
 
             if self.useAllSets:
                 self._initializeAccumulatorIfRequired()
-                iterationCount = len(self.useAllSetsAccumulator[AccuracyType.OVERALL]) + 1
+                if firstreevaluate:
+                    iterationCount = 1
+                else:
+                    iterationCount = len(self.useAllSetsAccumulator[AccuracyType.OVERALL]) + 1
 
                 for actype in AccuracyType:
-                    self.useAllSetsAccumulator['last'][actype] = self.stats.__getattribute__(actype.statsName)
+                    if firstreevaluate or not self.reEvaluating:
+                        self.useAllSetsAccumulator['last'][actype] = self.stats.__getattribute__(actype.statsName)
+                    if firstreevaluate: self.useAllSetsAccumulator[actype] = []
+                        
                     self.useAllSetsAccumulator[actype].append(results[actype][LossAccuracy.ACCURACY])
                     self.stats.__setattr__(actype.statsName, sum(self.useAllSetsAccumulator[actype]) / iterationCount)
 
-                ## print accumulated accuracy stats
-                # print('Iterations: {}\nOverall positive accuracy: {}\nOverall negative accuracy: {}\nOverall overall accuracy: {}\n'.format(
-                #     totlength, sum(self.useAllSetsAccumulator[AccuracyType.POSITIVE])/totlength, sum(self.useAllSetsAccumulator[AccuracyType.NEGATIVE])/totlength, sum(self.useAllSetsAccumulator[AccuracyType.OVERALL])/totlength
-                # ))
                 print('Iterations:', iterationCount)
                 
 
@@ -319,7 +308,7 @@ class NeuralNetworkInstance:
                 self.stats.negativeAccuracy = results[AccuracyType.NEGATIVE][LossAccuracy.ACCURACY]
 
 
-            self.printAccuracyStats()
+            if not self.reEvaluating: self.printAccuracyStats()
         
         self.updated = True
 
