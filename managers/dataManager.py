@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import random, math, numpy, tqdm, time, pickle
+import random, math, numpy, tqdm, time, pickle, gc
 from tensorflow import keras
 from timeit import default_timer as timer
 from datetime import date
@@ -52,6 +52,7 @@ class DataManager():
     selectedInstances = []
     # unselectedInstances = []
     unselectedInstances = {}
+    setSplitTuple = None
     trainingInstances = []
     validationInstances = []
     testingInstances = []
@@ -66,7 +67,7 @@ class DataManager():
         precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, threshold=0,
         setCount=None, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, useAllSets=False,
         inputVectorFactory=InputVectorFactory(), normalizationInfo={}, symbolList:List=[],
-        analysis=False, statsOnly=False, 
+        analysis=False, statsOnly=False, initializeStockDataHandlersOnly=False, useOptimizedSplitMethodForAllSets=True,
         anchorDate=None, forPredictor=False,
         minDate=None,
         **kwargs
@@ -77,36 +78,52 @@ class DataManager():
         self.config = inputVectorFactory.config
         self.inputVectorFactory = inputVectorFactory
         self.precedingRange = precedingRange
-        # self.followingRange = followingRange
-        # self.seriesType = seriesType
-        # self.threshold = threshold
+        self.followingRange = followingRange
+        self.seriesType = seriesType
+        self.threshold = threshold
+        self.setSplitTuple = setSplitTuple
+        self.minDate = minDate
         # self.setCount = setCount
         self.kerasSetCaches = {}
         self.normalizationInfo = recdotdict(normalizationInfo)
         # self.symbolList = symbolList
         self.useAllSets = useAllSets
+        self.useOptimizedSplitMethodForAllSets = useOptimizedSplitMethodForAllSets
+        self.initializedWindow = None
 
         ## purge invalid tickers
         for s in symbolList:
             if (s.exchange, s.symbol) in unusableSymbols:
                 symbolList.remove(s)
 
-        ## pull and setup financial reports ref
-        if gconfig.feature.financials.enabled:
+        if useAllSets and useOptimizedSplitMethodForAllSets:
+            self.windows = dbm.getTickerSplit(1641959005, 25000)
+            for windex in range(len(self.windows)):
+                for i in range(len(self.windows[windex])):
+                    self.windows[windex][i] = dbm.getSymbols(exchange=self.windows[windex][i].exchange, symbol=self.windows[windex][i].symbol)[0]
+        ## not useAllSets and not useOptimizedSplitMethodForAllSets
+        else:
+            ## pull and setup financial reports ref
+            if gconfig.feature.financials.enabled:
+                startt2 = time.time()
+                self.initializeFinancialDataHandlers(symbolList)
+                print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
+
             startt2 = time.time()
-            self.initializeFinancialDataHandlers(symbolList)
-            print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
+            self.initializeStockDataHandlers(symbolList)
+            print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
 
-        startt2 = time.time()
-        self.initializeStockDataHandlers(symbolList, self.normalizationInfo, precedingRange, followingRange, seriesType, threshold, minDate)
-        print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
+            if not initializeStockDataHandlersOnly:
+                startt3 = time.time()
+                self.initializeStockDataInstances()
+                print('Stock data instance initialization time:', time.time() - startt3, 'seconds')
 
-        if setCount is not None:
-            self.setupSets(setCount, setSplitTuple, minimumSetsPerSymbol)
-        elif analysis or forPredictor:
-            self.setupSets(len(self.stockDataInstances.values()), (0,1), selectAll=True)
-        elif statsOnly:
-            self.setupSets(1, (1,0), 0)
+                if setCount is not None:
+                    self.setupSets(setCount, setSplitTuple, minimumSetsPerSymbol)
+                elif analysis or forPredictor:
+                    self.setupSets(len(self.stockDataInstances.values()), (0,1), selectAll=True)
+                elif statsOnly:
+                    self.setupSets(1, (1,0), 0)
 
         print('DataManager init complete. Took', time.time() - startt, 'seconds')
 
@@ -169,6 +186,108 @@ class DataManager():
         #     statsOnly=True
         # )
         return cls.forTraining(seriesType, statsOnly=True, **kwargs)
+    
+    @classmethod
+    def determineAllSetsTickerSplit(cls, nn: NeuralNetworkInstance, setCount, **kwargs):
+        normalizationInfo = nn.stats.getNormalizationInfo()
+        _, _, symbolList = dbm.getNormalizationData(nn.stats.seriesType, normalizationInfo=normalizationInfo, **kwargs) #exchanges=exchanges, excludeExchanges=excludeExchanges, sectors=sectors, excludeSectors=excludeSectors)
+
+
+
+        self = cls(
+            precedingRange=nn.stats.precedingRange, followingRange=nn.stats.followingRange, seriesType=nn.stats.seriesType, threshold=nn.stats.changeThreshold, inputVectorFactory=nn.inputVectorFactory,
+            normalizationInfo=normalizationInfo, symbolList=symbolList,
+            initializeStockDataHandlersOnly=True,
+            **kwargs
+        )
+
+        ## catalog output classes for all instances for all handlers
+        outputClassCountsDict = {}
+        for k,v in tqdm.tqdm(self.stockDataHandlers.items(), desc='Collecting output class counts'):
+            outputClassCountsDict[k] = self.initializeStockDataInstances([v], collectOutputClassesOnly=True, verbose=0)
+
+        instanceCount = 0
+        for v in outputClassCountsDict.values():
+            for o in OutputClass:
+                instanceCount += v[o]
+
+        windowPercentage = getAdjustedSlidingWindowPercentage(instanceCount, setCount)
+        windowSize = int(instanceCount*windowPercentage)
+        numberOfWindows = math.ceil(1 / windowPercentage)
+        windows = [[] for i in range(numberOfWindows)]
+        tickerWindows = [[] for i in range(numberOfWindows)]
+        splitRatio = gconfig.sets.minimumClassSplitRatio
+
+        ## catalog tickers in optimal-level buckets
+        optimals = [[] for i in range(3)]
+        nonOptimals = []
+        for k,v in outputClassCountsDict.items():
+            splt = v[OutputClass.POSITIVE] / (v[OutputClass.POSITIVE] + v[OutputClass.NEGATIVE])
+            for i in range(len(optimals)):
+                if splitRatio - 0.01*(i+1) <= splt and splt < splitRatio + 0.02*(i+1):
+                    optimals[i].append(k)
+                    break
+                if i == len(optimals)-1:
+                    nonOptimals.append(k)
+            
+        def getWindowCountTotal(w):
+            try:
+                return sum([ sum([ wi[o] for o in OutputClass ]) for wi in w ])
+            except TypeError:
+                return 0
+        
+        ## distribute all tickers from tlist in the window buckets, attempting to stay within setCount
+        def fitTickerListToWindows(tlist: List, additionalToleranceFactor=1, label=None):
+            startingwindex = windows.index(min(windows, key=len))
+            skiptlistindexes = []
+            breakouter = False
+            with tqdm.tqdm(total=len(tlist), desc=label) as tqdmbar:
+                while len(skiptlistindexes) < len(tlist):
+                    startinglen = len(skiptlistindexes)
+                    for windex in range(startingwindex, len(windows)+startingwindex):
+                        windex = windex % len(windows)
+                        for opindex in range(len(tlist)):
+                            if opindex in skiptlistindexes: continue
+                            if getWindowCountTotal(windows[windex]) + outputClassCountsDict[tlist[opindex]][OutputClass.POSITIVE] + outputClassCountsDict[tlist[opindex]][OutputClass.NEGATIVE] < windowSize * additionalToleranceFactor:
+                                windows[windex].append(outputClassCountsDict[tlist[opindex]])
+                                tickerWindows[windex].append({ 'exchange': tlist[opindex][0], 'symbol': tlist[opindex][1] })
+                                skiptlistindexes.append(opindex)
+                                tqdmbar.update()
+                                if len(skiptlistindexes) == len(tlist):
+                                    breakouter = True
+                                break
+                        if breakouter: break
+                    
+                    if len(skiptlistindexes) == startinglen:
+                        print('stuck')
+                        break
+            for skp in reversed(sorted(skiptlistindexes)):
+                tlist.pop(skp)
+        
+        for p in range(len(optimals)):
+            fitTickerListToWindows(optimals[p], 1 + 0.03*p, label='Fitting optimals level {}'.format(p))
+        fitTickerListToWindows(nonOptimals, 1.15, label='Fitting non-optimals')
+
+        def getWindowRatio(w):
+            pos = 0
+            neg = 0
+            for i in w:
+                pos += i[OutputClass.POSITIVE]
+                neg += i[OutputClass.NEGATIVE]
+            return pos / (pos + neg)
+        for w in range(len(windows)):
+            # print('Window', w, ':', str(getWindowCountTotal(windows[w])).ljust(6), getWindowRatio(windows[w]))
+            pass
+
+        for o in range(len(optimals)):
+            if len(optimals[o]) > 0:
+                print('Remaining Op{}:'.format(o), optimals[o])
+        if len(nonOptimals) > 0:
+            print('Remaining non-optimals')
+            for o in nonOptimals:
+                print(o, outputClassCountsDict[o])
+
+        return tickerWindows
 
     def buildInputVector(self, stockDataSet: StockDataHandler, stockDataIndex, googleInterestData, symbolData):
         startt = time.time()
@@ -197,64 +316,53 @@ class DataManager():
 
         return ret
 
-    def initializeStockDataHandlers(self, symbolList: List, normalizationInfo, precedingRange, followingRange, seriesType, threshold, minDate):
+    def initializeStockDataHandlers(self, symbolList: List):
         ## purge unusable symbols
         for s in symbolList:
             if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
 
+        sdhArg = lambda ticker, data: [
+            ticker,
+            self.seriesType,
+            data,
+            *self.normalizationInfo.values(),
+            self.precedingRange,
+            self.followingRange
+        ]
         if gconfig.multicore:
-            for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockDataTickerTuples, seriesType=seriesType, minDate=minDate), symbolList, chunksize=1, desc='Getting stock data'), desc='Creating stock handlers'):
-                if len(data) >= precedingRange + followingRange + 1:
-                    self.stockDataHandlers[(ticker.exchange, ticker.symbol)] = StockDataHandler(
-                        ticker,
-                        seriesType,
-                        data,
-                        *normalizationInfo.values(),
-                        precedingRange,
-                        followingRange
-                    )
-            
-            h: StockDataHandler
-            for h in tqdm.tqdm(self.stockDataHandlers.values(), desc='Initializing stock instances'):
-                for sindex in h.getAvailableSelections():
-                    try:
-                        change = (h.data[sindex + followingRange].low / h.data[sindex - 1].high) - 1
-                    except ZeroDivisionError:
-                        change = 0
-
-                    self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, h.data[sindex].date)] = DataPointInstance(
-                        self.buildInputVector,
-                        h, sindex,
-                        OutputClass.POSITIVE if change >= threshold else OutputClass.NEGATIVE
-                    )
-
+            for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate), symbolList, chunksize=1, desc='Getting stock data'), desc='Creating stock handlers'):
+                if len(data) >= self.precedingRange + self.followingRange + 1:
+                    self.stockDataHandlers[(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArg(ticker, data))
         else:
-            for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):   
-                if (s.exchange, s.symbol) in unusableSymbols: continue
-                data = dbm.getStockData(s.exchange, s.symbol, seriesType, minDate=minDate)
-                if len(data) >= precedingRange + followingRange + 1:
-                    self.stockDataHandlers[(s.exchange, s.symbol)] = StockDataHandler(
-                        s,
-                        seriesType,
-                        data,
-                        *normalizationInfo.values(),
-                        precedingRange,
-                        followingRange
-                    )
-        
-            h: StockDataHandler
-            for h in tqdm.tqdm(self.stockDataHandlers.values(), desc='Initializing stock instances'):
-                for sindex in h.getAvailableSelections():
-                    try:
-                        change = (h.data[sindex + followingRange].low / h.data[sindex - 1].high) - 1
-                    except ZeroDivisionError:
-                        change = 0
+            for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):
+                data = dbm.getStockData(s.exchange, s.symbol, self.seriesType, minDate=self.minDate)
+                if len(data) >= self.precedingRange + self.followingRange + 1:
+                    self.stockDataHandlers[(s.exchange, s.symbol)] = StockDataHandler(*sdhArg(s, data))
 
+    def initializeStockDataInstances(self, stockDataHandlers: List[StockDataHandler]=None, collectOutputClassesOnly=False, verbose=1):
+        if not stockDataHandlers:
+            stockDataHandlers = self.stockDataHandlers.values()
+
+        outputClassCounts = { o: 0 for o in OutputClass }
+
+        h: StockDataHandler
+        for h in tqdm.tqdm(stockDataHandlers, desc='Initializing stock instances') if verbose > 0 else stockDataHandlers:
+            for sindex in h.getAvailableSelections():
+                try:
+                    change = (h.data[sindex + self.followingRange].low / h.data[sindex - 1].high) - 1
+                except ZeroDivisionError:
+                    change = 0
+                oupclass = OutputClass.POSITIVE if change >= self.threshold else OutputClass.NEGATIVE
+
+                if collectOutputClassesOnly:
+                    outputClassCounts[oupclass] += 1
+                else:
                     self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, h.data[sindex].date)] = DataPointInstance(
                         self.buildInputVector,
-                        h, sindex,
-                        OutputClass.POSITIVE if change >= threshold else OutputClass.NEGATIVE
+                        h, sindex, oupclass
                     )
+
+        if collectOutputClassesOnly: return outputClassCounts
         
     def initializeFinancialDataHandlers(self, symbolList):
         ANALYZE1 = False
@@ -381,7 +489,19 @@ class DataManager():
                 print('insertingtime',insertingtime,'seconds')
                 print('total',gettingtime+massagingtime+creatingtime+insertingtime,'seconds')
 
-    def setupSets(self, setCount, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, selectAll=False):
+    def initializeWindow(self, windowIndex):
+        self.stockDataInstances.clear()
+        self.stockDataHandlers.clear()
+        self.initializeStockDataHandlers(self.windows[windowIndex])
+        self.initializeStockDataInstances()
+        self.setupSets(selectAll=True)
+        self.initializedWindow = windowIndex
+        gc.collect()
+
+    def setupSets(self, setCount=None, setSplitTuple=None, minimumSetsPerSymbol=0, selectAll=False):
+        if not setSplitTuple:
+            setSplitTuple = shortc(self.setSplitTuple, (1/3,1/3))
+
         if self.useAllSets or selectAll:
             self.unselectedInstances = []
             self.selectedInstances = list(self.stockDataInstances.values())
@@ -401,7 +521,7 @@ class DataManager():
             if DEBUG: print('Selecting', setCount, 'instances')
 
             ## cover minimums
-            if minimumSetsPerSymbol > 0 and not self.useAllSets:
+            if minimumSetsPerSymbol > 0:
                 self.unselectedInstances = []
                 for h in self.stockDataHandlers.values():
                     available = h.getAvailableSelections()
@@ -426,7 +546,7 @@ class DataManager():
             puints, nuints = getInstancesByClass(self.unselectedInstances)
             if DEBUG: print('sel rem', len(self.selectedInstances), setCount, len(self.selectedInstances) < setCount)
             # select remaining
-            if len(self.selectedInstances) < setCount and not self.useAllSets:
+            if len(self.selectedInstances) < setCount:
                 if DEBUG:
                     print('Positive selected instances', len(psints))
                     print('Negative selected instances', len(nsints))
@@ -497,6 +617,8 @@ class DataManager():
         # return trainingSet, validationSet, testingSet
 
     def getNumberOfWindowIterations(self):
+        if self.useAllSets and self.useOptimizedSplitMethodForAllSets:
+            return len(self.windows)
         return math.ceil(1 / self.setsSlidingWindowPercentage)
 
     def _checkSelectedBalance(self):
@@ -528,7 +650,13 @@ class DataManager():
         return ret
 
     def getKerasSets(self, classification=0, validationDataOnly=False, exchange=None, symbol=None, slice=None, verbose=1):
+        if self.useAllSets and not self.useOptimizedSplitMethodForAllSets and shortc(slice, 0) > self.getNumberOfWindowIterations() - 1: raise IndexError()
         # if self.setsSlidingWindowPercentage and slice is None: raise ValueError('Keras set setup will overload memory, useAllSets set but not slice indicated')
+
+        if self.useAllSets and self.useOptimizedSplitMethodForAllSets:
+            if self.initializedWindow != slice:
+                self.initializeWindow(slice)
+            slice = None
 
         self.getprecstocktime = 0
         self.getprecfintime = 0
@@ -614,6 +742,15 @@ class DataManager():
 
 
 if __name__ == '__main__':
+
+    tsplit = DataManager.determineAllSetsTickerSplit(
+        NeuralNetworkManager().get(1641959005),
+        25000,
+        assetTypes=['CS','CLA','CLB','CLC']
+    )
+    dbm.saveTickerSplit(1641959005, 25000, tsplit)
+    exit()
+    
     s = DataManager.forTraining(
         SeriesType.DAILY,
         precedingRange=90,

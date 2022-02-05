@@ -71,8 +71,10 @@ class recdotdict(dict):
 def recdotlist(list):
     return [recdotdict(l) for l in list]
 
-def recdot(obj):
-    return recdotlist(obj) if type(obj) is list else recdotdict(obj)
+def recdotobj(obj):
+    if type(obj) is list:
+        return [recdotobj(i) for i in obj]
+    return recdotdict(obj)
 
 class Singleton(object):
     def __new__(cls, *args, **kwds):

@@ -1,4 +1,3 @@
-import json
 import os, sys
 path = os.path.dirname(os.path.abspath(__file__))
 while ".vscode" not in os.listdir(path):
@@ -8,6 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
+import math, re, dill, operator, shutil, json, optparse, time, pickle
 from typing import Dict, List, Union
 import sqlite3, atexit, numpy as np, xlrd
 from datetime import date, timedelta, datetime
@@ -21,7 +21,7 @@ from globalConfig import config as gconfig
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from managers.marketDayManager import MarketDayManager
 from constants.enums import AccuracyAnalysisTypes, CorrBool, FinancialReportType, OperatorDict, PrecedingRangeType, SeriesType, AccuracyType, SetType
-from utils.support import asISOFormat, processDBQuartersToDicts, processRawValueToInsertValue, recdot, recdotdict, Singleton, extractDateFromDesc, recdotlist, shortc, shortcdict, unixToDatetime
+from utils.support import asISOFormat, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, unixToDatetime
 from constants.values import unusableSymbols, apiList
 
 def addLastUpdatesRowsForAllSymbols(dbc):
@@ -88,6 +88,8 @@ class DatabaseManager(Singleton):
         for idx, col in enumerate(c.description):
             if col[0] == 'timestamp' and re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}', shortc(r[idx], '')):
                 d[col[0]] = datetime.strptime(r[idx], '%Y-%m-%d %X')
+            elif col[0].startswith('pickled'):
+                d[col[0]] = pickle.loads(r[idx])
             else: d[col[0]] = r[idx]
         return recdotdict(d)
 
@@ -585,6 +587,13 @@ class DatabaseManager(Singleton):
                 correct = r2count
             return correct/total
 
+    def getTickerSplit(self, nnid, setCount):
+        stmt = 'SELECT pickled_split FROM ticker_splits WHERE network_id=? AND set_count=?'
+        res = self.dbc.execute(stmt, (nnid, setCount)).fetchall()
+        if len(res) > 1:
+            raise ValueError('Too many returned rows')
+        return recdotobj(res[0]['pickled_split'])
+
     ## end gets ####################################################################################################################################################################
     ####################################################################################################################################################################
     ## sets ####################################################################################################################################################################
@@ -1019,6 +1028,12 @@ class DatabaseManager(Singleton):
         )
         tpl = [dataCount] + ([minDate] if minDate else []) + [lastExchange, lastSymbol, nnid, acctype.value]
         self.dbc.execute(stmt, tuple(tpl))
+
+    def saveTickerSplit(self, nnid, setCount, splitList):
+        tickerCount = sum([ len(w) for w in splitList])
+        stmt = 'INSERT INTO ticker_splits VALUES (?,?,?,?)'
+        tpl = (nnid, setCount, tickerCount, pickle.dumps(splitList))
+        self.dbc.execute(stmt, tpl)
 
     ## end sets ####################################################################################################################################################################
     ####################################################################################################################################################################

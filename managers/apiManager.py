@@ -17,7 +17,7 @@ import time as timer
 
 from constants.exceptions import APILimitReached, APITimeout, APIError
 from constants.enums import FinancialReportType, FinancialStatementType, TimespanType
-from utils.support import Singleton, recdot, recdotdict, shortc
+from utils.support import Singleton, recdotdict, shortc
 
 class APIManager(Singleton):
     def __init__(self):
