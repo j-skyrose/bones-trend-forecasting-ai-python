@@ -164,6 +164,7 @@ class DataManager():
 
         symbolList = []
         for t in qualifyingSymbolList:
+            if len(symbolList) == gconfig.testing.REDUCED_SYMBOL_SCOPE: break
             symbolList.append(dbm.getSymbols(exchange=t.exchange, symbol=t.symbol)[0])
 
         return cls(

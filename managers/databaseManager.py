@@ -488,7 +488,7 @@ class DatabaseManager(Singleton):
 
         stmt += ' GROUP BY h.exchange, h.symbol'
         if gconfig.testing.enabled: stmt += ' LIMIT ' + str(gconfig.testing.stockQueryLimit)
-        elif gconfig.testing.reducedScope: stmt += ' LIMIT 100'
+        elif gconfig.testing.REDUCED_SYMBOL_SCOPE: stmt += ' LIMIT ' + str(gconfig.testing.REDUCED_SYMBOL_SCOPE)
 
         symbolList = self._queryOrGetCache(stmt, tuple, self._getHistoricalDataCount(), 'getnormsymbolist')
         # symbolList = self.dbc.execute(stmt, tuple).fetchall()

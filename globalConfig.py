@@ -11,30 +11,37 @@ from constants.enums import DataFormType, SeriesType
 from utils.support import recdotdict
 
 # TESTING = True
-try:
-    if TESTING: pass
-except:
-    TESTING = False
+# REDUCED_SYMBOL_SCOPE = 10
+# TESTING_PREDICTOR = True
+# SEED_RANDOM = 420
 
-# REDUCED_SCOPE = True
-try:
-    if REDUCED_SCOPE: pass
-except:
-    REDUCED_SCOPE = False    
-
-TESTING_PREDICTOR = True
-try:
-    if TESTING_PREDICTOR: pass
-except:
-    TESTING_PREDICTOR = False   
-    
 useGPU = True
+useMainGPU = True
+
+try:    TESTING
+except: TESTING = False
+try:    REDUCED_SYMBOL_SCOPE
+except: REDUCED_SYMBOL_SCOPE = -1
+try:    TESTING_PREDICTOR
+except: TESTING_PREDICTOR = False
+try:    SEED_RANDOM
+except: SEED_RANDOM = False
+
 try: useGPU
 except NameError: useGPU = False
-    
-useMainGPU = True
 try: useMainGPU
 except NameError: useMainGPU = False
+
+
+if TESTING and SEED_RANDOM:
+    useGPU = False
+    os.environ['PYTHONHASHSEED'] = str(SEED_RANDOM)
+
+    import numpy, tensorflow, random
+    numpy.random.seed(SEED_RANDOM)
+    random.seed(SEED_RANDOM)
+    tensorflow.random.set_seed(SEED_RANDOM)
+
 
 trainingConfig = {
     ## master
@@ -72,20 +79,21 @@ def genFeatureObj(enabled, extype, dataRequired=True):
 config = recdotdict({
     'useGPU': useGPU,
     'useMainGPU': useMainGPU,
-    'multicore': False,
+    'multicore': not ('VSCODE_GIT_IPC_HANDLE' in os.environ),
     'dataForm': {
         'dayOfWeek': DataFormType.VECTOR,
         'dayOfMonth': DataFormType.VECTOR,
         'monthOfYear': DataFormType.VECTOR,
         # 'dayOfWeek': DataFormType.INTEGER,
         # 'dayOfMonth': DataFormType.INTEGER,
-        # 'monthOfYear': DataFormType.INTEGER
+        # 'monthOfYear': DataFormType.INTEGER,
+
         'outputVector': DataFormType.BINARY,
         # 'outputVector': DataFormType.CATEGORICAL
     },
     'sets': {
         'positiveSplitRatio': 1/6, # default 0.5,
-        'minimumClassSplitRatio': 0.15 if not TESTING else 0.01
+        'minimumClassSplitRatio': 0.13 if not TESTING else 0.01
     },
     'predictor': {
         'ifBinaryUseRaw': True,
@@ -132,7 +140,7 @@ config = recdotdict({
 
     'testing': {
         'enabled': TESTING,
-        'reducedScope': REDUCED_SCOPE,
+        'REDUCED_SYMBOL_SCOPE': REDUCED_SYMBOL_SCOPE,
         'predictor': TESTING_PREDICTOR,
         'exchange': 'NYSE',
         'stockQueryLimit': 50,
