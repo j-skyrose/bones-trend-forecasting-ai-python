@@ -21,7 +21,7 @@ from globalConfig import config as gconfig
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from managers.marketDayManager import MarketDayManager
 from constants.enums import AccuracyAnalysisTypes, CorrBool, FinancialReportType, OperatorDict, PrecedingRangeType, SeriesType, AccuracyType, SetType
-from utils.support import asISOFormat, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, unixToDatetime
+from utils.support import asDate, asISOFormat, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, unixToDatetime
 from constants.values import unusableSymbols, apiList
 
 def addLastUpdatesRowsForAllSymbols(dbc):

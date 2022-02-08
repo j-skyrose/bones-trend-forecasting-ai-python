@@ -91,7 +91,7 @@ class Collector:
         lastUpdatedPastDaysCount = math.floor( (date.today() - self.apiManager.apis[api].updatedOn).total_seconds() / (60 * 60 * 24) )
         if DEBUG: print('max days', startingPastDaysCount, 'last updated delta', lastUpdatedPastDaysCount)
 
-        currentdate = date.today()
+        currentdate = date.today() ## TODO: fix so same day running is possible, with some sort of time gating
         if currentdate.weekday() < 5: print('WARNING: running too early on weekdays may result in incomplete data\nOpt to run after ~6pm')
         for c in range(min(startingPastDaysCount, lastUpdatedPastDaysCount)-1, -1, -1):
         # for c in range(1):
@@ -228,7 +228,7 @@ class Collector:
 
                     self.__mixedSymbolDateTimespanCollect(api, tickerlist)
                 else:
-                self.__singleDateBatchCollect(api)
+                    self.__singleDateBatchCollect(api)
                 
             else:
                 ## gather symbols for this collection run
@@ -591,7 +591,7 @@ if __name__ == '__main__':
             kwargs[key] = massageVariable(key, val)
 
         if options.api == 'vix':
-        c.collectVIX()
+            c.collectVIX()
         else:
             c.startAPICollection(options.api, **kwargs)
     else:

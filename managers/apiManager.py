@@ -17,7 +17,7 @@ import time as timer
 
 from constants.exceptions import APILimitReached, APITimeout, APIError
 from constants.enums import FinancialReportType, FinancialStatementType, TimespanType
-from utils.support import Singleton, recdotdict, shortc
+from utils.support import Singleton, recdotdict, recdotobj, shortc
 
 class APIManager(Singleton):
     def __init__(self):
@@ -106,7 +106,7 @@ class APIManager(Singleton):
         apiHandle = self.apis[api]
         self._checkLimits(apiHandle, seriesType, queryDate)
 
-        return recdot(self.__executeAPIRequest(apiHandle, lambda: requestFunc(apiHandle), verbose))
+        return recdotobj(self.__executeAPIRequest(apiHandle, lambda: requestFunc(apiHandle), verbose))
 
     def query(self, api, symbol=None, stype=None, qdate=None, verbose=0):
         return self._executeRequestWrapper(
@@ -172,7 +172,7 @@ class APIManager(Singleton):
 
     #     ret = self.__executeAPIRequest(apih, func)
 
-    #     return recdot(ret) ## if type(ret) is not list else ret
+    #     return recdotobj(ret) ## if type(ret) is not list else ret
 
     # def getTickerDetails(self, api, symbol):
     #     apih = self.apis[api]
@@ -181,7 +181,7 @@ class APIManager(Singleton):
     #     func = lambda: apih.api.getTickerDetails(symbol)
     #     ret = self.__executeAPIRequest(apih, func)
 
-    #     return recdot(ret) ## if type(ret) is not list else ret
+    #     return recdotobj(ret) ## if type(ret) is not list else ret
 
     def compileSupportedSymbols(self, api):
         apih = self.apis[api]

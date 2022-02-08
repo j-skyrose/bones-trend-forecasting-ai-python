@@ -146,7 +146,7 @@ class Predictor(Singleton):
             anchorDates = [date.today()]
         anchorDates = [asDate(dt) for dt in anchorDates]
 
-        anchorDateArg = max(*anchorDates)
+        anchorDateArg = max(anchorDates)
         nn, tickers = self._initialize(networkid=networkid, anchorDate=anchorDateArg, needInstanceSetup=withWeighting, **kwargs)
         if len(tickers) == 0:
             print('No tickers available for anchor date of', anchorDateArg)
@@ -176,7 +176,7 @@ class Predictor(Singleton):
         
         for tkrORdt in loopHandle:
             if loopingTickers:  
-                dt = date.fromisoformat(anchorDates[0]) if anchorDate else date.fromisoformat(t.date) + timedelta(days=1)
+                dt = anchorDates[0]
                 texchange = tkrORdt.exchange
                 tsymbol = tkrORdt.symbol
             else:               
@@ -194,9 +194,9 @@ class Predictor(Singleton):
                     predictionInputVectors.append(inptpl)
                 
                 predictionTickers.append(tkrORdt)
-            except (ValueError, tf.errors.InvalidArgumentError, SufficientlyUpdatedDataNotAvailable, KeyError, AnchorDateAheadOfLastDataDate) as e:
+            except (ValueError, tf.errors.InvalidArgumentError, SufficientlyUpdatedDataNotAvailable, KeyError, AnchorDateAheadOfLastDataDate, TypeError) as e:
             # except IndexError:
-                print(e)
+                # print(e)
 
                 pc_exceptions += 1
 

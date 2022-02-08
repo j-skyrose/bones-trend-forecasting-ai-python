@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Dict
 
 from globalConfig import config as gconfig
-import interfaces.predictor as predictorModule
+# import interfaces.predictor as predictorModule
 from managers.databaseManager import DatabaseManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
