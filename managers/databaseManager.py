@@ -247,22 +247,25 @@ class DatabaseManager(Singleton):
         return self.__purgeUnusableTickers(self.dbc.execute(stmt).fetchall())
 
     ## get raw data from last_updates
-    def getLastUpdatedInfo(self, stype, dt=None, dateModifier=OperatorDict.EQUAL, exchanges=[], symbols=[], **kwargs):
-        stmt = 'SELECT * FROM last_updates WHERE type=? AND api IS NOT NULL'
+    def getLastUpdatedInfo(self, stype, dt=None, dateModifier=OperatorDict.EQUAL, exchanges=[], symbols=[], assetTypes=[], **kwargs):
+        stmt = 'SELECT * FROM last_updates lu JOIN symbols s on lu.exchange=s.exchange and lu.symbol=s.symbol WHERE lu.type=? AND lu.api IS NOT NULL'
         args = [stype.function.replace('TIME_SERIES_','')]
         if dt:
-            stmt += ' AND date' + dateModifier.sqlsymbol + '? '
+            dt = asDate(dt)
+            stmt += ' AND lu.date' + dateModifier.sqlsymbol + '? '
 
             ## adjust anchor date if on a weekend, so it do not result in an empty symbol list because anchor is ahead of last update date
-            weekday = date.fromisoformat(asISOFormat(dt)).weekday()
+            weekday = dt.weekday()
             if weekday > 4:
-                dt = date.isoformat(date.fromisoformat(dt) - timedelta(days=(weekday % 4)))
+                dt = dt - timedelta(days=(weekday % 4))
 
-            args.append(dt)
+            args.append(dt.isoformat())
         if exchanges:
-            stmt += self._andXContainsListStatement('exchange', exchanges)
+            stmt += self._andXContainsListStatement('lu.exchange', exchanges)
         if symbols:
-            stmt += self._andXContainsListStatement('symbol', symbols)
+            stmt += self._andXContainsListStatement('lu.symbol', symbols)
+        if assetTypes:
+            stmt += self._andXContainsListStatement('s.asset_type', assetTypes)
 
         stmt += ' ORDER BY date ASC'
         if gconfig.testing.predictor: 
@@ -405,7 +408,7 @@ class DatabaseManager(Singleton):
         return dateGaps
 
     ## returns normalizationColumns, normalizationMaxes, symbolList
-    def getNormalizationData(self, stype, normalizationInfo=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[]):
+    def getNormalizationData(self, stype, normalizationInfo=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[], assetTypes=[], **kwargs):
         DEBUG = True
         normalizationColumns = ['high', 'volume']
 
@@ -469,7 +472,10 @@ class DatabaseManager(Singleton):
             if sectors:
                 stmt3 += self._andXContainsListStatement('h.sector', sectors)
             elif excludeSectors:
-                stmt3 += self._andXContainsListStatement('h.sector', excludeSectors, notIn=True)    
+                stmt3 += self._andXContainsListStatement('h.sector', excludeSectors, notIn=True)
+
+            if assetTypes:
+                stmt3 += self._andXContainsListStatement('s.asset_type', assetTypes)
         else:
             if gconfig.feature.googleInterests.enabled: 
                 stmt3 += 'AND s.google_topic_id IS NOT NULL'
@@ -1478,6 +1484,151 @@ class DatabaseManager(Singleton):
         self.dbc.execute(lastupdates_stmt)
         self.dbc.execute(networkacc_stmt)
 
+    ## https://en.wikipedia.org/wiki/Ticker_symbol#Canada
+    def _determineAssetType(self, exchange: str, symbol: str, name: str, basic=False):
+        symbol = symbol.lower()
+        name = name.lower()
+        if exchange == 'BATS':
+            if basic: return 'Non-CS'
+            else:
+                pass
+        elif exchange == 'NASDAQ':
+            if basic and len(symbol) == 5:
+                return 'Non-CS'
+            lastchar = symbol[-1]
+            if lastchar == 'a' and (len(symbol) == 5 or name.endswith('cl a') or name.endswith('cl. a')):
+                if basic: return 'CLA'
+                else:
+                    pass
+            elif lastchar == 'b' and (len(symbol) == 5 or name.endswith('cl b') or name.endswith('cl. b')):
+                if basic: return 'CLB'
+                else:
+                    pass
+            elif lastchar == 'c' and len(symbol) == 5:
+                return 'NXSH'
+            # elif lastchar == 'd':
+            # elif lastchar == 'e': ## none at len(5)
+            # elif lastchar == 'f':
+            # elif lastchar == 'g': ## "notes due XXXX"
+            # elif lastchar == 'h': ## "notes due XXXX"
+            # elif lastchar == 'i': ## "notes due XXXX"
+            # elif lastchar == 'j': ## none at len(5)
+            # elif lastchar == 'l':
+            # elif lastchar == 'm':
+            # elif lastchar == 'n':
+            # elif lastchar == 'f':
+            # elif lastchar == 'o':
+            elif lastchar == 'p' and (len(symbol) == 5 or ' pfd' in name or 'preferred' in name):
+                if basic: return 'PFD'
+                else:
+                    pass
+            # elif lastchar == 'q':
+            elif lastchar == 'r' and (len(symbol) == 5 or name.endswith(' right') or name.endswith(' rights')):
+                return 'RIGHT'
+            # elif lastchar == 's':
+            # elif lastchar == 't':
+            elif lastchar == 'u' and (len(symbol) == 5 or ' unit' in name):
+                return 'UNIT'
+            # elif lastchar == 'v':
+            elif lastchar == 'w' and (len(symbol) == 5 or name.endswith(' wt') or name.endswith(' wts')):
+                return 'WT'
+            elif lastchar == 'x' and len(symbol) == 5:
+                return 'MF'
+            # elif lastchar == 'y':
+            # elif lastchar == 'z':
+
+
+        elif exchange == 'NYSE':
+            if basic and '-' in symbol or '.' in symbol or ' ' in symbol:
+                return 'Non-CS'
+
+
+        ## unable to determine based on last char, special code
+        ## check for other indicators that it is a special symbol
+        if 'cl a' in name or 'cl. a' in name or 'class a' in name:
+            return 'CLA'
+        elif name.endswith(' etf') or ' etf ' in name or 'indexetf' in name or 'vanguard' in name:
+            return 'ETF'
+        elif name.endswith(' etn'):
+            if basic: return 'Non-CS'
+            else: pass
+        elif name.endswith(' ft'):
+            if basic: return 'Non-CS'
+            else: pass
+        elif name.endswith(' fund') or ' fund ' in name or name.endswith(' fd') or ' fd ' in name:
+            if basic: return 'Non-CS'
+            else: pass
+        elif name.endswith(' adr') or 'american depositary receipt' in name:
+            if basic: return 'Non-CS'
+            else: pass
+        elif name.endswith(' ads') or 'american depositary share' in name or 'american depository share' in name or ' ads each' in name:
+            if basic: return 'Non-CS'
+            else: pass
+        elif 'notes due' in name:
+            if basic: return 'Non-CS'
+            else: pass
+        elif 'warrant' in name:
+            if basic: return 'Non-CS'
+            else: pass
+        elif ' bond' in name:
+            if basic: return 'Non-CS'
+            else: pass
+        elif ' unit' in name or 'common unit' in name:
+            if basic: return 'Non-CS'
+            else: pass
+        elif ' index' in name:
+            if basic: return 'Non-CS'
+            else: pass
+        elif ' due' in name:
+            if basic: return 'Non-CS'
+            else: pass
+        elif ' pfd' in name or 'preferred' in name:
+            if basic: return 'Non-CS'
+            else: pass
+        elif ' trust' in name:
+            if basic: return 'Non-CS'
+            else: pass
+        elif ' right' in name:
+            if basic: return 'Non-CS'
+            else: pass
+        elif '%' in name:
+            if basic: return 'Non-CS'
+            else: pass
+
+
+        ## probably normal share, double check
+        if 'ordinary share' in name or 'ord sh' in name or 'common stock' in name or 'common share' in name:
+            return 'CS'
+
+        ## some other wierd kind of share, e.g. proshares, ishares, victoryshares
+        if 'share' in name:
+            return 'Non-CS'
+
+        return 'CS'
+
+
+    ## BATS seems to be all non-CS
+    def analyzePossibleSymbolAssetTypes(self, exchanges=['NYSE','NASDAQ','NYSE MKT','NYSE ARCA']):
+        stmt = 'SELECT * FROM symbols WHERE (api_polygon=1 OR api_fmp=1 or api_alphavantage=1) '
+        if exchanges:
+            stmt += self._andXContainsListStatement('exchange', exchanges)
+        stmt += ' ORDER BY symbol'
+
+        res = self.dbc.execute(stmt).fetchall()
+        symbolGroups = { e: {} for e in exchanges }
+        for s in tqdm(res, desc='Sorting symbols'):
+            sdict = symbolGroups[s.exchange]
+            try:
+                for k,v in sdict.items():
+                    if k in s.symbol and s.name.lower().startswith(v[0].name.split(' ')[0].lower()):
+                        v.append(s)
+                        raise BufferError
+                sdict[s.symbol] = [s]
+            except BufferError:
+                pass
+
+        return symbolGroups
+
     ## end limited use utility ####################################################################################################################################################################
     ####################################################################################################################################################################
     
@@ -1565,13 +1716,14 @@ if __name__ == '__main__':
     #         print(res)
     #         break
 
-    # print(d.getDailyHistoricalGaps('BATS','ACES'))
-    # data = d.getStockData('BATS', 'AVDR', SeriesType.DAILY, True)
-    # for d in data: print(d)
+        res = d.dbc.execute('select * from symbols where exchange=? and (api_polygon=1 or api_fmp=1 or api_alphavantage=1)', ('NYSE MKT',)).fetchall()
+        for r in res:
+            # if not d._determineAssetType(r.exchange, r.symbol, r.name, basic=True):
+            #     print(r.exchange, r.symbol, r.name)
+            d.dbc.execute('update symbols set asset_type=? where exchange=? and symbol=?', (d._determineAssetType(r.exchange, r.symbol, r.name, basic=True), r.exchange, r.symbol))
 
     # d.fillHistoricalGaps(exchange='BATS', symbol='ACES', type=SeriesType.DAILY)
-    d.fillHistoricalGaps(type=SeriesType.DAILY, dryrun=True)
-    # d.fillHistoricalGaps(type=SeriesType.DAILY)
+        # d.fillHistoricalGaps(type=SeriesType.DAILY, dryrun=True)
 
     # addLastUpdatesRowsForAllSymbols(d.dbc)
     # d.addAPI('polygon')
