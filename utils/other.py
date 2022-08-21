@@ -1,4 +1,3 @@
-from math import ceil
 import os, sys
 path = os.path.dirname(os.path.abspath(__file__))
 while ".vscode" not in os.listdir(path):
@@ -9,9 +8,10 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 import numpy, re
-
+from math import ceil
 from calendar import monthrange
 from datetime import date, datetime, timedelta
+
 from structures.inputVectorStats import InputVectorStats
 from utils.support import recdotdict, shortc, _isoformatd
 from constants.values import interestColumn, stockOffset
@@ -48,6 +48,15 @@ def normalizeStockData(data, highMax, volumeMax):
         r.low = (r.low / highMax) - stockOffset
         r.close = (r.close / highMax) - stockOffset
         r.volume = (r.volume / volumeMax) - stockOffset
+    return data
+
+def denormalizeStockData(data, highMax, volumeMax):
+    for r in data:
+        r.open = (r.open +stockOffset)* highMax
+        r.high = (r.high +stockOffset)* highMax
+        r.low = (r.low +stockOffset)* highMax
+        r.close = (r.close +stockOffset)* highMax
+        r.volume = (r.volume +stockOffset)* volumeMax
     return data
 
 def normalizeFinancials(data, generalMax):
@@ -174,7 +183,6 @@ def _inputVector_old(dataSet, vixRef, googleInterests, listingDate, sector, getS
             # v_vix_open + v_vix_high + v_vix_low + v_vix_close +
             # v_googleinterest
         )
-
 
 def getInstancesByClass(instances):
     pclass = []

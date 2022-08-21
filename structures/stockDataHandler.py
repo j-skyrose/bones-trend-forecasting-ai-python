@@ -8,7 +8,7 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 import copy
-from utils.other import normalizeStockData
+from utils.other import normalizeStockData, denormalizeStockData
 
 '''
 maintains the time series data from the DB, in normalized and raw forms
@@ -32,8 +32,11 @@ class StockDataHandler:
         self.precedingRange = precedingRange
         self.followingRange = followingRange
 
-        if highMax and volumeMax:
-            self.normalize(highMax, volumeMax)
+        self.highMax = highMax
+        self.volumeMax=volumeMax
+
+        if self.highMax and self.volumeMax:
+            self.normalize()
         if precedingRange and followingRange:
             self.determineSelections(precedingRange, followingRange)
 
@@ -41,15 +44,22 @@ class StockDataHandler:
         self.selections = [x for x in range(len(self.data)) if precedingRange <= x and x < len(self.data) - followingRange]
         return self.selections
 
-    def normalize(self, highMax, volumeMax):
+    def normalize(self):
         if not self.normalized:
-            self.data = normalizeStockData(self.data, highMax, volumeMax)
+            self.data = normalizeStockData(self.data, self.highMax, self.volumeMax)
             self.normalized = True
+    
+    def denormalize(self):
+        if self.normalized:
+            self.data = denormalizeStockData(self.data, self.highMax, self.volumeMax)
+            self.normalized = False
 
     def setData(self, data, highMax=None, volumeMax=None, precedingRange=None, followingRange=None):
         self.data = data
-        if highMax and volumeMax:
-            self.normalize(highMax, volumeMax)
+        self.highMax = highMax
+        self.volumeMax=volumeMax
+        if self.highMax and self.volumeMax:
+            self.normalize()
         else:
             self.normalizedData = None
         if precedingRange and followingRange:

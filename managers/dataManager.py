@@ -23,6 +23,7 @@ from constants.values import unusableSymbols
 from managers.stockDataManager import StockDataManager
 from managers.databaseManager import DatabaseManager
 from managers.vixManager import VIXManager
+from managers.neuralNetworkManager import NeuralNetworkManager
 from managers.inputVectorFactory import InputVectorFactory
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.financialDataHandler import FinancialDataHandler
@@ -62,6 +63,8 @@ class DataManager():
     inputVectorFactory = None
     setsSlidingWindowPercentage = 0
     useAllSets = False
+    shouldNormalize = False
+    normalized = False
 
     def __init__(self,
         precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, threshold=0,
@@ -70,6 +73,7 @@ class DataManager():
         analysis=False, statsOnly=False, initializeStockDataHandlersOnly=False, useOptimizedSplitMethodForAllSets=True,
         anchorDate=None, forPredictor=False,
         minDate=None,
+        normalize=False,
         **kwargs
         # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
         # neuralNetwork: NeuralNetworkInstance=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[]
@@ -90,6 +94,7 @@ class DataManager():
         self.useAllSets = useAllSets
         self.useOptimizedSplitMethodForAllSets = useOptimizedSplitMethodForAllSets
         self.initializedWindow = None
+        self.shouldNormalize = normalize
 
         ## purge invalid tickers
         for s in symbolList:
@@ -111,6 +116,7 @@ class DataManager():
 
             startt2 = time.time()
             self.initializeStockDataHandlers(symbolList)
+
             print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
 
             if not initializeStockDataHandlersOnly:
@@ -340,6 +346,8 @@ class DataManager():
                 if len(data) >= self.precedingRange + self.followingRange + 1:
                     self.stockDataHandlers[(s.exchange, s.symbol)] = StockDataHandler(*sdhArg(s, data))
 
+        if self.shouldNormalize: self.normalize()
+
     def initializeStockDataInstances(self, stockDataHandlers: List[StockDataHandler]=None, collectOutputClassesOnly=False, verbose=1):
         if not stockDataHandlers:
             stockDataHandlers = self.stockDataHandlers.values()
@@ -493,6 +501,7 @@ class DataManager():
     def initializeWindow(self, windowIndex):
         self.stockDataInstances.clear()
         self.stockDataHandlers.clear()
+        self.normalized = False
         self.initializeStockDataHandlers(self.windows[windowIndex])
         self.initializeStockDataInstances()
         self.setupSets(selectAll=True)
@@ -737,6 +746,20 @@ class DataManager():
             print('Total vector build time', self.actualbuildtime)
 
         return [trainingData, validationData, testingData]
+
+    def normalize(self):
+        if not self.normalized:
+            h: StockDataHandler
+            for h in self.stockDataHandlers.values():
+                h.normalize()
+            self.normalized=True
+
+    def denormalize(self):
+        if self.normalized:
+            h: StockDataHandler
+            for h in self.stockDataHandlers.values():
+                h.denormalize()
+            self.normalized=False
 
     def save(self, networkId, setId=None):
         dbm.saveDataSet(networkId, self.trainingSet, self.validationSet, self.testingSet, setId)
