@@ -20,9 +20,9 @@ from structures.api.googleTrends.request import GoogleAPI
 from globalConfig import config as gconfig
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from managers.marketDayManager import MarketDayManager
-from constants.enums import AccuracyAnalysisTypes, CorrBool, FinancialReportType, OperatorDict, PrecedingRangeType, SeriesType, AccuracyType, SetType
+from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FinancialReportType, OperatorDict, PrecedingRangeType, SQLHelpers, SeriesType, AccuracyType, SetType, SortDirection
 from utils.support import asDate, asISOFormat, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, unixToDatetime
-from constants.values import unusableSymbols, apiList
+from constants.values import unusableSymbols, apiList, standardExchanges
 
 def addLastUpdatesRowsForAllSymbols(dbc):
     symbolPairs = dbc.execute("SELECT exchange, symbol FROM symbols").fetchall()
@@ -275,25 +275,28 @@ class DatabaseManager(Singleton):
         return self.__purgeUnusableTickers(self.dbc.execute(stmt, tuple(args)).fetchall(), **kwargs)
 
     ## used by collector to determine which stocks are more in need of new/updated data
-    def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, type=None, api=None):
+    def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, stype=None, api=None, apiSortDirection:SortDirection=SortDirection.DESCENDING, apiFilter:Union[APIState, List[APIState]]=APIState.WORKING, exchanges=standardExchanges):
         stmt = 'SELECT s.*, u.api, u.date FROM last_updates u join symbols s on u.exchange=s.exchange and u.symbol=s.symbol'
         args = []
         adds = []
-        if exchange or symbol or type:
+        if exchange or symbol or stype:
             stmt += ' WHERE '
-            adds.append('(' + ' OR '.join(['api_'+a+'=1' for a in apiList]) + ')')
+            adds.append('(' + ' OR '.join(['api_{}={}'.format(a, st.value) for a in ([api] if api else apiList) for st in (apiFilter if type(apiFilter) is list else [apiFilter])]) + ')')
             if exchange:
                 adds.append('u.exchange = ?')
                 args.append(exchange)
+            elif exchanges:
+                adds.append('(' + ' OR '.join(['u.exchange=?' for a in exchanges]) + ')')
+                args.extend(exchanges)
             if symbol:
                 adds.append('u.symbol = ?')
                 args.append(symbol)
-            if type:
+            if stype:
                 adds.append('type = ?')
-                args.append(type.function.replace('TIME_SERIES_',''))
+                args.append(stype.function.replace('TIME_SERIES_',''))
             stmt += ' AND '.join(adds)
 
-        stmt += ' ORDER BY ' + (('api_' + api + ' DESC, ') if api else '') + 'api_polygon ASC, date ASC'
+        stmt += ' ORDER BY ' + (('api_{} {}, '.format(api, apiSortDirection.value)) if api else '') + 'api_polygon ASC, date ASC'
 
 
         return self.dbc.execute(stmt, tuple(args))

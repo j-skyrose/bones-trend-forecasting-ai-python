@@ -25,6 +25,15 @@ class SeriesType(Enum):
     MONTHLY_ADJUSTED =  'TIME_SERIES_MONTHLY_ADJUSTED', 'Monthly Time Series'
     MINUTE =            'TIME_SERIES_MINUTE', '' ## polygon only
 
+class APIState(Enum):
+    INVALID = -1
+    UNKNOWN = 0
+    WORKING = 1
+
+class SortDirection(Enum):
+    ASCENDING = 'ASC'
+    DESCENDING = 'DESC'
+
 class AccuracyType(Enum):
     def __init__(self, a, b):
         self.statsName = b
@@ -113,7 +122,10 @@ class PrecedingRangeType(Enum):
     INCREASINGWITHWORSELOW = 'INCREASINGWITHWORSELOW'
     DECREASINGWITHWORSELOW = 'DECREASINGWITHWORSELOW'
     INCREASINGWITHBETTERHIGHANDWORSELOW = 'INCREASINGWITHBETTERHIGHANDWORSELOW'
-    DECREASINGWITHBETTERHIGHANDWORSELOW = 'DECREASINGWITHBETTERHIGHANDWORSELOW'    
+    DECREASINGWITHBETTERHIGHANDWORSELOW = 'DECREASINGWITHBETTERHIGHANDWORSELOW'
+
+class SQLHelpers(Enum):
+    UNKNOWN = 'UNKNOWN'
 
 class OperatorDict(Enum):
     def __init__(self, a, b, c=None):

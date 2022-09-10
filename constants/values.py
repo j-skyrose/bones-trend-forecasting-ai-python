@@ -3,6 +3,9 @@ interestColumn = 'interest'
 
 
 apiList = ['polygon', 'fmp', 'alphavantage']
+standardExchanges = ['BATS','NASDAQ','NYSE','NYSE ARCA','NYSE MKT', 'TSX', 
+# 'LSE'
+]
 
 ## symbols that are for testing, too high to be usable, or contain weird extreme data spikes
 testingSymbols = [('NASDAQ', 'ZAZZT'),('NASDAQ', 'ZBZZT'),('NASDAQ', 'ZCZZT'),('NASDAQ', 'ZJZZT'),('NASDAQ', 'ZWZZT'),('NASDAQ', 'ZXZZT'),('NYSE','NTEST.G'),('BATS','ZTEST')]
@@ -21,3 +24,16 @@ foundedSynonyms = ['inception', 'founded', 'formed', 'incorporated']
 ## normalization
 stockOffset = 0
 vixOffset = 0
+
+
+## No Commission Scotia stocks
+tseEquity = ['XSP','VFV','ESG','HXS','XQQ','QQC.F','XIU','HXT','XIC','SITC','SITI','SITU','VEF','XEU','EAAI','EAGB','EARK','EAUT','HBGD','CDZ','DXC','CUD','DXU','CYH','DXR','QQCC','SRIC','SRIU','MWMN','DXET','SRII','CEW','VRE','XIT','XMA','XST','XUT','XHC','CGR','COW','CWW','DXF','DXN','CPD','DXP','CJP','CWO','DXEM','XEC','XCH','XID','XCS']
+batsEquity = ['OMFL','OMFS','IEFA','FINX','HERO','PRNT','PSI','WCLD','HLAL','MILN','NACP','PAWZ','IXC','IXP','IAT','VCR','VDC','VDE','VIS','MRGR','FLQM','HSCZ','SIZE','VLUE']
+tseBalanced = ['XGRO','FIE','XBAL','VCNS','XCNS','XINC']
+batsBalanced = ['AOA','AOM']
+tseFixedIncome = ['CHB','CSD','DXO','CBO','DXV','VCB','XCB','SRIB','CLF','HBB','SITB','XQB']
+batsFixedIncome = ['TLT']
+tseCommodity = ['CGL','CGL.C','HUC','HUN','HUZ','SVR']
+tseNoCommissionSymbols = tseEquity + tseBalanced + tseFixedIncome + tseCommodity
+batsNoCommissionSymbols = batsEquity + batsBalanced + batsFixedIncome
+noCommissionSymbols = tseNoCommissionSymbols + batsNoCommissionSymbols

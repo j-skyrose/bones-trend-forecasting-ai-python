@@ -1,4 +1,3 @@
-from constants.enums import FinancialReportType, FinancialStatementType
 import os, sys
 path = os.path.dirname(os.path.abspath(__file__))
 while ".vscode" not in os.listdir(path):
@@ -8,11 +7,10 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import requests
-# from requests.json.decoder import JSONDecodeError
-import json
-
+import requests, json
 from requests.models import Response
+
+from constants.enums import FinancialReportType, FinancialStatementType
 from constants.exceptions import APIError, APITimeout
 
 class Alphavantage:
@@ -20,8 +18,13 @@ class Alphavantage:
         self.url = url
         self.apiKey = key
 
-    def __formatSymbol(self, symbol):
-        return symbol.replace('.','-')
+    def __buildExchangeSnippet(self, exchange):
+        if not exchange or exchange in ['NYSE ARCA', 'NASDAQ', 'NYSE MKT', 'BATS']:
+            return ''
+        return exchange + ':'
+
+    def __formatSymbol(self, exchange, symbol):
+        return self.__buildExchangeSnippet(exchange) + symbol.replace('.','-')
 
     def __responseHandler(self, resp: Response):
         try:
@@ -87,13 +90,13 @@ class Alphavantage:
         )
 
 
-    def query(self, type, symbol):
+    def query(self, type, symbol, exchange):
         rjson = self.__responseHandler(
             requests.get(self.url, params={
                 'apikey': self.apiKey,
                 'function': type.function,
                 'outputsize': 'full',
-                'symbol': self.__formatSymbol(symbol)
+                'symbol': self.__formatSymbol(exchange, symbol)
             })
         )
         data = rjson[type.description]

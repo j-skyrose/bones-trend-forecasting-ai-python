@@ -7,20 +7,22 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import tqdm, queue, atexit, traceback, math, requests, csv, codecs, optparse
+import tqdm, queue, atexit, traceback, math, requests, csv, codecs, optparse, json
 import time as timer
 from datetime import date, datetime, timedelta
 from threading import Thread
 from contextlib import closing
+from typing import List
+from sqlite3 import IntegrityError
 
 from managers.databaseManager import DatabaseManager
 from managers.apiManager import APIManager
 from managers.marketDayManager import MarketDayManager
 
 from constants.exceptions import APILimitReached, APIError
-from utils.support import recdotdict
-from constants.enums import FinancialReportType, FinancialStatementType, SeriesType, TimespanType
-import json
+from utils.support import recdotdict, shortcdict
+from constants.enums import APIState, FinancialReportType, FinancialStatementType, SeriesType, SortDirection, TimespanType
+from constants.values import tseNoCommissionSymbols
 
 dbm: DatabaseManager = DatabaseManager()
 
@@ -36,55 +38,34 @@ class Collector:
         self.apiManager.saveConfig()
         print('collector shutting down')
 
-    def __singleSymbolCollect(self, api, symbols, type):
-        # for s in symbols:
-        #     print(s.exchange, s.symbol)
-        # return
-        localDBM: DatabaseManager = DatabaseManager()
+    def __updateSymbolsAPIField(self, api, exchange, symbol, val):
+        dbm.dbc.execute('UPDATE symbols SET api_'+api+'=? WHERE exchange=? AND symbol=?',(val, exchange, symbol))
+
+    def __loopCollectBySymbol(self, api, symbols, type):
         counter = 0
         try:
             for sp in symbols:
                 try:
-                    # self.returnQueue.put((api, sp.exchange, sp.symbol, type, self.apiManager.query(api, sp.symbol, type)))
-                    localDBM.insertData(sp.exchange, sp.symbol, type.name, api, self.apiManager.query(api, sp.symbol, type))
-                    localDBM.commit()
+                    dbm.insertData(sp.exchange, sp.symbol, type.name, api, self.apiManager.query(api, sp.symbol, type, exchange=sp.exchange))
+                    self.__updateSymbolsAPIField(api, sp.exchange, sp.symbol, 1)
+                    dbm.commit()
                     counter += 1
                 except APIError:
                     print('api error',sys.exc_info()[0])
                     print(traceback.format_exc())
                     self.apiErrors.append((sp.exchange, sp.symbol))
-                    # try:
-                    #     dbm.dbc.execute('UPDATE symbols SET api_?=-1 WHERE exchange=? AND symbol=?',(api, sp.exchange, sp.symbol))
-                    # except:
-                    #   sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 64284 and this is thread id 34320.
-                    #     print('update api error',sys.exc_info()[0])
-                    #     print(traceback.format_exc())
+                    try:
+                        self.__updateSymbolsAPIField(api, sp.exchange, sp.symbol, -1)
+                    except:
+                        print('API update error', sp.exchange, sp.symbol)
 
-                # print ('mocking sp', sp)
-                # self.returnQueue.put((api, sp.exchange, sp.symbol, recdotdict({
-                #     '2020-01-01': {
-                #         'open': "5.22",
-                #         'high': "5.21",
-                #         'low': "5.12",
-                #         'close': "5.24",
-                #         'volume': "4.22"
-                #     },
-                #     '2020-01-05': {
-                #         'open': "5.22",
-                #         'high': "5.21",
-                #         'low': "5.12",
-                #         'close': "5.24",
-                #         'volume': "4.22"
-                #     }
-                # })))
         except APILimitReached:
             print('api limit reached for',api)
             pass
 
         print('Updated', api, 'data for', counter, '/', len(symbols), 'symbols')
-        localDBM.close()
 
-    def __singleDateBatchCollect(self, api):
+    def __loopCollectByDate(self, api):
         localDBM = DatabaseManager()
         batchByDate = {}
         startingPastDaysCount = self.apiManager.apis[api].priority * 365
@@ -199,10 +180,10 @@ class Collector:
     def _collectFromAPI(self, api, symbols=None, type=None):
         if type:
             print(api,'collector started',len(symbols))
-            if api == 'alphavantage': self.__singleSymbolCollect(api, symbols, type)
+            if api == 'alphavantage': self.__loopCollectBySymbol(api, symbols, type)
         else:
             print(api,'collector started')
-            if api == 'polygon': self.__singleDateBatchCollect(api)
+            if api == 'polygon': self.__loopCollectByDate(api)
 
         self.activeThreads -= 1
         print(api,'collector complete','\nThreads remaining',self.activeThreads)
@@ -228,11 +209,11 @@ class Collector:
 
                     self.__mixedSymbolDateTimespanCollect(api, tickerlist)
                 else:
-                    self.__singleDateBatchCollect(api)
+                    self.__loopCollectByDate(api)
                 
             else:
                 ## gather symbols for this collection run
-                lastUpdatedList = dbm.getLastUpdatedCollectorInfo(type=stype, api=api).fetchall()
+                lastUpdatedList = dbm.getLastUpdatedCollectorInfo(stype=stype, api=api).fetchall()
                 if DEBUG: print('lastUpdatedList length',len(lastUpdatedList))
                 symbols = []
                 for r in lastUpdatedList:
@@ -254,12 +235,50 @@ class Collector:
                     if len(symbols) == self.apiManager.apis[api]['remaining']: break
 
                 print('symbol list size', len(symbols))
-                self.__singleSymbolCollect(api, symbols, stype)
+                self.__loopCollectBySymbol(api, symbols, stype)
 
 
         except (KeyboardInterrupt, APIError):
             print('keyboard interrupt')
             if api != 'polygon': self.close()
+
+        print('API Errors:',self.apiErrors)
+
+    def startAPICollection_exploratoryAlphavantageAPIUpdates(self):
+        api = 'alphavantage'
+        stype=SeriesType.DAILY
+        tsePrioritySymbols = tseNoCommissionSymbols
+    
+        try:
+            ## gather symbols for this collection run
+            lastUpdatedList: List = dbm.getLastUpdatedCollectorInfo(stype=stype, api=api, apiSortDirection=SortDirection.ASCENDING, apiFilter=[APIState.UNKNOWN, APIState.WORKING], exchanges=['TSX']).fetchall()
+            if DEBUG: print('lastUpdatedList length',len(lastUpdatedList))
+
+            priorityRows = []
+            for idx, r in enumerate(lastUpdatedList):
+                if r.exchange == 'TSX' and r.symbol in tsePrioritySymbols:
+                    priorityRows.append(lastUpdatedList.pop(idx))
+            apiRows = []
+            for idx, r in enumerate(lastUpdatedList):
+                if r.api_alphavantage == 0:
+                    apiRows.append(lastUpdatedList.pop(idx))
+            lastUpdatedList = priorityRows + apiRows + lastUpdatedList
+
+            ## filter out any symbols already updated today
+            symbols = []
+            for r in lastUpdatedList:
+                if date.fromisoformat(r.date) == date.today():
+                    continue
+
+                symbols.append(r)
+                if len(symbols) == self.apiManager.apis[api]['remaining']: break
+                # if len(symbols) > 500: break
+
+            print('symbol list size', len(symbols))
+            self.__loopCollectBySymbol(api, symbols, stype)
+
+        except (KeyboardInterrupt, APIError):
+            print('keyboard interrupt')
 
         print('API Errors:',self.apiErrors)
 
@@ -272,7 +291,7 @@ class Collector:
             nonTypeAPIs = []
 
             ## sort symbols into buckets for each API based on priority
-            lastUpdatedList = dbm.getLastUpdatedCollectorInfo(type=type).fetchall()
+            lastUpdatedList = dbm.getLastUpdatedCollectorInfo(stype=type).fetchall()
             if DEBUG: print('lastUpdatedList length',len(lastUpdatedList))
             buckets = []
             for a in range(len(typeAPIs)):
@@ -339,7 +358,7 @@ class Collector:
             # apis = ['polygon']
 
             ## sort symbols into buckets for each API based on priority
-            lastUpdatedList = dbm.getLastUpdatedCollectorInfo(type=type).fetchall()
+            lastUpdatedList = dbm.getLastUpdatedCollectorInfo(stype=type).fetchall()
             if DEBUG: print('lastUpdatedList length',len(lastUpdatedList))
             buckets = []
             for a in range(len(apis)):
@@ -611,7 +630,8 @@ if __name__ == '__main__':
             # dbm.staging_condenseSector()
             # dbm.symbols_pullStagedFounded()
             # dbm.symbols_pullStagedSector()
-            c.startAPICollection('polygon', SeriesType.MINUTE)
+            # c.startAPICollection('polygon', SeriesType.MINUTE)
+            c.startAPICollection_exploratoryAlphavantageAPIUpdates()
             pass
         except KeyboardInterrupt:
             # dbm.staging_condenseFounded()

@@ -108,10 +108,10 @@ class APIManager(Singleton):
 
         return recdotobj(self.__executeAPIRequest(apiHandle, lambda: requestFunc(apiHandle), verbose))
 
-    def query(self, api, symbol=None, stype=None, qdate=None, verbose=0):
+    def query(self, api, symbol=None, stype=None, qdate=None, exchange=None, verbose=0):
         return self._executeRequestWrapper(
             api,
-            (lambda apih: apih.api.query(stype, symbol)) if not qdate else (lambda apih: apih.api.query(qdate, verbose)),
+            (lambda apih: apih.api.query(stype, symbol, exchange)) if not qdate else (lambda apih: apih.api.query(qdate, verbose)),
             stype,
             qdate,
             verbose
