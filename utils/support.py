@@ -305,7 +305,6 @@ def _getFromListWithCustomMatchFunction(iterable, matchFunction, returnType: Ret
             elif returnType == ReturnType.VALUE: return val
 
 
-
 if __name__ == '__main__':
     # print(processRawValueToInsertValue(44))
     # print(processRawValueToInsertValue('dave'))

@@ -307,7 +307,7 @@ class Predictor(Singleton):
 
 
             print(pc_exceptions, '/', len(tickers), 'had exceptions')
-            print(pc, '/', len(tickers) - pc_exceptions, 'predicted to exceed threshold from', dt.isoformat(), 'to', (dt + timedelta(days=nn.stats.precedingRange)).isoformat())
+            print(len(weightedAccuracies), '/', len(tickers) - pc_exceptions, 'predicted to exceed threshold from', dt.isoformat(), 'to', (dt + timedelta(days=nn.stats.followingRange)).isoformat()) ## todo: to should be market days
 
         ## todo, show final date
 

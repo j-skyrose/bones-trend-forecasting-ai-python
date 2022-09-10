@@ -74,7 +74,7 @@ class TrainingInstance():
     def train(self, epochs=None, minEpochs=5, validationType: AccuracyType=AccuracyType.OVERALL, patience=None, stopTime=None, timeDuration=None, verbose=1, **kwargs):
         pos = self.validationDataHandler[AccuracyType.POSITIVE][0]
         neg = self.validationDataHandler[AccuracyType.NEGATIVE][0]
-        print('split:', len(pos[0] if gconfig.network.recurrent else pos), ':', len(neg[0] if gconfig.network.recurrent else pos))
+        if verbose > 0: print('split:', len(pos[0] if gconfig.network.recurrent else pos), ':', len(neg[0] if gconfig.network.recurrent else pos))
 
         try:
             validation_data = self.validationDataHandler.getTuple(validationType) if validationType else None
@@ -101,7 +101,7 @@ class TrainingInstance():
                     verbose=verbose, patience=patience, restore_best_weights=True
                 ))
 
-            if stopTime: 
+            if stopTime and verbose > 0: 
                 print('Stopping at', stopTime)
                 print('Current time', time.time())
 
@@ -115,7 +115,7 @@ class TrainingInstance():
             )
             
             ## update stats
-            self.evaluate(verbose)
+            return self.evaluate(verbose)
             
             pass
         except KeyboardInterrupt:

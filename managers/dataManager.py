@@ -11,7 +11,7 @@ import random, math, numpy, tqdm, time, pickle, gc
 from tensorflow import keras
 from timeit import default_timer as timer
 from datetime import date
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from tqdm.contrib.concurrent import process_map
 from functools import partial
 
@@ -52,7 +52,7 @@ class DataManager():
     # stockDataManager: StockDataManager = None
     stockDataHandlers = {}
     vixDataHandler = VIXManager().data
-    financialDataHandlers: Dict[tuple, FinancialDataHandler] = {}
+    financialDataHandlers: Dict[Tuple[str, str], FinancialDataHandler] = {}
     stockSplitsHandlers: Dict[Tuple[str, str], StockSplitsHandler] = {}
     stockDataInstances = {}
     selectedInstances = []
@@ -140,6 +140,7 @@ class DataManager():
 
         print('DataManager init complete. Took', time.time() - startt, 'seconds')
 
+    ## TODO: optimized class methods, forTraining needs to have option of providing a networkid for use in getting the ticker window split
     @classmethod
     def forTraining(cls, seriesType=SeriesType.DAILY, **kwargs):
         print('forTraining starting')
@@ -691,6 +692,11 @@ class DataManager():
                 self.initializeWindow(slice)
             slice = None
 
+        ## lazily ensure slice is not used if not setup for all sets
+        if not self.useAllSets:
+            if shortc(slice,0) > 0: raise IndexError('Not setup to use all sets')
+            else: slice = None
+
         self.getprecstocktime = 0
         self.getprecfintime = 0
         self.actualbuildtime = 0
@@ -763,7 +769,7 @@ class DataManager():
         trainingData = constructDataSet(trainingSet)
         testingData = constructDataSet(testingSet)
 
-        if gconfig.testing.enabled:
+        if gconfig.testing.enabled and verbose > 0.5:
             print('Stock data handler build time', self.getprecstocktime)
             print('Financial reports build time', self.getprecfintime)
             print('Total vector build time', self.actualbuildtime)

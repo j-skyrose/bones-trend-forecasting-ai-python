@@ -32,16 +32,20 @@ except NameError: useGPU = False
 try: useMainGPU
 except NameError: useMainGPU = False
 
-
-if TESTING and SEED_RANDOM:
-    useGPU = False
-    os.environ['PYTHONHASHSEED'] = str(SEED_RANDOM)
-
+def resetSeeds():
     import numpy, tensorflow, random
     numpy.random.seed(SEED_RANDOM)
     random.seed(SEED_RANDOM)
     tensorflow.random.set_seed(SEED_RANDOM)
 
+if TESTING and SEED_RANDOM:
+    useGPU = False ## gpu operations are not guarenteed to be deterministic, even with identical seeds
+
+    # os.environ['PYTHONHASHSEED'] = str(SEED_RANDOM)
+    # does not work, variable must be set before python runs > PYTHONHASHSEED=0 python3 myPython.py
+    # currently explicitly set in Windows environment variables to 420
+    
+    resetSeeds()
 
 trainingConfig = {
     ## master

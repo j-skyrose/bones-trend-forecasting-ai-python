@@ -21,7 +21,7 @@ from structures.networkStats import NetworkStats
 from structures.EvaluationResultsObj import EvaluationResultsObj
 from constants.exceptions import LocationNotSpecificed
 from constants.enums import AccuracyType, DataFormType, LossAccuracy, SeriesType
-from utils.support import recdotdict, shortc
+from utils.support import recdotdict, shortc, shortcdict
 from utils.other import maxQuarters
 from managers.inputVectorFactory import InputVectorFactory
 from structures.EvaluationDataHandler import EvaluationDataHandler
@@ -47,10 +47,10 @@ os.environ["TF_MIN_GPU_MULTIPROCESSOR_COUNT"]= "8" if gconfig.useMainGPU else "5
 # tf.test.gpu_device_name()
 # sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 
-## allow keras to use more of the GPU memory, to avoid OOM crashes
-gpu_options = tf.compat.v1.GPUOptions(allow_growth=True)
-sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))
-tf.compat.v1.keras.backend.set_session(sess)
+## allow keras to use more of the GPU memory, to avoid OOM crashes in theory
+# gpu_options = tf.compat.v1.GPUOptions(allow_growth=True)
+# sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))
+# tf.compat.v1.keras.backend.set_session(sess)
 
 
 class NeuralNetworkInstance:
@@ -84,8 +84,13 @@ class NeuralNetworkInstance:
     @classmethod
     def new(
         cls, id, optimizer, layers, inputSize,
-        threshold=0, precedingRange=1, followingRange=1, seriesType=SeriesType.DAILY, highMax=0, volumeMax=0, accuracyType=AccuracyType.OVERALL, useAllSets=False
+        threshold=0, precedingRange=1, followingRange=1, seriesType=SeriesType.DAILY, highMax=0, volumeMax=0, accuracyType=AccuracyType.OVERALL, useAllSets=False,
+        activation='selu',
+        verbose=1
     ):
+
+        def _getActivationString(layer):
+            return shortcdict(layer, 'activation', activation)
 
         if gconfig.network.recurrent:
             static_features, semiseries_features, series_features = InputVectorFactory().getInputSize()
@@ -95,28 +100,40 @@ class NeuralNetworkInstance:
             semiseries_input = Input(shape=(maxQuarters(precedingRange), semiseries_features)) 
             series_input = Input(shape=(precedingRange, series_features))
 
-            print('series input', series_input)
+            if verbose > 0: 
+                print('static_features',static_features)
+                print('static_input',static_input)
+                print('semiseries_features',semiseries_features)
+                print('semiseries_input',semiseries_features)
+                print('series_features',series_features)
+                print('series_input',series_input)
 
             static_x = Dense(
                     int(layers[0][0]['units']),
                     # activation=layers[0]['activation'],
-                    activation='selu',
+                    # activation='selu',
+                    activation=_getActivationString(layers[0][0]),
                     # input_dim=inputSize,
                     kernel_initializer='lecun_normal'
             )(static_input)
             semiseries_x = GRU(
                 int(layers[1][0]['units']),
                 # activation='selu',
-                kernel_initializer='lecun_normal'
+                kernel_initializer='lecun_normal',
+                return_sequences=len(layers[2]) > 1
             )(semiseries_input)
-            semiseries_x = Activation('selu')(semiseries_x)
+            semiseries_x = Activation(_getActivationString(layers[1][0]))(semiseries_x)
             series_x = GRU(
                 int(layers[2][0]['units']),
                 # input_shape=inputSize,  ## (time_steps, features) ...i.e. (days, datapoints per day)
                 # activation='selu',
+                kernel_initializer='lecun_normal',
+                return_sequences=len(layers[2]) > 1
+            )(series_input)
+            series_x = Activation(_getActivationString(layers[2][0]))(series_x)
                 kernel_initializer='lecun_normal'
             )(series_input)
-            series_x = Activation('selu')(series_x)
+            series_x = Activation(_getActivationString(l))(series_x)
 
             x_combined = Concatenate()([
                 static_x, 
@@ -145,13 +162,13 @@ class NeuralNetworkInstance:
             model = Sequential()
             model.add(Dense(int(layers[0]['units']),
                     # activation=layers[0]['activation'],
-                    activation='selu',
+                    activation=_getActivationString(layers[0]),
                     input_dim=inputSize,
                     kernel_initializer='lecun_normal'))
             for l in layers[1:]:
                 model.add(Dense(int(l['units']),
                                 # activation=l['activation']),
-                                activation='selu',
+                                activation=_getActivationString(l),
                                 kernel_initializer='lecun_normal'))
                 if l['dropout']:
                     # model.add(Dropout(l['dropoutRate']))
@@ -169,8 +186,9 @@ class NeuralNetworkInstance:
                     optimizer=optimizer, ## Adam(amsgrad=True)
                     metrics=['accuracy'])
 
-        print('Input size:', inputSize)
-        model.summary()
+        if verbose > 0: 
+            print('Input size:', inputSize)
+            model.summary()
 
         ## initialize stats
         stats = NetworkStats(id, threshold, precedingRange, followingRange, seriesType, accuracyType)
@@ -272,15 +290,15 @@ class NeuralNetworkInstance:
             # self.stats.epochs += kwargs['epochs']
             self.stats.epochs += len(hist.epoch)
     
-    def evaluate(self, evaluationDataHandler: EvaluationDataHandler, reEvaluate=False, **kwargs) -> EvaluationResultsObj:
+    def evaluate(self, evaluationDataHandler: EvaluationDataHandler, reEvaluate=False, verbose=1, **kwargs) -> EvaluationResultsObj:
         firstreevaluate = False
         if not self.model: raise BufferError('Model not loaded')
         if reEvaluate and not self.reEvaluating:
             firstreevaluate = True
             self.reEvaluating = True
-        print('{}valuating...'.format('Re-e' if self.reEvaluating else 'E'))
+        if verbose > 0: print('{}valuating... (overall > positive > negative)'.format('Re-e' if self.reEvaluating else 'E'))
         
-        results = evaluationDataHandler.evaluateAll(self.model, **kwargs)
+        results = evaluationDataHandler.evaluateAll(self.model, verbose=verbose, **kwargs)
 
         if evaluationDataHandler.accuracyTypesCount() == 3:
 
@@ -299,7 +317,7 @@ class NeuralNetworkInstance:
                     self.useAllSetsAccumulator[actype].append(results[actype][LossAccuracy.ACCURACY])
                     self.stats.__setattr__(actype.statsName, sum(self.useAllSetsAccumulator[actype]) / iterationCount)
 
-                print('Iterations:', iterationCount)
+                if verbose > 0: print('Iterations:', iterationCount)
                 
 
             elif results[self.stats.accuracyType][LossAccuracy.ACCURACY] > self.stats[self.stats.accuracyType.statsName]:
@@ -308,7 +326,7 @@ class NeuralNetworkInstance:
                 self.stats.negativeAccuracy = results[AccuracyType.NEGATIVE][LossAccuracy.ACCURACY]
 
 
-            if not self.reEvaluating: self.printAccuracyStats()
+            if not self.reEvaluating and verbose > 0: self.printAccuracyStats()
         
         self.updated = True
 

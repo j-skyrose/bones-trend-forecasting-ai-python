@@ -180,8 +180,9 @@ class DatabaseManager(Singleton):
                 adds.append('exchange = ?')
                 args.append(exchange)
             if symbol:
-                adds.append('symbol = ?')
-                args.append(symbol)
+                symList = asList(symbol)
+                adds.append(' symbol IN ({}) '.format(','.join(['?' for s in symList])))
+                args.extend(symList)
             if assetType:
                 adds.append('asset_type = ?')
                 args.append(assetType)

@@ -6,6 +6,7 @@ while ".vscode" not in os.listdir(path):
     path = os.path.dirname(path)
 sys.path.append(path)
 ## done boilerplate "package"
+
 from globalConfig import config as gconfig
 
 import tqdm, math, gc, time

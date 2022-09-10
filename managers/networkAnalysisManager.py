@@ -42,11 +42,11 @@ def breakdownWeightsByInputSection(nn: NeuralNetworkInstance):
     # print(len(ws[0][0]))
     # print(ws[0][0][0])
 
-    ivs = ivf.getStats()
+    inpVecStats = ivf.getStats()
 
     wstats = {}
     offset = 0
-    for k in tqdm.tqdm(ivs.keys(), desc='Gathering stats'):
+    for k in tqdm.tqdm(inpVecStats.keys(), desc='Gathering stats'):
         r = wstats[k] = {
             'vals': []
             # 'sum': 0,
@@ -56,7 +56,7 @@ def breakdownWeightsByInputSection(nn: NeuralNetworkInstance):
             # 'sumNegative': 0,
         }
 
-        newend = ivs[k] * precRange
+        newend = inpVecStats[k] * precRange
         for l in tqdm.tqdm(range(offset, newend + offset), leave=False):
             for v in ws[0][l]:
                 r['vals'].append(v)
