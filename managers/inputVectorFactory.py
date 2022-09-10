@@ -12,7 +12,7 @@ from calendar import monthrange
 from datetime import date, datetime, timedelta
 
 from globalConfig import config as gconfig
-from constants.enums import DataFormType, InputVectorDataType
+from constants.enums import DataFormType, FeatureExtraType, InputVectorDataType
 from constants.values import interestColumn
 from utils.support import Singleton, flatten, recdotdict, _isoformatd, shortc, _edgarformatd
 from utils.other import maxQuarters
@@ -67,21 +67,22 @@ class InputVectorFactory(Singleton):
     def build(self, stockDataSet, vixData, financialDataSet, googleInterests, foundedDate, ipoDate, sector, exchange, getSplitStat=False):
         global loggedonce
         if gconfig.network.recurrent:
-            ivs = {e: {} for e in InputVectorDataType}
+            inpVecStats = {e: {} for e in InputVectorDataType}
         else:
-            ivs = {}
+            inpVecStats = {}
         # spcl = speclog()
 
         retarr = []
         seriesarr = []
         semiseriesarr = []
         staticarr = []
+        ## loop thru all feature keys recursively and incrementally add them to the end of the vector
         for kprime, vprime in self.config.feature.items():
             for k,v in vprime.items() if 'enabled' not in vprime.keys() else [(kprime, vprime)]:
                 if not v['enabled']: continue
-                extype = v['extype']
-                vlist = []
-                fk = k
+                extraType = v['extraType']
+                vectorAsList = []
+                compositeKey = k ## concat kprime with k for features that consist of multiple sub-features
 
                 logstuff = False
                 # if k in [
@@ -96,92 +97,92 @@ class InputVectorFactory(Singleton):
                 #     'ipoAge'
                 # ]: continue
 
-                # if extype in [
+                # if extraType in [
                 #     'key',
                 #     'vixkey',
                 # ]: continue
 
                 ##############################################################################################################################
                 ## daily "instances"
-                if extype == 'key':
-                    vlisttype = InputVectorDataType.SERIES
+                if extraType == FeatureExtraType.KEY:
+                    vectorListType = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
-                    vlist = [d[k] for d in stockDataSet]
-                    fk = kprime + k
-                    if collectStats: sm.extypekeytime += time.time() - startt
+                    vectorAsList = [d[k] for d in stockDataSet]
+                    compositeKey = kprime + k
+                    if collectStats: sm.extraTypekeytime += time.time() - startt
 
-                elif extype == 'vixkey':
-                    vlisttype = InputVectorDataType.SERIES
+                elif extraType == FeatureExtraType.VIXKEY:
+                    vectorListType = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
-                    vlist = [(vixData[d.date])[k] for d in stockDataSet]
-                    fk = kprime + k
-                    if collectStats: sm.extypevixkeytime += time.time() - startt
+                    vectorAsList = [(vixData[d.date])[k] for d in stockDataSet]
+                    compositeKey = kprime + k
+                    if collectStats: sm.extraTypevixkeytime += time.time() - startt
 
                 elif k == 'dayOfWeek':
-                    vlisttype = InputVectorDataType.SERIES
+                    vectorListType = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
-                    # vlist = [_isoformatd(d).weekday()/6 - 0.5 for d in stockDataSet]
+                    # vectorAsList = [_isoformatd(d).weekday()/6 - 0.5 for d in stockDataSet]
                     # if self.config.dataForm.dayOfWeek in [DataFormType.INTEGER, DataFormType.NATURAL]:
                     #     itemGen = lambda d: _isoformatd(d).weekday()/6 - (0.5 if self.config.dataForm.dayOfWeek == DataFormType.INTEGER else 0)
                     # elif self.config.dataForm.dayOfWeek == DataFormType.VECTOR:
                     #     itemGen = lambda d: self._getCategoricalVector(_isoformatd(d).weekday(), max=5)
-                    # vlist = [itemGen(d) for d in stockDataSet]
+                    # vectorAsList = [itemGen(d) for d in stockDataSet]
 
                     if self.config.dataForm.dayOfMonth in [DataFormType.INTEGER, DataFormType.NATURAL]:
-                        vlist = [_isoformatd(d).weekday()/6 - (0.5 if self.config.dataForm.dayOfWeek == DataFormType.INTEGER else 0) for d in stockDataSet]
+                        vectorAsList = [_isoformatd(d).weekday()/6 - (0.5 if self.config.dataForm.dayOfWeek == DataFormType.INTEGER else 0) for d in stockDataSet]
                     elif self.config.dataForm.dayOfMonth == DataFormType.VECTOR:
-                        vlist = [i for d in stockDataSet for i in self._getCategoricalVector(_isoformatd(d).weekday(), max=5)]
+                        vectorAsList = [i for d in stockDataSet for i in self._getCategoricalVector(_isoformatd(d).weekday(), max=5)]
 
                     if collectStats: sm.ktypedayofweektime += time.time() - startt
 
                 elif k == 'dayOfMonth':
-                    vlisttype = InputVectorDataType.SERIES
+                    vectorListType = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
-                    # # vlist = [(dt.day - 1)/monthrange(dt.year, dt.month)[1] - 0.5 for dt in [_isoformatd(d) for d in stockDataSet]]
+                    # # vectorAsList = [(dt.day - 1)/monthrange(dt.year, dt.month)[1] - 0.5 for dt in [_isoformatd(d) for d in stockDataSet]]
 
                     # ## include bit about how many days are in month? 28, 29, 30, 31
                     # if self.config.dataForm.dayOfMonth in [DataFormType.INTEGER, DataFormType.NATURAL]:
                     #     itemGen = lambda d: (d.day - 1)/monthrange(d.year, d.month)[1] - (0.5 if self.config.dataForm.dayOfMonth == DataFormType.INTEGER else 0)
                     # elif self.config.dataForm.dayOfMonth == DataFormType.VECTOR:
                     #     itemGen = lambda d: self._getCategoricalVector(d.day - 1, max=31)
-                    # vlist = [itemGen(dt) for dt in [_isoformatd(d) for d in stockDataSet]]
+                    # vectorAsList = [itemGen(dt) for dt in [_isoformatd(d) for d in stockDataSet]]
 
                     dts = [_isoformatd(d) for d in stockDataSet]
                     if self.config.dataForm.dayOfMonth in [DataFormType.INTEGER, DataFormType.NATURAL]:
-                        vlist = [(d.day - 1)/monthrange(d.year, d.month)[1] - (0.5 if self.config.dataForm.dayOfMonth == DataFormType.INTEGER else 0) for d in dts]
+                        vectorAsList = [(d.day - 1)/monthrange(d.year, d.month)[1] - (0.5 if self.config.dataForm.dayOfMonth == DataFormType.INTEGER else 0) for d in dts]
                     elif self.config.dataForm.dayOfMonth == DataFormType.VECTOR:
-                        vlist = [i for d in dts for i in self._getCategoricalVector(d.day - 1, max=31)]
+                        vectorAsList = [i for d in dts for i in self._getCategoricalVector(d.day - 1, max=31)]
 
                     if collectStats: sm.ktypedayofmonthtime += time.time() - startt
 
                 elif k == 'monthOfYear':
-                    vlisttype = InputVectorDataType.SERIES
+                    vectorListType = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
-                    # vlist = [(_isoformatd(d).month - 1)/12 - 0.5 for d in stockDataSet]
+                    # vectorAsList = [(_isoformatd(d).month - 1)/12 - 0.5 for d in stockDataSet]
 
                     # if self.config.dataForm.monthOfYear in [DataFormType.INTEGER, DataFormType.NATURAL]:
                     #     itemGen = lambda d: (_isoformatd(d).month - 1)/12 - (0.5 if self.config.dataForm.monthOfYear == DataFormType.INTEGER else 0)
                     # elif self.config.dataForm.monthOfYear == DataFormType.VECTOR:
                     #     itemGen = lambda d: self._getCategoricalVector(_isoformatd(d).month - 1, max=12)
-                    # vlist = [itemGen(d) for d in stockDataSet]
+                    # vectorAsList = [itemGen(d) for d in stockDataSet]
 
                     if self.config.dataForm.dayOfMonth in [DataFormType.INTEGER, DataFormType.NATURAL]:
-                        vlist = [(_isoformatd(d).month - 1)/12 - (0.5 if self.config.dataForm.monthOfYear == DataFormType.INTEGER else 0) for d in stockDataSet]
+                        vectorAsList = [(_isoformatd(d).month - 1)/12 - (0.5 if self.config.dataForm.monthOfYear == DataFormType.INTEGER else 0) for d in stockDataSet]
                     elif self.config.dataForm.dayOfMonth == DataFormType.VECTOR:
-                        vlist = [i for d in stockDataSet for i in self._getCategoricalVector(_isoformatd(d).month - 1, max=12)]
+                        vectorAsList = [i for d in stockDataSet for i in self._getCategoricalVector(_isoformatd(d).month - 1, max=12)]
 
                     if collectStats: sm.ktypemonthofyeartime += time.time() - startt
 
                 elif k == 'googleInterests':
-                    vlisttype = InputVectorDataType.SERIES
+                    vectorListType = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
-                    vlist = [googleInterests.at[_isoformatd(d), interestColumn] for d in stockDataSet]
+                    vectorAsList = [googleInterests.at[_isoformatd(d), interestColumn] for d in stockDataSet]
                     if collectStats: sm.ktypegoogleintereststime += time.time() - startt
 
                 ##############################################################################################################################
                 ## non-daily, semi-repeated "instances"
                 elif k == 'financials':
-                    vlisttype = InputVectorDataType.SEMISERIES
+                    vectorListType = InputVectorDataType.SEMISERIES
                     if collectStats: startt = time.time()
                     tags = flatten([v['tierTags'][t] for t in range(v['maxTierIndex'])]) ## combine all tags from tiers upto and including v['maxTierIndex']
 
@@ -246,7 +247,7 @@ class InputVectorFactory(Singleton):
                         return retvector
                     ## done createReportVector
 
-                    vlist = [[],[]]
+                    vectorAsList = [[],[]]
                     try:
                         reportNotFiledYetForCurrentPeriod = [1 if _isoformatd(stockDataSet[-1]).month - _edgarformatd(financialDataSet[-1].period).month > 3 else 0]
                     except IndexError:
@@ -265,27 +266,27 @@ class InputVectorFactory(Singleton):
                         print('fdset', len(financialDataSet))
                         print('reportvec',len(reportVector))
 
-                    vlist[0] = reportNotFiledYetForCurrentPeriod
-                    vlist[1] = reportVector
+                    vectorAsList[0] = reportNotFiledYetForCurrentPeriod
+                    vectorAsList[1] = reportVector
 
                     if collectStats: sm.ktypefinancialstime += time.time() - startt
 
                 ##############################################################################################################################
                 # non-daily, single "instances"
                 elif k == 'exchange':
-                    vlisttype = InputVectorDataType.STATIC
+                    vectorListType = InputVectorDataType.STATIC
                     if collectStats: startt = time.time()
-                    vlist = self._getCategoricalVector(exchange, lookupList=self.dbm.getExchanges(), topBuffer=3)
+                    vectorAsList = self._getCategoricalVector(exchange, lookupList=self.dbm.getExchanges(), topBuffer=3)
 
                     if collectStats: sm.ktypeexchangetime += time.time() - startt
                 elif k == 'sector':
-                    vlisttype = InputVectorDataType.STATIC
+                    vectorListType = InputVectorDataType.STATIC
                     if collectStats: startt = time.time()
-                    vlist = self._getCategoricalVector(sector, lookupList=self.dbm.getSectors(), topBuffer=3)
+                    vectorAsList = self._getCategoricalVector(sector, lookupList=self.dbm.getSectors(), topBuffer=3)
 
                     if collectStats: sm.ktypesectortime += time.time() - startt
                 elif k == 'companyAge':
-                    vlisttype = InputVectorDataType.STATIC
+                    vectorListType = InputVectorDataType.STATIC
                     if collectStats: startt = time.time()
                     if foundedDate:
                         year = month = day = None
@@ -303,46 +304,46 @@ class InputVectorFactory(Singleton):
                         ## normalize
                         companyagedays /= 40 * 365
 
-                        vlist = [
+                        vectorAsList = [
                             companyagedays,
                             1 if month else 0,  ## do we know month
                             1 if day else 0     ## do we know day
                         ]
                     else:
-                        vlist = [0,0,0]
+                        vectorAsList = [0,0,0]
 
                     if collectStats: sm.ktypecompanyagetime += time.time() - startt
                 elif k == 'ipoAge':
-                    vlisttype = InputVectorDataType.STATIC
+                    vectorListType = InputVectorDataType.STATIC
                     if collectStats: startt = time.time()
-                    vlist = [((_isoformatd(stockDataSet[-1]) - date.fromisoformat(ipoDate)).days) / 40 / 365] if ipoDate else [0]
+                    vectorAsList = [((_isoformatd(stockDataSet[-1]) - date.fromisoformat(ipoDate)).days) / 40 / 365] if ipoDate else [0]
 
                     if collectStats: sm.ktypeipoagetime += time.time() - startt
 
                 ##############################################################################################################################
 
-                # spcl.addl(fk, vlist)
-                # ivs.addStatFromList(fk, vlist)
+                # spcl.addl(compositeKey, vectorAsList)
+                # inpVecStats.addStatFromList(compositeKey, vectorAsList)
 
                 if collectStats: startt = time.time()
                 if gconfig.network.recurrent:
                     if k == 'financials':
-                        ivs[InputVectorDataType.STATIC][fk + InputVectorDataType.STATIC.value] = len(vlist[0])
-                        ivs[InputVectorDataType.SEMISERIES][fk] = len(vlist[1])
-                        staticarr += vlist[0]
-                        semiseriesarr += vlist[1]
+                        inpVecStats[InputVectorDataType.STATIC][compositeKey + InputVectorDataType.STATIC.value] = len(vectorAsList[0])
+                        inpVecStats[InputVectorDataType.SEMISERIES][compositeKey] = len(vectorAsList[1])
+                        staticarr += vectorAsList[0]
+                        semiseriesarr += vectorAsList[1]
                     else:
-                        ivs[vlisttype][fk] = len(vlist)
-                        if vlisttype == InputVectorDataType.STATIC:
-                            staticarr += vlist
-                        elif vlisttype == InputVectorDataType.SEMISERIES:
-                            semiseriesarr += vlist
+                        inpVecStats[vectorListType][compositeKey] = len(vectorAsList)
+                        if vectorListType == InputVectorDataType.STATIC:
+                            staticarr += vectorAsList
+                        elif vectorListType == InputVectorDataType.SEMISERIES:
+                            semiseriesarr += vectorAsList
                         else:
-                            seriesarr += vlist
+                            seriesarr += vectorAsList
                 else:
-                    ivs[fk] = len(vlist)
-                    retarr += vlist
-                if collectStats: sm.ivsretarrtime += time.time() - startt
+                    inpVecStats[compositeKey] = len(vectorAsList)
+                    retarr += vectorAsList
+                if collectStats: sm.inpVecStatsretarrtime += time.time() - startt
         
         # if not loggedonce and not getSplitStat:
         #     loggedonce = True
@@ -350,7 +351,7 @@ class InputVectorFactory(Singleton):
         #     print(spcl.toString())
 
         if getSplitStat:
-            return recdotdict(ivs)
+            return recdotdict(inpVecStats)
         else:
             if collectStats: startt = time.time()
             if logstuff: print(len(retarr),len(financialDataSet))

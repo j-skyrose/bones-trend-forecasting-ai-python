@@ -53,6 +53,14 @@ class SetType(Enum):
     VALIDATION = 'VALIDATION'
     TESTING = 'TESTING'
 
+class FeatureExtraType(Enum):
+    SINGLE = 'SINGLE'
+    OF = 'OF'
+    KEY = 'KEY'
+    VIXKEY = 'VIXKEY'
+    FINANCIALS = 'FINANCIALS'
+    INTEREST = 'INTEREST'
+
 class FinancialReportType(Enum):
     def __init__(self, alphavantage, fmp, polygon):
         self.alphavantage = alphavantage

@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-from constants.enums import DataFormType, SeriesType
+from constants.enums import DataFormType, FeatureExtraType, SeriesType
 from utils.support import recdotdict
 
 # TESTING = True
@@ -73,8 +73,8 @@ trainingConfig = {
 
 }
 
-def genFeatureObj(enabled, extype, dataRequired=True):
-    return { 'enabled': enabled, 'extype': extype, 'dataRequired': dataRequired }
+def genFeatureObj(enabled, extype:FeatureExtraType, dataRequired=True):
+    return { 'enabled': enabled, 'extraType': extype, 'dataRequired': dataRequired }
 
 config = recdotdict({
     'useGPU': useGPU,
@@ -107,35 +107,35 @@ config = recdotdict({
 
     },
     'feature': {
-        'exchange': genFeatureObj(False, 'single'),
-        'sector': genFeatureObj(True, 'single', True),
-        'companyAge': genFeatureObj(True, 'single', True),
-        'ipoAge': genFeatureObj(False, 'single'),
+        'exchange': genFeatureObj(False, FeatureExtraType.SINGLE),
+        'sector': genFeatureObj(False, FeatureExtraType.SINGLE, True), ## polygon API changed to v3, this info in DB may be outdated/incorrect due to de/re-listing of symbols by different companys
+        'companyAge': genFeatureObj(False, FeatureExtraType.SINGLE, True), ## polygon API changed to v3, this info in DB may be outdated/incorrect due to de/re-listing of symbols by different companys
+        'ipoAge': genFeatureObj(False, FeatureExtraType.SINGLE),
 
-        'dayOfWeek': genFeatureObj(True, 'of'),
-        'dayOfMonth': genFeatureObj(True, 'of'),
-        'monthOfYear': genFeatureObj(True, 'of'),
+        'dayOfWeek': genFeatureObj(True, FeatureExtraType.OF),
+        'dayOfMonth': genFeatureObj(True, FeatureExtraType.OF),
+        'monthOfYear': genFeatureObj(True, FeatureExtraType.OF),
         'stock': {
-            'open': genFeatureObj(True, 'key'),
-            'high': genFeatureObj(True, 'key'),
-            'low': genFeatureObj(True, 'key'),
-            'close': genFeatureObj(True, 'key'),
-            'volume': genFeatureObj(True, 'key')
+            'open': genFeatureObj(True, FeatureExtraType.KEY),
+            'high': genFeatureObj(True, FeatureExtraType.KEY),
+            'low': genFeatureObj(True, FeatureExtraType.KEY),
+            'close': genFeatureObj(True, FeatureExtraType.KEY),
+            'volume': genFeatureObj(True, FeatureExtraType.KEY)
         },
         'vix': {
-            'open': genFeatureObj(True, 'vixkey'),
-            'high': genFeatureObj(True, 'vixkey'),
-            'low': genFeatureObj(True, 'vixkey'),
-            'close': genFeatureObj(True, 'vixkey')
+            'open': genFeatureObj(True, FeatureExtraType.VIXKEY),
+            'high': genFeatureObj(True, FeatureExtraType.VIXKEY),
+            'low': genFeatureObj(True, FeatureExtraType.VIXKEY),
+            'close': genFeatureObj(True, FeatureExtraType.VIXKEY)
         },
-        'financials': {**genFeatureObj(False, 'financials'), **{
+        'financials': {**genFeatureObj(False, FeatureExtraType.FINANCIALS), **{
             'includeDates': True,
             'maxTierIndex': 1,
             'tierTags': [
                 ['Assets', 'Liabilities', 'StockholdersEquity']
             ],
         }},
-        'googleInterests': genFeatureObj(False, 'interest')
+        'googleInterests': genFeatureObj(False, FeatureExtraType.INTEREST)
     },
 
     'testing': {
