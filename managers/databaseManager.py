@@ -13,6 +13,7 @@ import sqlite3, atexit, numpy as np, xlrd
 from datetime import date, timedelta, datetime
 from tqdm import tqdm
 from multiprocessing import current_process
+from decimal import Decimal
 
 from managers.dbCacheManager import DBCacheManager
 from structures.api.googleTrends.request import GoogleAPI
@@ -21,7 +22,7 @@ from globalConfig import config as gconfig
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from managers.marketDayManager import MarketDayManager
 from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FinancialReportType, OperatorDict, PrecedingRangeType, SQLHelpers, SeriesType, AccuracyType, SetType, SortDirection
-from utils.support import asDate, asISOFormat, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, unixToDatetime
+from utils.support import asDate, asISOFormat, asList, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, unixToDatetime
 from constants.values import unusableSymbols, apiList, standardExchanges
 
 def addLastUpdatesRowsForAllSymbols(dbc):
@@ -603,6 +604,34 @@ class DatabaseManager(Singleton):
             raise ValueError('Too many returned rows')
         return recdotobj(res[0]['pickled_split'])
 
+    def getLatestSplitDate(self, exchange=None):
+        stmt = 'SELECT max(date) as date FROM stock_splits'
+        args = []
+        exchange = asList(shortc(exchange, []))
+        if exchange:
+            stmt += ' WHERE exchange in ({})'.format(','.join(['?' for e in exchange]))
+            args.extend(exchange)
+
+        print(stmt, args)
+        res = self.dbc.execute(stmt, tuple(args)).fetchone()['date']
+        if not res:
+            return '1970-01-01'
+        else:
+            return res
+    
+    def getStockSplits(self, exchange=None, symbol=None):
+        # stmt = 'SELECT * FROM stock_splits'
+        stmt = 'SELECT * FROM dump_stock_splits_polygon'
+        args = []
+        exchange = asList(shortc(exchange, []))
+        if exchange:
+            stmt += ' WHERE exchange in ({})'.format(','.join(['?' for e in exchange]))
+            args.extend(exchange)
+            if symbol:
+                stmt += ' AND symbol=?'
+                args.append(symbol)
+        return self.dbc.execute(stmt, tuple(args)).fetchall()
+
     ## end gets ####################################################################################################################################################################
     ####################################################################################################################################################################
     ## sets ####################################################################################################################################################################
@@ -1044,6 +1073,11 @@ class DatabaseManager(Singleton):
         tpl = (nnid, setCount, tickerCount, pickle.dumps(splitList))
         self.dbc.execute(stmt, tpl)
 
+    def insertStockSplit(self, exchange, symbol, date, split_from, split_to):
+        stmt = 'INSERT INTO stock_splits VALUES (?,?,?,?,?)'
+        tpl = (shortc(exchange, SQLHelpers.UNKNOWN.value), symbol, date, split_from, split_to)
+        self.dbc.execute(stmt, tpl)
+
     ## end sets ####################################################################################################################################################################
     ####################################################################################################################################################################
     ## deletes ####################################################################################################################################################################
@@ -1375,8 +1409,71 @@ class DatabaseManager(Singleton):
                     if c > 4:
                         break
 
-            
+    ## detects order of magnitude jumps in stock price from one day to next, that may be representative of a stock split
+    def detectStockSplits(self, exchange=None, symbol=None, type:SeriesType=SeriesType.DAILY, verbose=0):
+        MULTIPLE = exchange or not symbol
+        results = self.getSymbols(exchange, symbol)
 
+        splitDates = {} if MULTIPLE else []
+        if verbose > 0: print('Detecting {} stock splits'.format(type.name))
+        # for r in tqdm(results):
+        for r in results:
+            if (r.exchange, r.symbol) in unusableSymbols: continue
+
+            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ORDER BY date', (r.exchange, r.symbol, type.name)).fetchall()
+
+            for idx, d in enumerate(data):
+                try:
+                    ratio = d.close / data[idx+1].close
+                    if ratio >= 2 or ratio <= 0.5:
+                        if MULTIPLE:
+                            try:
+                                splitDates[d.date].append((r.exchange, r.symbol))
+                            except KeyError:
+                                splitDates[d.date] = [(r.exchange, r.symbol)]
+                        else:
+                            splitDates.append(d.date)
+
+                        ## determine split
+                        ratio = Decimal(ratio).as_integer_ratio()
+
+                        if verbose > 0: 
+                            print(r.exchange, r.symbol, '{} : {}'.format(math.ceil(ratio[0]*10)/10, math.ceil(ratio[1]*10)/10), d.date)
+                            print('\t', d.close, '->', data[idx+2].close)                        
+
+                except IndexError:
+                    break
+
+        return splitDates
+
+    ## detects stock symbols which have excessive strings of artificial dates within the historical data which may be representative of damage caused by abherrant data prior to proper symbol IPO and later gap filling attempts
+    def detectArtificiallyDamagedSymbols(self, exchange=None, symbol=None, type:SeriesType=SeriesType.DAILY, verbose=0):
+        results = self.getSymbols(exchange, symbol)
+
+        damagedSymbols = []
+        damageThresholdLength = 50
+        if verbose > 0: print('Detecting damage for {} data'.format(type.name))
+        # for r in tqdm(results):
+        for r in results:
+
+            if r.exchange=='NYSE': continue
+
+            if (r.exchange, r.symbol) in unusableSymbols: continue
+
+            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ORDER BY date', (r.exchange, r.symbol, type.name)).fetchall()
+
+            artificialStringLength = 0
+            for d in data:
+                if artificialStringLength > damageThresholdLength:
+                    if verbose > 0: print('{} : {}'.format(r.exchange, r.symbol))
+                    damagedSymbols.append((r.exchange, r.symbol))
+                    break
+                if d.artificial:
+                    artificialStringLength += 1
+                else:
+                    artificialStringLength = 0
+
+        return damagedSymbols        
 
     ## one time use
     def loadVIXArchive(self, filepath):
@@ -1631,6 +1728,143 @@ class DatabaseManager(Singleton):
                 pass
 
         return symbolGroups
+
+    ## determines tickers that have stock splits that are less than a certain period apart, possibly indicating a problem with one of them
+    def checkForDumpStockSplitsTooClose(self,period:timedelta=timedelta(days=90), onlyTickersWithData=True,  verbose=1):
+        stmt = 'select * from dump_stock_splits_polygon {} where exchange <> "UNKNOWN" and split_from <> split_to order by symbol, date'.format('JOIN (SELECT DISTINCT exchange AS hexchange,symbol AS hsymbol FROM historical_data) ON exchange=hexchange AND symbol=hsymbol' if onlyTickersWithData else '')
+        res = self.dbc.execute(stmt)
+        cursym = ''
+        lastdate = ''
+        offendingTickers = []
+        for r in res:
+            if r.symbol != cursym:
+                cursym = r.symbol
+                lastdate = r.date
+                continue
+            diff = (date.fromisoformat(r.date) - date.fromisoformat(lastdate)).days
+            if diff < period.days:
+                if verbose > 0: print(r.exchange, r.symbol, lastdate, r.date)
+                offendingTickers.append(r)
+            lastdate = r.date
+        return offendingTickers
+
+# NYSE	LAIX	2022-03-04	14	1	0
+# NYSE	LAIX	DAILY	2022-03-03	0.48	0.48	0.44	0.44	277293	0
+# NYSE	LAIX	DAILY	2022-03-04	5.36	5.36	4.53	4.61	61399	0
+
+    ## check if stock splits are garbage/duplicate/invalid and update status column
+    def validateStockSplits(self, dryRun=False, verbose=0):
+        stmt = 'SELECT * FROM stock_splits sp JOIN (SELECT DISTINCT exchange, symbol FROM historical_data) h ON sp.exchange = h.exchange AND sp.symbol = h.symbol WHERE sp.exchange <> ? AND sp.status = ?'
+        tpl = ('UNKNOWN', 0)
+        tickersToCheck = self.dbc.execute(stmt, tpl).fetchall()
+
+        errorTickers = []
+        ratioErrorTickers = []
+        selectStmt = 'SELECT * FROM historical_data WHERE date >= ? AND date <= ? AND exchange = ? AND symbol = ? AND type=? ORDER BY date DESC LIMIT 2'
+        updateStmt = 'UPDATE stock_splits SET status=? WHERE date=? AND exchange=? AND symbol=?'
+        c=0
+        for t in tqdm(tickersToCheck, desc='Validating stock splits') if verbose > 0 and not dryRun else tickersToCheck:
+            tpl = (t.date, t.exchange, t.symbol)
+            try:
+                splitDayData, prevDayData = self.dbc.execute(selectStmt, ((date.fromisoformat(t.date)-timedelta(days=4)).isoformat(),)+tpl+(SeriesType.DAILY.name,)).fetchall()
+                if splitDayData.date != t.date: raise ValueError
+            except (ValueError, AttributeError):
+            # except Exception as e:
+                # print(e)
+                # print(e)
+                # exit()
+                errorTickers.append(tpl)
+                continue
+
+            splitRatio = t.split_from / t.split_to
+            # priceDiff = abs(splitDayData.open - prevDayData.close)
+            priceDiff = splitDayData.open - prevDayData.close
+            try: 
+                multiplesOfChange = abs(min(prevDayData.close, splitDayData.open) / priceDiff)
+                inverseMultiplesOfChange = 1 / multiplesOfChange
+            except ZeroDivisionError: 
+                multiplesOfChange = 0
+                inverseMultiplesOfChange = 0
+            expectedVsActualError = abs(1-(prevDayData.close * splitRatio / splitDayData.open))
+
+            ## actual next day value is near to expected value
+            passCriteria1 = expectedVsActualError <= 0.2
+            ## orders of magnitude of change in price is near to expected based on the split ratio
+            passCriteria2 = multiplesOfChange > splitRatio*1/3 and multiplesOfChange < splitRatio*2#(1+(2/3))
+            passCriteria3 = inverseMultiplesOfChange > splitRatio*1/3 and inverseMultiplesOfChange < splitRatio*2#(1+(2/3))
+            ## tiny splits may only be detectable via the direction of price change
+            splitRatioLessThanDouble = splitRatio < 2 and splitRatio > 0.5
+            passCriteria4_1 = splitRatio > 1 and priceDiff > 0
+            passCriteria4_2 = splitRatio < 1 and priceDiff < 0
+            passCriteria4 = splitRatioLessThanDouble and (passCriteria4_1 or passCriteria4_2)
+
+            if not passCriteria1 and not passCriteria2 and not passCriteria3 and not passCriteria4:
+                print(passCriteria1,passCriteria2,passCriteria3,passCriteria4)
+                print(t, 'invalid')
+                # print('bef aft', prevDayData.close, splitDayData.open)
+                print('bef', prevDayData.close, prevDayData)
+                print('aft', splitDayData.open, splitDayData)
+                print('expectedVsActualError', expectedVsActualError)
+                print('splitRatio', splitRatio)
+                print('multiplesOfChange', splitRatio*1/3, multiplesOfChange, inverseMultiplesOfChange, splitRatio*2)#(1+(2/3)))
+
+                if prevDayData.close == splitDayData.open:
+                    self.dbc.execute(updateStmt, (-1,) + tpl)
+                    c+=1
+            else:
+                continue
+                print(passCriteria1,passCriteria2,passCriteria3,passCriteria4)
+                print(t, 'valid')
+                print('bef aft', prevDayData.close, splitDayData.open)
+                print('expectedVsActualError', expectedVsActualError)
+                print('splitRatio', splitRatio)
+                print('multiplesOfChange', multiplesOfChange)
+
+            continue
+
+            # historicalRatio = splitDayData.open / prevDayData.close
+            # error = abs((splitRatio / historicalRatio)-1)
+            # error = 1 - (splitDayData.open - prevDayData.close) / splitDayData.open + 1 / splitRatio
+            # error = abs(1-((prevDayData.close * splitRatio) / splitDayData.open))
+            error = abs(1-(prevDayData.close * splitRatio / splitDayData.open))
+
+            if error > 0.2:
+                priceDiff = abs(splitDayData.open - prevDayData.close)
+                ## within some multiples threshold
+                if priceDiff / prevDayData.close > splitRatio * 1/3:
+                    pass
+                else:
+                    print(t, 'invalid')
+                    print('err', error)
+                    print('bef aft', prevDayData.close, splitDayData.open)
+                    print('splitRatio', splitRatio)
+                    print('actual mult', priceDiff / prevDayData.close)
+
+                if dryRun:
+                    # if error < 0.5:
+                    #     print(t, 'invalid')
+                    #     print('splitRatio', splitRatio)
+                    #     # print('historicalRatio', historicalRatio, splitDayData.open, prevDayData.close)
+                    #     print('diff', prevDayData.close, splitDayData.open, splitDayData.open - prevDayData.close)
+                    #     print('error', error)
+                    # else:
+                    #     pass
+                    pass
+                else:
+                    self.dbc.execute(updateStmt, (-1,) + tpl)
+                ratioErrorTickers.append((t, prevDayData.close, splitDayData.open))
+            
+            if dryRun:
+                # print(tpl, 'valid')
+                pass
+            else:
+                self.dbc.execute(updateStmt, (1,) + tpl)
+
+        print(c,'tickers marked as -1')
+        if verbose > 0 and not dryRun:
+            print('Error tickers', errorTickers)
+            print('Ratio errors', ratioErrorTickers)
+
 
     ## end limited use utility ####################################################################################################################################################################
     ####################################################################################################################################################################

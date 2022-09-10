@@ -10,7 +10,7 @@ sys.path.append(path)
 import requests
 from requests.models import Response
 from constants.exceptions import APIError, APITimeout
-from constants.enums import FinancialReportType, TimespanType
+from constants.enums import FinancialReportType, OperatorDict, TimespanType
 from utils.support import shortcdict
 
 # import codecs
@@ -155,3 +155,31 @@ class Polygon:
                 'type': ftype.polygon
             })
         )
+
+    def getStockSplits(self, symbol=None, endSymbol=None, symbolOperator:OperatorDict=None, endSymbolOperator:OperatorDict=None, date=None, endDate=None, dateOperator:OperatorDict=None, endDateOperator:OperatorDict=None):
+        params = {
+            'apikey': self.apiKey,
+            'limit': 1000,
+            'sort': 'execution_date'
+        }
+        if symbol:
+            params['ticker{}'.format('' if not symbolOperator else '.'+symbolOperator.polygonsymbol)] = symbol
+        if endSymbol:
+            params['ticker{}'.format('' if not endSymbolOperator else '.'+endSymbolOperator.polygonsymbol)] = endSymbol
+        if date:
+            params['execution_date{}'.format('' if not dateOperator else '.'+dateOperator.polygonsymbol)] = date
+        if endDate:
+            params['execution_date{}'.format('' if not endDateOperator else '.'+endDateOperator.polygonsymbol)] = endDate
+
+        return self.__responseHandler(
+            requests.get(self.url + '/v3/reference/splits', params=params), 
+            verbose=1
+        )['results']
+        '''
+        [{
+        "execution_date": "2022-09-14",
+        "split_from": 1,
+        "split_to": 3,
+        "ticker": "PANW"
+        }]
+        '''

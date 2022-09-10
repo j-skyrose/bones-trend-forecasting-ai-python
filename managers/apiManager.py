@@ -143,6 +143,14 @@ class APIManager(Singleton):
 
         return self._executeRequestWrapper(api, lmb)
 
+    ## polygon only
+    def getStockSplits(self, api, **kwargs):
+        return self._executeRequestWrapper(
+            api,
+            lambda apih: apih.api.getStockSplits(**kwargs)
+        )
+
+
     # ## fmp
     # def getFinancials_income(self, api, symbol, ftype):
     #     return self._executeRequestWrapper(

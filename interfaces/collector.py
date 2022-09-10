@@ -21,7 +21,7 @@ from managers.marketDayManager import MarketDayManager
 
 from constants.exceptions import APILimitReached, APIError
 from utils.support import recdotdict, shortcdict
-from constants.enums import APIState, FinancialReportType, FinancialStatementType, SeriesType, SortDirection, TimespanType
+from constants.enums import APIState, FinancialReportType, FinancialStatementType, OperatorDict, SeriesType, SortDirection, TimespanType
 from constants.values import tseNoCommissionSymbols
 
 dbm: DatabaseManager = DatabaseManager()
@@ -586,11 +586,61 @@ class Collector:
 
             # break
 
+    ## collect stock split dates/amounts and insert to DB
+    def startSplitsCollection(self, api, **kwargs):
+        if api != 'polygon': raise 'Splits retrieval not supported by non-polygon API at the moment'
+
+        insertcount = 0
+
+        frameLength = 200
+        ## latest split date in DB
+        startDate = date.fromisoformat(dbm.getLatestSplitDate(shortcdict(kwargs, 'exchange', None))) #- timedelta(days=1)
+
+        while startDate < date.today():
+            endDate = startDate + timedelta(days=frameLength)
+            ## API can return future dated splits so should be careful to ensure last split is on or before run date
+            if endDate > date.today(): endDate = date.today()
+            res = self.apiManager.getStockSplits(api, date=startDate.isoformat(), endDate=endDate.isoformat(), dateOperator=OperatorDict.GREATERTHANOREQUAL, endDateOperator=OperatorDict.LESSTHAN)
+
+            if len(res) > 999:
+                frameLength /= 2
+                print('too much data, reducing frame to {}'.format(frameLength))
+            else:
+                print('got {} splits'.format(len(res)))
+
+                startDate += timedelta(days=frameLength)
+                if len(res) < frameLength / 4: frameLength *= 2
+
+                dbm.startBatch()
+                # try:
+                for s in reversed(res):
+                    exchange = None
+                    ## try to determine the exchange that symbol belong(ed/s) to
+                    symbols = dbm.getSymbols(symbol=s.ticker, api=api)
+                    if len(symbols) == 0:
+                        symbols = dbm.getSymbols(symbol=s.ticker)
+                    if len(symbols) == 1:
+                        exchange = symbols[0].exchange
+
+                    try: 
+                        dbm.insertStockSplit(exchange, s.ticker, s.execution_date, s.split_from, s.split_to)
+                        insertcount += 1
+                    except IntegrityError:
+                        print('IntegrityError', exchange, s.ticker, s.execution_date)
+                        pass
+                dbm.commitBatch()
+
+        print('inserted {} splits'.format(insertcount))
+
+
 if __name__ == '__main__':
     parser = optparse.OptionParser()
     parser.add_option('-a', '--api',
         action='store', dest='api', default=None
-        )
+    )
+    parser.add_option('-t', '--type',
+        action='store', dest='type', default=None
+    )
     
     options, args = parser.parse_args()
 
@@ -611,6 +661,8 @@ if __name__ == '__main__':
 
         if options.api == 'vix':
             c.collectVIX()
+        elif options.type == 'splits':
+            c.startSplitsCollection(options.api, **kwargs)
         else:
             c.startAPICollection(options.api, **kwargs)
     else:
@@ -632,6 +684,7 @@ if __name__ == '__main__':
             # dbm.symbols_pullStagedSector()
             # c.startAPICollection('polygon', SeriesType.MINUTE)
             c.startAPICollection_exploratoryAlphavantageAPIUpdates()
+            # c.startSplitsCollection('polygon')
             pass
         except KeyboardInterrupt:
             # dbm.staging_condenseFounded()

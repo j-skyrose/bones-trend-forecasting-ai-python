@@ -40,6 +40,9 @@ class StockDataHandler:
         if precedingRange and followingRange:
             self.determineSelections(precedingRange, followingRange)
 
+    def getTickerTuple(self):
+        return (self.symbolData.exchange, self.symbolData.symbol)
+
     def determineSelections(self, precedingRange, followingRange):
         self.selections = [x for x in range(len(self.data)) if precedingRange <= x and x < len(self.data) - followingRange]
         return self.selections

@@ -29,6 +29,7 @@ from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.financialDataHandler import FinancialDataHandler
 from structures.stockDataHandler import StockDataHandler
 from structures.dataPointInstance import DataPointInstance
+from structures.stockSplitsHandler import StockSplitsHandler
 from structures.api.googleTrends.request import GoogleAPI
 
 DEBUG = True
@@ -41,6 +42,9 @@ def multicore_getFinancialDataTickerTuples(ticker):
 def multicore_getStockDataTickerTuples(ticker, seriesType, minDate):
     return (ticker, DatabaseManager().getStockData(ticker.exchange, ticker.symbol, seriesType, minDate))
 
+def multicore_getStockSplitsTickerTuples(ticker):
+    return (ticker, DatabaseManager().getStockSplits(ticker.exchange, ticker.symbol))
+
 ## each session should only rely on one (precedingRange, followingRange) combination due to the way the handlers are setup
 ## not sure how new exchange/symbol handler setups would work with normalization info, if not initialized when datamanager is created
 
@@ -49,6 +53,7 @@ class DataManager():
     stockDataHandlers = {}
     vixDataHandler = VIXManager().data
     financialDataHandlers: Dict[tuple, FinancialDataHandler] = {}
+    stockSplitsHandlers: Dict[Tuple[str, str], StockSplitsHandler] = {}
     stockDataInstances = {}
     selectedInstances = []
     # unselectedInstances = []
@@ -120,6 +125,8 @@ class DataManager():
             print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
 
             if not initializeStockDataHandlersOnly:
+                self.initializeStockSplitsHandlers(symbolList)
+
                 startt3 = time.time()
                 self.initializeStockDataInstances()
                 print('Stock data instance initialization time:', time.time() - startt3, 'seconds')
@@ -301,6 +308,8 @@ class DataManager():
         precset = stockDataSet.getPrecedingSet(stockDataIndex)
         self.getprecstocktime += time.time() - startt
 
+        splitsset = self.stockSplitsHandlers[stockDataSet.getTickerTuple()].getForRange(precset[0].date, precset[-1].date)
+
         if gconfig.feature.financials.enabled:
             startt = time.time()
             precfinset = self.financialDataHandlers[(symbolData.exchange, symbolData.symbol)].getPrecedingReports(date.fromisoformat(stockDataSet.data[stockDataIndex].date), self.precedingRange)
@@ -317,7 +326,8 @@ class DataManager():
             symbolData.founded,
             'todo',
             symbolData.sector,
-            symbolData.exchange
+            symbolData.exchange,
+            splitsset
         )
         self.actualbuildtime += time.time() - startt
 
@@ -497,6 +507,19 @@ class DataManager():
                 print('creatingtime',creatingtime,'seconds')
                 print('insertingtime',insertingtime,'seconds')
                 print('total',gettingtime+massagingtime+creatingtime+insertingtime,'seconds')
+
+    def initializeStockSplitsHandlers(self, symbolList):
+        ## purge unusable symbols
+        for s in symbolList:
+            if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
+
+        if gconfig.multicore:
+            for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockSplitsTickerTuples), symbolList, chunksize=1, desc='Getting stock splits data'), desc='Creating stock splits handlers'):
+                self.stockSplitsHandlers[(ticker.exchange, ticker.symbol)] = StockSplitsHandler(ticker.exchange, ticker.symbol, data)
+                    
+        else:
+            for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):
+                self.stockSplitsHandlers[(s.exchange, s.symbol)] = StockSplitsHandler(s.exchange, s.symbol, dbm.getStockSplits(s.exchange, s.symbol))
 
     def initializeWindow(self, windowIndex):
         self.stockDataInstances.clear()

@@ -136,17 +136,18 @@ class SQLHelpers(Enum):
     UNKNOWN = 'UNKNOWN'
 
 class OperatorDict(Enum):
-    def __init__(self, a, b, c=None):
+    def __init__(self, a, b, c=None, d=None):
         self.function = a
         self.symbol = b
         self.sqlsymbol = shortc(c, b)
+        self.polygonsymbol = d
 
-    LESSTHAN =          operator.lt, '>'
-    LESSTHANOREQUAL =   operator.le, '>='
+    LESSTHAN =          operator.lt, '>', None, 'lt'
+    LESSTHANOREQUAL =   operator.le, '>=', None, 'lte'
     EQUAL =             operator.eq, '='
     NOTEQUAL =          operator.ne, '!=', '<>'
-    GREATERTHANOREQUAL= operator.ge, '<='
-    GREATERTHAN =       operator.gt, '<'
+    GREATERTHANOREQUAL= operator.ge, '<=', None, 'gte'
+    GREATERTHAN =       operator.gt, '<', None, 'gt'
 
 if __name__ == '__main__':
     print(AccuracyType.OVERALL.name, AccuracyType.OVERALL.value, AccuracyType.OVERALL.statsName)

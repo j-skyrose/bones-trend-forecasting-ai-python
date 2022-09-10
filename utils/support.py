@@ -11,7 +11,8 @@ sys.path.append(path)
 import numpy, re, math, calendar, json
 from datetime import date, datetime, timedelta
 from multiprocessing import Pool, cpu_count
-from typing import Union
+from typing import Callable, Dict, Union
+from enum import Enum
 
 from constants.values import months, foundedSynonyms
 
@@ -90,7 +91,8 @@ class Singleton(object):
 def shortc(val, e):
     ## and (type(val) is not list or (type(val) is list and len(val) > 0))
     # try:
-    return val if val != '' and val != None else e
+    listCond = len(val) > 0 if type(val) is list else True
+    return val if val != '' and val != None and listCond else e
     # except:
 
 def shortcdict(dict, key, e, shortcValue=True):
@@ -154,6 +156,9 @@ def asDatetime(dt: Union[date, datetime, str]):
         return datetime.fromisoformat(dt)
     
     raise ValueError('Unrecognized type')
+
+def asList(val):
+    return val if type(val) is list else [val]
 
 ## attempt to parse a date out of a description string, otherwise return the description for later analysis, or 'e' if its empty
 ## expects a date in the format: december 12, 2000
@@ -280,6 +285,26 @@ def containsAllKeys(dict, *args, throwSomeError=None, throwAllError=None):
         else: return False
 
     return True
+
+
+
+class ReturnType(Enum):
+    INDEX = 'INDEX'
+    VALUE = 'VALUE'
+
+def getIndex(iterable, matchFunction: Callable[[Dict], bool]):
+    return _getFromListWithCustomMatchFunction(iterable, matchFunction, ReturnType.INDEX)
+
+def getItem(iterable, matchFunction: Callable[[Dict], bool]):
+    return _getFromListWithCustomMatchFunction(iterable, matchFunction, ReturnType.VALUE)
+
+def _getFromListWithCustomMatchFunction(iterable, matchFunction, returnType: ReturnType):
+    for i, val in enumerate(iterable):
+        if matchFunction(val):
+            if returnType == ReturnType.INDEX: return i
+            elif returnType == ReturnType.VALUE: return val
+
+
 
 if __name__ == '__main__':
     # print(processRawValueToInsertValue(44))

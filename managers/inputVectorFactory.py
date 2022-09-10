@@ -64,7 +64,7 @@ class InputVectorFactory(Singleton):
 #     def toString(self):
 #         return self.logstring
 
-    def build(self, stockDataSet, vixData, financialDataSet, googleInterests, foundedDate, ipoDate, sector, exchange, getSplitStat=False):
+    def build(self, stockDataSet, vixData, financialDataSet, googleInterests, foundedDate, ipoDate, sector, exchange, stockSplits, getSplitStat=False):
         global loggedonce
         if gconfig.network.recurrent:
             inpVecStats = {e: {} for e in InputVectorDataType}
@@ -178,6 +178,19 @@ class InputVectorFactory(Singleton):
                     if collectStats: startt = time.time()
                     vectorAsList = [googleInterests.at[_isoformatd(d), interestColumn] for d in stockDataSet]
                     if collectStats: sm.ktypegoogleintereststime += time.time() - startt
+                
+                elif k == 'stockSplits':
+                    vectorListType = InputVectorDataType.SERIES
+                    if collectStats: startt = time.time()
+                    # stockSplitDates = [s.date for s in stockSplits]
+                    ## zero center split ratio: 1:2 -> 2, 3:1 -> -3
+                    stockSplitDict = {s.date: ((max(s.split_from, s.split_to) / min(s.split_from, s.split_to)) - 1) * (1 if s.split_from < s.split_to else -1) for s in stockSplits}
+                    # vectorAsList = [*([1,stockSplitDict[d.date]] if d.date in stockSplitDict.keys() else [0,0]) for d in stockDataSet]
+                    # vectorAsList = [1 if d.date in stockSplitDict.keys() else 0 for d in stockDataSet]
+                    # vectorAsList += [stockSplitDict[d.date] if d.date in stockSplitDict.keys() else 0 for d in stockDataSet]
+                    vectorAsList = [(1 if splitBooleanAndNotRatio else stockSplitDict[d.date]) if d.date in stockSplitDict.keys() else 0 for d in stockDataSet for splitBooleanAndNotRatio in [True, False]]
+                    if collectStats: sm.ktypestocksplitstime += time.time() - startt
+
 
                 ##############################################################################################################################
                 ## non-daily, semi-repeated "instances"
@@ -398,7 +411,7 @@ class InputVectorFactory(Singleton):
             })]
             mockginterests = {} ## todo
 
-            self.stats = self.build(mockstockDataSet, mockvix, mockfinancialDataSet, mockginterests, mocklistdt, mockipodt, 'Technology', 'NYSE', getSplitStat=True)
+            self.stats = self.build(mockstockDataSet, mockvix, mockfinancialDataSet, mockginterests, mocklistdt, mockipodt, 'Technology', 'NYSE', [], getSplitStat=True)
 
         return self.stats
 

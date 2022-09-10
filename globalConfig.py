@@ -115,6 +115,7 @@ config = recdotdict({
         'dayOfWeek': genFeatureObj(True, FeatureExtraType.OF),
         'dayOfMonth': genFeatureObj(True, FeatureExtraType.OF),
         'monthOfYear': genFeatureObj(True, FeatureExtraType.OF),
+        'stockSplits': genFeatureObj(True, FeatureExtraType.OF),
         'stock': {
             'open': genFeatureObj(True, FeatureExtraType.KEY),
             'high': genFeatureObj(True, FeatureExtraType.KEY),
