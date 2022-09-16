@@ -25,20 +25,6 @@ from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, Financial
 from utils.support import asDate, asISOFormat, asList, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, unixToDatetime
 from constants.values import unusableSymbols, apiList, standardExchanges
 
-def addLastUpdatesRowsForAllSymbols(dbc):
-    symbolPairs = dbc.execute("SELECT exchange, symbol FROM symbols").fetchall()
-    print(len(symbolPairs),'symbols found')
-
-    tot = 0
-    for s in symbolPairs:
-        exchange, symbol = s
-        # print(s)
-
-        for e in SeriesType:
-            dbc.execute('INSERT OR IGNORE INTO last_updates(exchange, symbol, type, date) VALUES (?,?,?,?)', (exchange, symbol, e.function, '1970-01-01'))
-            tot += dbc.rowcount
-    print(tot, 'rows added')
-
 ## for ad hoc SQL execution ################################################################################################
 # conn = sqlite3.connect(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'raw/sp2Database.db'))
 # dbc = conn.cursor()
@@ -636,6 +622,29 @@ class DatabaseManager(Singleton):
     ## end gets ####################################################################################################################################################################
     ####################################################################################################################################################################
     ## sets ####################################################################################################################################################################
+
+    ## ensures there are corresponding rows in the last_updates table for each ticker in the symbols table
+    def addLastUpdatesRowsForAllSymbols(self, exchange=None, verbose=1):
+        stmt = 'SELECT exchange, symbol FROM symbols'
+        args = []
+        if exchange:
+            stmt += ' WHERE exchange=?'
+            args.append(exchange)
+        tickers = self.dbc.execute(stmt, tuple(args)).fetchall()
+        # tickers = self.dbc.execute("SELECT exchange, symbol FROM symbols WHERE exchange='TSX'").fetchall()
+        if verbose > 0: print(len(tickers),'tickers found')
+
+        tot = 0
+        for t in tickers:
+            exchange, symbol = t.values()
+
+            for e in SeriesType:
+                try:
+                    self.dbc.execute('INSERT INTO last_updates(exchange, symbol, type, date) VALUES (?,?,?,?)', (exchange, symbol, e.name, '1970-01-01'))
+                    tot += self.dbc.rowcount
+                except sqlite3.IntegrityError:
+                    pass
+        if verbose > 0: print(tot, 'rows added')
 
 
     ## insert data in historical_data table and update the last_updates table with the API used and current date
@@ -1865,6 +1874,82 @@ class DatabaseManager(Singleton):
         if verbose > 0 and not dryRun:
             print('Error tickers', errorTickers)
             print('Ratio errors', ratioErrorTickers)
+
+        ## symbols loaded from FMP? came with a .TO suffix, so this should clean them up by either merging them with their non-suffixed existing tickers and delete the suffixed row, or update the symbol if there is no non-suffixed match. 
+        ## should run a foreign key constraint check and cleanup of last_updates after since ON DELETE CASCADE does not appear work:
+        ##      DELETE FROM last_updates WHERE rowid IN (SELECT rowid FROM pragma_foreign_key_check('last_updates'));
+        def mergeAndEliminateDotTOSymbols(self, verbose=0):
+            def getAPIVal(a1, a2):
+                if a1==a2: return a1
+                if a1==0: return a2
+                if a2==0: return a1
+                return 0
+
+            tickers = self.dbc.execute('SELECT * FROM symbols WHERE exchange=? AND symbol LIKE ?', ('TSX','%.TO')).fetchall()
+
+            for idx, t in enumerate(tickers):
+                massagedSymbol = t.symbol.replace('.TO','').replace('-','.')
+                res = d.getSymbols('TSX', massagedSymbol)
+
+                if len(res) == 0:
+                    if verbose > 0: print('missing .TO match',t)
+                    d.dbc.execute('UPDATE symbols SET symbol=? WHERE exchange=? AND symbol=?', (massagedSymbol, 'TSX', t.symbol))
+                    if verbose > 0: print('migrated', massagedSymbol)
+                elif len(res) > 1:
+                    if verbose > 0: print('too many results', t)
+                else:
+                    res = res[0]
+                    ## combine
+                    newrow = (
+                        ## name
+                        res.name.strip() if len(res.name.strip()) > len(t.name.strip()) else t.name.strip(),
+                        ## asset_type
+                        shortc(res.asset_type, t.asset_type),
+                        ## api_alphavantage
+                        getAPIVal(res.api_alphavantage, t.api_alphavantage),
+                        ## api_polygon
+                        getAPIVal(res.api_polygon, t.api_polygon),
+                        ## google_topic_id
+                        shortc(res.google_topic_id, t.google_topic_id),
+                        ## sector
+                        shortc(res.sector, t.sector),
+                        ## industry
+                        shortc(res.industry, t.industry),
+                        ## founded
+                        shortc(res.founded, t.founded),
+                        ## api_fmp
+                        getAPIVal(res.api_fmp, t.api_fmp),
+                        ## exchange
+                        'TSX',
+                        ## symbol
+                        res.symbol,
+                    )
+
+                    d.dbc.execute('UPDATE symbols SET name=?,asset_type=?,api_alphavantage=?,api_polygon=?,google_topic_id=?,sector=?,industry=?,founded=?,api_fmp=? WHERE exchange=? AND symbol=?', newrow)
+                    d.dbc.execute('DELETE FROM symbols WHERE exchange=? AND symbol=?', ('TSX', t.symbol))
+
+                    if verbose > 0: 
+                        print(t)
+                        print(res)
+                        print('new:',newrow)
+                
+        ## check for symbol and symbol.TO collisions in historical data
+        # tickers = d.getSymbols('TSX')
+        # dottotickerswithdata = []
+        # for t in tickers:
+        #     if '.TO' in t.symbol:
+        #         data = d.getStockData(t.exchange, t.symbol)
+        #         if len(data) > 0:
+        #             print(t.exchange,t.symbol,len(data))
+        #             dottotickerswithdata.append(t)
+
+        # for t in dottotickerswithdata:
+        #     for subt in tickers:
+        #         if subt.symbol == t.symbol.replace('.TO',''):
+        #             print('collision', t.exchange, t.symbol)
+
+        ################################################################
+
 
 
     ## end limited use utility ####################################################################################################################################################################

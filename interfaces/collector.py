@@ -194,7 +194,7 @@ class Collector:
 
         try:
 
-            if api in nonTypeAPIs:
+            if api in ['polygon']:
                 if stype == SeriesType.MINUTE:
                     tickerlist = dbm.getLatestMinuteDataRows(api)
 
@@ -215,34 +215,65 @@ class Collector:
                 ## gather symbols for this collection run
                 lastUpdatedList = dbm.getLastUpdatedCollectorInfo(stype=stype, api=api).fetchall()
                 if DEBUG: print('lastUpdatedList length',len(lastUpdatedList))
-                symbols = []
-                for r in lastUpdatedList:
-                    # ## cull all rows that have been updated today by the currently checked API (higher priority already culled in previous iteration)
-                    # if r.api == api and date.fromisoformat(r.date) == date.today():
-                    #     continue
-                    # above is obsolete while all alphavantage stocks have been collected at least once for the given series type within the past 2 years
-                    # polygon can handle all these stocks now, unless they are not available from the api, in which case only alphavantage can retrieve updated info
-                    if date.fromisoformat(r.date) == date.today():
-                        continue
 
-                    ## only include if symbol is supported by API
-                    try:
-                        if r['api_'+api] == 1:
-                            symbols.append(r)
-                    except KeyError:
-                        print('key error checking if symbol is supported by api', api)
-                        raise APIError
-                    if len(symbols) == self.apiManager.apis[api]['remaining']: break
+                if api == 'alphavantage':
+                    symbols = []
+                    for r in lastUpdatedList:
+                        # ## cull all rows that have been updated today by the currently checked API (higher priority already culled in previous iteration)
+                        # if r.api == api and date.fromisoformat(r.date) == date.today():
+                        #     continue
+                        # above is obsolete while all alphavantage stocks have been collected at least once for the given series type within the past 2 years
+                        # polygon can handle all these stocks now, unless they are not available from the api, in which case only alphavantage can retrieve updated info
+                        if date.fromisoformat(r.date) == date.today():
+                            continue
 
-                print('symbol list size', len(symbols))
-                self.__loopCollectBySymbol(api, symbols, stype)
+                        ## only include if symbol is supported by API
+                        try:
+                            if r['api_'+api] == 1:
+                                symbols.append(r)
+                        except KeyError:
+                            print('key error checking if symbol is supported by api', api)
+                            raise APIError
+                        if len(symbols) == self.apiManager.apis[api]['remaining']: break
 
+                    print('symbol list size', len(symbols))
+                    self.__loopCollectBySymbol(api, symbols, stype)
+
+                elif api == 'neo':
+                    for r in lastUpdatedList:
+                        ## skip if updated today
+                        if date.fromisoformat(r.date) == date.today():
+                            continue
+                        ## skip if symbol not supported by API
+                        try: 
+                            if r['api_'+api] != 1: continue
+                        except KeyError: continue
+
+                        self.__loopCollectDateRangebySymbol(api, r.symbol, date.fromisoformat(r.date))
 
         except (KeyboardInterrupt, APIError):
             print('keyboard interrupt')
             if api != 'polygon': self.close()
 
         print('API Errors:',self.apiErrors)
+
+    def __loopCollectDateRangebySymbol(self, api, symbol, sdate: date):
+        if api == 'neo':
+            chunkSize = 90
+            results = []
+            while sdate < date.today():
+                try:
+                    results.append(self.apiManager.query(api, symbol, fromDate=sdate, toDate=sdate + timedelta(days=chunkSize)))
+                except APIError:
+                    pass
+                sdate += timedelta(days=chunkSize)
+
+            ## merge all results into single dictionary
+            resDict = {}
+            for r in results:
+                resDict = {**resDict, **r}
+
+            dbm.insertData('NEO', symbol, SeriesType.DAILY.name, api, resDict)            
 
     def startAPICollection_exploratoryAlphavantageAPIUpdates(self):
         api = 'alphavantage'
@@ -683,8 +714,9 @@ if __name__ == '__main__':
             # dbm.symbols_pullStagedFounded()
             # dbm.symbols_pullStagedSector()
             # c.startAPICollection('polygon', SeriesType.MINUTE)
-            c.startAPICollection_exploratoryAlphavantageAPIUpdates()
+            # c.startAPICollection_exploratoryAlphavantageAPIUpdates()
             # c.startSplitsCollection('polygon')
+            c.startAPICollection('neo', SeriesType.DAILY)
             pass
         except KeyboardInterrupt:
             # dbm.staging_condenseFounded()

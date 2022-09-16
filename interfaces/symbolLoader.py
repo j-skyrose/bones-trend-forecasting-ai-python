@@ -9,14 +9,17 @@ sys.path.append(path)
 
 import sqlite3
 from managers.databaseManager import DatabaseManager
-from utils.support import recdotdict
+from managers.apiManager import APIManager
+from utils.support import asList, recdotdict, shortc
 import json
 
-sdpath=os.path.dirname(os.path.realpath(__file__))
+dbm = DatabaseManager()
+apim: APIManager = APIManager()
+symbolDumpPath=os.path.dirname(os.path.realpath(__file__))
 
-def getAliasesDictionary(dbc, api):
+def getAliasesDictionary(api):
     ret = {}
-    for r in dbc.execute('SELECT exchange, alias FROM exchange_aliases WHERE api=?', (api,)).fetchall():
+    for r in dbm.dbc.execute('SELECT exchange, alias FROM exchange_aliases WHERE api=?', (api,)).fetchall():
         ret[r['alias']] = r['exchange']
     return recdotdict(ret)
 
@@ -43,21 +46,21 @@ def importFromFMP():
 
             try: exchange=aldict[s['exchange']]
             except KeyError: exchange=str(s['exchange']).upper()
-            existing = dbc.execute('SELECT * from symbols WHERE exchange=? AND symbol=?', (exchange, s['symbol'])).fetchone()
+            existing = dbm.dbc.execute('SELECT * from symbols WHERE exchange=? AND symbol=?', (exchange, s['symbol'])).fetchone()
 
             if existing:
-                dbc.execute('UPDATE symbols SET api_fmp=1 WHERE exchange=? AND symbol=?', (exchange, s['symbol']))
+                dbm.dbc.execute('UPDATE symbols SET api_fmp=1 WHERE exchange=? AND symbol=?', (exchange, s['symbol']))
                 pass
             else:
-                dbc.execute('INSERT INTO symbols (exchange, symbol, name, api_fmp) VALUES (?,?,?,1)', (exchange, s['symbol'], s['name']))
+                dbm.dbc.execute('INSERT INTO symbols (exchange, symbol, name, api_fmp) VALUES (?,?,?,1)', (exchange, s['symbol'], s['name']))
                 # print('adding', (exchange, s['symbol'], s['name']))
 
 
 
 def importFromPolygon(dbc):
     overlapList = []
-    aldict = getAliasesDictionary(dbc, 'polygon')
-    with open(os.path.join(sdpath, 'polygon/reference_tickers.csv')) as f:
+    aldict = getAliasesDictionary('polygon')
+    with open(os.path.join(symbolDumpPath, 'polygon/reference_tickers.csv')) as f:
         f.readline() ## dump header line
         for line in f:
             ticker,name,market,locale,type,currency,active,primaryExch,updated,url = line.split(',')
@@ -71,7 +74,7 @@ def importFromPolygon(dbc):
             ## gids, mdx, nsx, spic: only few records, ignore?
             if exchange not in ['NYSE','NASDAQ','BATS','NYSE ARCA','NYSE MKT']: continue
 
-            existing = dbc.execute('SELECT * from symbols WHERE exchange=? AND symbol=?', (exchange, ticker)).fetchone()
+            existing = dbm.dbc.execute('SELECT * from symbols WHERE exchange=? AND symbol=?', (exchange, ticker)).fetchone()
 
             if existing:
                 # if existing['asset_type']:
@@ -82,23 +85,32 @@ def importFromPolygon(dbc):
                 newName = name if existing['name'].strip() in name else existing['name'].strip()
                 newAssetType = type if type else existing['asset_type']
 
-                dbc.execute('UPDATE symbols SET name=?, asset_type=?, api_polygon=1 WHERE exchange=? AND symbol=?', (newName, newAssetType, exchange, ticker))
+                dbm.dbc.execute('UPDATE symbols SET name=?, asset_type=?, api_polygon=1 WHERE exchange=? AND symbol=?', (newName, newAssetType, exchange, ticker))
             else:
-                dbc.execute('INSERT INTO symbols (exchange, symbol, name, asset_type, api_polygon) VALUES (?,?,?,?,1)', (exchange, ticker, name, type if type else None))
+                dbm.dbc.execute('INSERT INTO symbols (exchange, symbol, name, asset_type, api_polygon) VALUES (?,?,?,?,1)', (exchange, ticker, name, type if type else None))
 
     # print(len(overlapList))
     # for a in overlapList:
     #     print(a)
 
+def importFromNEOSearch():
+    stmt = 'INSERT OR IGNORE INTO symbols(exchange,symbol,name,api_neo) VALUES (?,?,?,?)'
+    tickers = apim.apis['neo'].api.getTickerDump()
+    for t in tickers:
+        tpl = ('NEO', t.symbol, t.securityName, 1)
+        dbm.dbc.execute(stmt, tpl)
 
-def importFromSymbolDumps(dbc):
-    project_path = os.path.dirname(os.path.realpath(__file__))
-    symbol_dumps_folder = os.path.join(project_path,'symbol_dumps')
-    for source in ['eoddata','alphavantage']:
+def importFromSymbolDumps(specificSource=None, specificFile=None):
+    global path
+    symbol_dumps_folder = os.path.join(path,'data/symbol_dumps')
+    sources = asList(shortc(specificSource, ['eoddata','alphavantage']))
+    for source in sources:
         linecount = 0
         lineupdated = 0
         path = os.path.join(symbol_dumps_folder, source)
         for file in [f for f in os.listdir(path) if os.path.isfile(path + '/' + f)]:
+            print(file)
+            if specificFile and file.lower() != specificFile.lower(): continue
 
             with open(os.path.join(path, file), 'r') as f:
                 f.readline() ## dump header line
@@ -110,10 +122,12 @@ def importFromSymbolDumps(dbc):
                     if exchange == 'AMEX': continue ## AMEX has since become NYSE MKT
                     for line in f:
                         symbol, name = line.split('\t',1)
+                        name = name.strip()
 
                         try:
-                            dbc.execute('INSERT INTO symbols (exchange, symbol, name, api_alphavantage) VALUES (?,?,?,-1)', (exchange, symbol, name))
+                            dbm.dbc.execute('INSERT INTO symbols (exchange, symbol, name) VALUES (?,?,?)', (exchange, symbol, name))
                             linecount += 1
+                            print('inserted:',exchange,symbol,name)
                         except sqlite3.IntegrityError:
                             pass
                 elif source == 'alphavantage':
@@ -127,12 +141,12 @@ def importFromSymbolDumps(dbc):
                             exit()
 
                         try:
-                            dbc.execute('INSERT INTO symbols (exchange, symbol, name, asset_type, api_alphavantage) VALUES (?,?,?,?,1)', (exchange, symbol, name, assetType))
+                            dbm.dbc.execute('INSERT INTO symbols (exchange, symbol, name, asset_type, api_alphavantage) VALUES (?,?,?,?,1)', (exchange, symbol, name, assetType))
                             linecount += 1
                         except sqlite3.IntegrityError:
                             try:
-                                if dbc.execute("SELECT asset_type FROM symbols WHERE exchange=? AND symbol=?", (exchange, symbol)).fetchone()[0] is None:
-                                    dbc.execute('UPDATE symbols SET asset_type=?, api_alphavantage=1 WHERE exchange=? AND symbol=?', (assetType, exchange, symbol))
+                                if dbm.dbc.execute("SELECT asset_type FROM symbols WHERE exchange=? AND symbol=?", (exchange, symbol)).fetchone()[0] is None:
+                                    dbm.dbc.execute('UPDATE symbols SET asset_type=?, api_alphavantage=1 WHERE exchange=? AND symbol=?', (assetType, exchange, symbol))
                                     lineupdated += 1
                             except Exception as e:
                                 print('update exception',e, ' for',symbol, name, exchange, assetType)
@@ -142,6 +156,8 @@ def importFromSymbolDumps(dbc):
 
         print(linecount, 'symbols added from', source)
         print(lineupdated, 'symbols updated from', source)
+
+        dbm.addLastUpdatesRowsForAllSymbols()
 ## END importFromSymbolDumps END #################################################################################
 
 
@@ -152,3 +168,6 @@ def importFromSymbolDumps(dbc):
 # importFromPolygon(dbc)
 
 # importFromFMP()
+
+# importFromSymbolDumps('eoddata', 'TSX.txt')
+importFromNEOSearch()

@@ -10,6 +10,7 @@ sys.path.append(path)
 from structures.api.alphavantage import Alphavantage
 from structures.api.polygon import Polygon
 from structures.api.fmp import FMP
+from structures.api.neo import NEO
 from managers.configManager import ConfigManager
 from datetime import date
 import atexit
@@ -33,6 +34,9 @@ class APIManager(Singleton):
 
         k = 'fmp'
         self.apis[k] = self._buildAPIObj(k, FMP(self.config.get(k, 'url'), self.config.get(k, 'apikey')))
+
+        k = 'neo'
+        self.apis[k] = self._buildAPIObj(k, NEO(self.config.get(k, 'url')))
 
         ## update 'remaining' counts
         for a in self.apis.keys():
@@ -108,10 +112,16 @@ class APIManager(Singleton):
 
         return recdotobj(self.__executeAPIRequest(apiHandle, lambda: requestFunc(apiHandle), verbose))
 
-    def query(self, api, symbol=None, stype=None, qdate=None, exchange=None, verbose=0):
+    def query(self, api, symbol=None, stype=None, qdate=None, exchange=None, fromDate=None, toDate=None, verbose=0):
+        if qdate:
+            queryArgs = (qdate, verbose)
+        elif fromDate and toDate:
+            queryArgs = (symbol, fromDate, toDate)
+        else:
+            queryArgs = (stype, symbol, exchange)
         return self._executeRequestWrapper(
             api,
-            (lambda apih: apih.api.query(stype, symbol, exchange)) if not qdate else (lambda apih: apih.api.query(qdate, verbose)),
+            lambda apih: apih.api.query(*queryArgs),
             stype,
             qdate,
             verbose
