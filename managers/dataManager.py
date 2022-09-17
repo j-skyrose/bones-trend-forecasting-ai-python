@@ -14,6 +14,7 @@ from datetime import date
 from typing import Dict, List, Tuple
 from tqdm.contrib.concurrent import process_map
 from functools import partial
+from argparse import ArgumentError
 
 from globalConfig import config as gconfig
 from constants.enums import DataFormType, OperatorDict, OutputClass, SeriesType, SetType
@@ -50,11 +51,13 @@ def multicore_getStockSplitsTickerTuples(ticker):
 
 class DataManager():
     # stockDataManager: StockDataManager = None
-    stockDataHandlers = {}
+    stockDataHandlers: Dict[Tuple[str,str], StockDataHandler] = {}
+    explicitValidationStockDataHandlers: Dict[Tuple[str,str], StockDataHandler] = {}
     vixDataHandler = VIXManager().data
     financialDataHandlers: Dict[Tuple[str, str], FinancialDataHandler] = {}
     stockSplitsHandlers: Dict[Tuple[str, str], StockSplitsHandler] = {}
-    stockDataInstances = {}
+    stockDataInstances: Dict[Tuple[str,str,str], DataPointInstance] = {}
+    explicitValidationStockDataInstances: Dict[Tuple[str,str,str], DataPointInstance] = {}
     selectedInstances = []
     # unselectedInstances = []
     unselectedInstances = {}
@@ -64,6 +67,7 @@ class DataManager():
     testingInstances = []
     trainingSet = []
     validationSet = []
+    explicitValidationSet = []
     testingSet = []
     inputVectorFactory = None
     setsSlidingWindowPercentage = 0
@@ -73,11 +77,12 @@ class DataManager():
 
     def __init__(self,
         precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, threshold=0,
-        setCount=None, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, useAllSets=False,
+        setCount=None, setSplitTuple=None, minimumSetsPerSymbol=0, useAllSets=False,
         inputVectorFactory=InputVectorFactory(), normalizationInfo={}, symbolList:List=[],
         analysis=False, statsOnly=False, initializeStockDataHandlersOnly=False, useOptimizedSplitMethodForAllSets=True,
         anchorDate=None, forPredictor=False,
         minDate=None,
+        explicitValidationSymbolList:List=[],
         normalize=False,
         **kwargs
         # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
@@ -90,7 +95,6 @@ class DataManager():
         self.followingRange = followingRange
         self.seriesType = seriesType
         self.threshold = threshold
-        self.setSplitTuple = setSplitTuple
         self.minDate = minDate
         # self.setCount = setCount
         self.kerasSetCaches = {}
@@ -100,11 +104,42 @@ class DataManager():
         self.useOptimizedSplitMethodForAllSets = useOptimizedSplitMethodForAllSets
         self.initializedWindow = None
         self.shouldNormalize = normalize
+        # self.explicitValidationSymbolList = explicitValidationSymbolList
 
-        ## purge invalid tickers
-        for s in symbolList:
+        ## check for inappropriate argument combinations
+        if useAllSets and not useOptimizedSplitMethodForAllSets:
+            raise ArgumentError("Optimized split took lots of calculation and should be cached/saved, this should not be available yet")
+        if explicitValidationSymbolList and setSplitTuple and setSplitTuple[1] != 0:
+            raise ArgumentError('Cannot use an explicit validation set and a validation split')
+
+        ## default setSplitTuple determination
+        if not setSplitTuple:
+            if explicitValidationSymbolList:
+                self.setSplitTuple = (2/3,0)
+            else:
+                self.setSplitTuple = (1/3,1/3)
+        else:
+            if not explicitValidationSymbolList and setSplitTuple[1] == 0:
+                raise ValueError('No validation set messes things up')
+            self.setSplitTuple = setSplitTuple
+
+        ## purge invalid/inappropriate tickers
+        for s in explicitValidationSymbolList:
             if (s.exchange, s.symbol) in unusableSymbols:
+                explicitValidationSymbolList.remove(s)
+        inappropriateSymbols = [(s.exchange, s.symbol) for s in explicitValidationSymbolList]
+        for s in symbolList:
+            if (s.exchange, s.symbol) in unusableSymbols + inappropriateSymbols:
                 symbolList.remove(s)
+
+
+        if explicitValidationSymbolList:
+            print('Initializing explicit validation stuff')
+            self.initializeExplicitValidationStockDataHandlers(explicitValidationSymbolList)
+            self.initializeExplicitValidationStockDataInstances()
+            self.setupExplicitValidationSet()
+            print('Initializing regular stock data stuff')
+
 
         if useAllSets and useOptimizedSplitMethodForAllSets:
             self.windows = dbm.getTickerSplit(1641959005, 25000)
@@ -116,7 +151,7 @@ class DataManager():
             ## pull and setup financial reports ref
             if gconfig.feature.financials.enabled:
                 startt2 = time.time()
-                self.initializeFinancialDataHandlers(symbolList)
+                self.initializeFinancialDataHandlers(symbolList, explicitValidationSymbolList)
                 print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
 
             startt2 = time.time()
@@ -125,7 +160,7 @@ class DataManager():
             print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
 
             if not initializeStockDataHandlersOnly:
-                self.initializeStockSplitsHandlers(symbolList)
+                self.initializeStockSplitsHandlers(symbolList, explicitValidationSymbolList)
 
                 startt3 = time.time()
                 self.initializeStockDataInstances()
@@ -334,7 +369,10 @@ class DataManager():
 
         return ret
 
-    def initializeStockDataHandlers(self, symbolList: List):
+    def initializeExplicitValidationStockDataHandlers(self, symbolList: List):
+        self.initializeStockDataHandlers(symbolList, 'explicitValidationStockDataHandlers')
+
+    def initializeStockDataHandlers(self, symbolList: List, dmProperty='stockDataHandlers'):
         ## purge unusable symbols
         for s in symbolList:
             if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
@@ -350,16 +388,22 @@ class DataManager():
         if gconfig.multicore:
             for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate), symbolList, chunksize=1, desc='Getting stock data'), desc='Creating stock handlers'):
                 if len(data) >= self.precedingRange + self.followingRange + 1:
-                    self.stockDataHandlers[(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArg(ticker, data))
+                    # self.stockDataHandlers[(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArg(ticker, data))
+                    self.__getattribute__(dmProperty)[(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArg(ticker, data))
+                    
         else:
             for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):
                 data = dbm.getStockData(s.exchange, s.symbol, self.seriesType, minDate=self.minDate)
                 if len(data) >= self.precedingRange + self.followingRange + 1:
-                    self.stockDataHandlers[(s.exchange, s.symbol)] = StockDataHandler(*sdhArg(s, data))
+                    # self.stockDataHandlers[(s.exchange, s.symbol)] = StockDataHandler(*sdhArg(s, data))
+                    self.__getattribute__(dmProperty)[(s.exchange, s.symbol)] = StockDataHandler(*sdhArg(s, data))
 
         if self.shouldNormalize: self.normalize()
 
-    def initializeStockDataInstances(self, stockDataHandlers: List[StockDataHandler]=None, collectOutputClassesOnly=False, verbose=1):
+    def initializeExplicitValidationStockDataInstances(self, **kwargs):
+        self.initializeStockDataInstances(stockDataHandlers=self.explicitValidationStockDataHandlers.values(), dmProperty='explicitValidationStockDataInstances', **kwargs)
+
+    def initializeStockDataInstances(self, stockDataHandlers: List[StockDataHandler]=None, collectOutputClassesOnly=False, dmProperty='stockDataInstances', verbose=1):
         if not stockDataHandlers:
             stockDataHandlers = self.stockDataHandlers.values()
 
@@ -377,14 +421,16 @@ class DataManager():
                 if collectOutputClassesOnly:
                     outputClassCounts[oupclass] += 1
                 else:
-                    self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, h.data[sindex].date)] = DataPointInstance(
+                    # self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, h.data[sindex].date)] = DataPointInstance(
+                    self.__getattribute__(dmProperty)[(h.symbolData.exchange, h.symbolData.symbol, h.data[sindex].date)] = DataPointInstance(
                         self.buildInputVector,
                         h, sindex, oupclass
                     )
 
         if collectOutputClassesOnly: return outputClassCounts
         
-    def initializeFinancialDataHandlers(self, symbolList):
+    def initializeFinancialDataHandlers(self, symbolList, explicitValidationSymbolList):
+        symbolList += explicitValidationSymbolList
         ANALYZE1 = False
         ANALYZE2 = False
         ANALYZE3 = False
@@ -509,7 +555,8 @@ class DataManager():
                 print('insertingtime',insertingtime,'seconds')
                 print('total',gettingtime+massagingtime+creatingtime+insertingtime,'seconds')
 
-    def initializeStockSplitsHandlers(self, symbolList):
+    def initializeStockSplitsHandlers(self, symbolList, explicitValidationSymbolList):
+        symbolList += explicitValidationSymbolList
         ## purge unusable symbols
         for s in symbolList:
             if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
@@ -531,6 +578,10 @@ class DataManager():
         self.setupSets(selectAll=True)
         self.initializedWindow = windowIndex
         gc.collect()
+
+    def setupExplicitValidationSet(self):
+        self.explicitValidationSet = list(self.explicitValidationStockDataInstances.values())
+        random.shuffle(self.explicitValidationSet)
 
     def setupSets(self, setCount=None, setSplitTuple=None, minimumSetsPerSymbol=0, selectAll=False):
         if not setSplitTuple:
@@ -746,7 +797,7 @@ class DataManager():
 
 
         trainingSet = self.trainingSet
-        validationSet = self.validationSet
+        validationSet = shortc(self.explicitValidationSet, self.validationSet)
         testingSet = self.testingSet
 
         if exchange or symbol:

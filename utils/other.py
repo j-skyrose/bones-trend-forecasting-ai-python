@@ -9,6 +9,7 @@ sys.path.append(path)
 
 import numpy, re
 from math import ceil
+from typing import List
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 
@@ -222,6 +223,12 @@ def determinePrecedingRangeType(data):
         if low < open:
             return PrecedingRangeType.INCREASINGWITHWORSELOW
         return PrecedingRangeType.INCREASING
+
+def buildCommaSeparatedTickerPairString(tupleList: List):
+    returnstr = ''
+    for d in tupleList:
+        returnstr += ',(\'' + d[0] + '\',\'' + d[1] + '\')'
+    return returnstr
 
 
 if __name__ == '__main__':

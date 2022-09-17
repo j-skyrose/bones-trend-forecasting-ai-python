@@ -14,6 +14,7 @@ from numpy.lib.function_base import median
 from tensorflow.keras.optimizers import Adam
 from datetime import date, datetime, timedelta
 from typing import Tuple
+from argparse import ArgumentError
 import tensorflow.keras.backend as K
 
 from utils.other import normalizeStockData
@@ -27,8 +28,10 @@ from structures.neuralNetworkInstance import NeuralNetworkInstance
 from constants.enums import AccuracyType, LossAccuracy, OperatorDict, SeriesType
 from constants.exceptions import SufficientlyUpdatedDataNotAvailable
 from utils.support import containsAllKeys, shortc, shortcdict
+from constants.values import tseNoCommissionSymbols
 
 nnm: NeuralNetworkManager = NeuralNetworkManager()
+dbm: DatabaseManager = DatabaseManager()
 
 def getTimestamp(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day, hour=datetime.now().hour, minute=datetime.now().minute):
     return time.mktime(datetime(year, month, day, hour, minute).timetuple())
@@ -40,11 +43,11 @@ class Trainer:
         self.dm: DataManager = DataManager.forTraining(inputVectorFactory=self.network.inputVectorFactory, useAllSets=useAllSets, **kwargs)
         self.useAllSets = useAllSets
 
-        # if network:
-        #     self.network.updateStats(
-        #         normalizationInfo=self.dm.normalizationInfo,
-        #         **kwargs
-        #     ) 
+        if network:
+            self.network.updateStats(
+                normalizationInfo=self.dm.normalizationInfo,
+                **kwargs
+            ) 
 
         kwparams = {}
         if not useAllSets:
@@ -123,16 +126,18 @@ if __name__ == '__main__':
         useAllSets = True
         # precrange = 202
         # precrange = 150
-        precrange = 65
-        folrange = 30
-        threshold = 0.1
-        setSplitTuple = (0.80,0.20)
+        # setSplitTuple = (0.80,0.20)
+        # explicitValidationSymbolList = []
+        setSplitTuple = (0.99,0)
+        explicitValidationSymbolList = dbm.getSymbols(exchange='TSX', symbol=tseNoCommissionSymbols)[1:2]
+
 
         if gconfig.testing.enabled:
             ## testing
             setCount = 250
             # setCount = 5
             minimumSetsPerSymbol = 0
+            useAllSets=False
         else:
             ## real
             setCount = 55000
@@ -182,7 +187,8 @@ if __name__ == '__main__':
             setSplitTuple=setSplitTuple,
             minimumSetsPerSymbol=minimumSetsPerSymbol,
 
-            useAllSets=useAllSets
+            useAllSets=useAllSets,
+            explicitValidationSymbolList=explicitValidationSymbolList
         )
 
 

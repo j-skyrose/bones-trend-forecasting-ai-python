@@ -3,7 +3,7 @@ interestColumn = 'interest'
 
 
 apiList = ['polygon', 'fmp', 'alphavantage']
-standardExchanges = ['BATS','NASDAQ','NYSE','NYSE ARCA','NYSE MKT', 'TSX', 
+standardExchanges = ['BATS','NASDAQ','NYSE','NYSE ARCA','NYSE MKT', 'TSX', 'NEO'
 # 'LSE'
 ]
 

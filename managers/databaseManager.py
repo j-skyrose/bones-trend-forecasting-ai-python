@@ -23,6 +23,7 @@ from structures.neuralNetworkInstance import NeuralNetworkInstance
 from managers.marketDayManager import MarketDayManager
 from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FinancialReportType, OperatorDict, PrecedingRangeType, SQLHelpers, SeriesType, AccuracyType, SetType, SortDirection
 from utils.support import asDate, asISOFormat, asList, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, unixToDatetime
+from utils.other import buildCommaSeparatedTickerPairString
 from constants.values import unusableSymbols, apiList, standardExchanges
 
 ## for ad hoc SQL execution ################################################################################################
@@ -389,10 +390,7 @@ class DatabaseManager(Singleton):
             # break
 
         if len(damagedTickers) > 0:
-            dtstr = ''
-            for d in damagedTickers:
-                dtstr += ',(\'' + d[0] + '\',\'' + d[1] + '\')'
-            print(dtstr)
+            print(buildCommaSeparatedTickerPairString(damagedTickers))
             raise Exception('consecutive gaps too big for some symbols')
 
 
