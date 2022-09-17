@@ -116,6 +116,13 @@ class NeuralNetworkInstance:
                     # input_dim=inputSize,
                     kernel_initializer='lecun_normal'
             )(static_input)
+            for l in layers[0][1:]:
+                static_x = Dense(
+                    int(l['units']),
+                    activation=_getActivationString(l),
+                    kernel_initializer='lecun_normal'
+                )(static_x)
+
             semiseries_x = GRU(
                 int(layers[1][0]['units']),
                 # activation='selu',
@@ -123,6 +130,13 @@ class NeuralNetworkInstance:
                 return_sequences=len(layers[2]) > 1
             )(semiseries_input)
             semiseries_x = Activation(_getActivationString(layers[1][0]))(semiseries_x)
+            for l in layers[1][1:]:
+                semiseries_x = GRU(
+                    int(l['units']),
+                    kernel_initializer='lecun_normal'
+                )(semiseries_x)
+                semiseries_x = Activation(_getActivationString(l))(semiseries_x)
+
             series_x = GRU(
                 int(layers[2][0]['units']),
                 # input_shape=inputSize,  ## (time_steps, features) ...i.e. (days, datapoints per day)
@@ -131,15 +145,26 @@ class NeuralNetworkInstance:
                 return_sequences=len(layers[2]) > 1
             )(series_input)
             series_x = Activation(_getActivationString(layers[2][0]))(series_x)
-                kernel_initializer='lecun_normal'
-            )(series_input)
-            series_x = Activation(_getActivationString(l))(series_x)
+            for l in layers[2][1:]:
+                series_x = GRU(
+                    int(l['units']),
+                    kernel_initializer='lecun_normal'
+                )(series_x)
+                series_x = Activation(_getActivationString(l))(series_x)
 
             x_combined = Concatenate()([
                 static_x, 
                 *([semiseries_x] if gconfig.feature.financials.enabled else []),
                 series_x
             ])
+
+            for l in layers[3]:
+                x_combined = Dense(
+                    int(l['units']),
+                    activation=_getActivationString(l),
+                    kernel_initializer='lecun_normal'
+                )(x_combined)
+
             if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL:
                 xc_units = 2
                 xc_activation = 'softmax'

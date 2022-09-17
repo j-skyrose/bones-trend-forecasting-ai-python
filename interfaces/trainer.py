@@ -82,6 +82,8 @@ class Trainer:
 
     def train(self, **kwargs):
         if not self.useAllSets:
+            if not any(x in kwargs.keys() for x in ['epochs', 'patience']):
+                raise ArgumentError(None, 'Missing epochs, network will not train at all')
             self.instance.train(**kwargs)
         else:
             self.instance.network.useAllSets = True
@@ -142,13 +144,17 @@ if __name__ == '__main__':
             staticSize, semiseriesSize, seriesSize = InputVectorFactory().getInputSize()
             layers = [
                 [
-                    { 'units': math.floor(staticSize / 1), 'dropout': False, 'dropoutRate': 0.001 }
+                    { 'units': math.floor(staticSize / 2), 'dropout': False, 'dropoutRate': 0.001 }
                 ],
                 [
                     { 'units': math.floor(semiseriesSize / 2), 'dropout': False, 'dropoutRate': 0.001 }
                 ],
                 [
-                    { 'units': math.floor(seriesSize / 1), 'dropout': False, 'dropoutRate': 0.001 }
+                    { 'units': math.floor(seriesSize / 1), 'dropout': False, 'dropoutRate': 0.001 },
+                    { 'units': math.floor(seriesSize / 2), 'dropout': False, 'dropoutRate': 0.001 }
+                ],
+                [
+                    { 'units': math.floor((staticSize + semiseriesSize + seriesSize) / 2), 'dropout': False, 'dropoutRate': 0.001 },
                 ]
             ]
         else:

@@ -77,13 +77,14 @@ class TrainingInstance():
         if verbose > 0: print('split:', len(pos[0] if gconfig.network.recurrent else pos), ':', len(neg[0] if gconfig.network.recurrent else pos))
 
         try:
-            validation_data = self.validationDataHandler.getTuple(validationType) if validationType else None
-            self.network.fit(*self.trainingSet, 
-                epochs=sys.maxsize, 
-                batch_size=self.config.batchSize, verbose=verbose, 
-                validation_data=validation_data,
-                callbacks=[DeviationFromBasedEarlyStopping(minEpochs=minEpochs, validation_accuracy=1)]
-            )
+            if not epochs:
+                validation_data = self.validationDataHandler.getTuple(validationType) if validationType else None
+                self.network.fit(*self.trainingSet,
+                    epochs=sys.maxsize,
+                    batch_size=self.config.batchSize, verbose=verbose,
+                    validation_data=validation_data,
+                    callbacks=[DeviationFromBasedEarlyStopping(minEpochs=minEpochs, validation_accuracy=1)]
+                )
 
             callbacks = [TimeBasedEarlyStopping(stopTime=stopTime, timeDuration=timeDuration)]
             if patience: 
