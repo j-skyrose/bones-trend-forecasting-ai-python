@@ -7,7 +7,9 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import copy
+from typing import Tuple
+
+from utils.types import TickerKeyType
 from utils.other import normalizeStockData, denormalizeStockData
 
 '''
@@ -40,8 +42,11 @@ class StockDataHandler:
         if precedingRange and followingRange:
             self.determineSelections(precedingRange, followingRange)
 
-    def getTickerTuple(self):
+    def getTickerTuple(self) -> Tuple[str,str]:
         return (self.symbolData.exchange, self.symbolData.symbol)
+
+    def getTickerKey(self) -> TickerKeyType:
+        return TickerKeyType(*self.getTickerTuple())
 
     def determineSelections(self, precedingRange, followingRange):
         self.selections = [x for x in range(len(self.data)) if precedingRange <= x and x < len(self.data) - followingRange]

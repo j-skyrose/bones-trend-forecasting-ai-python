@@ -32,6 +32,7 @@ from structures.stockDataHandler import StockDataHandler
 from structures.dataPointInstance import DataPointInstance
 from structures.stockSplitsHandler import StockSplitsHandler
 from structures.api.googleTrends.request import GoogleAPI
+from utils.types import TickerDateKeyType, TickerKeyType
 
 DEBUG = True
 
@@ -51,24 +52,23 @@ def multicore_getStockSplitsTickerTuples(ticker):
 
 class DataManager():
     # stockDataManager: StockDataManager = None
-    stockDataHandlers: Dict[Tuple[str,str], StockDataHandler] = {}
-    explicitValidationStockDataHandlers: Dict[Tuple[str,str], StockDataHandler] = {}
+    stockDataHandlers: Dict[TickerKeyType, StockDataHandler] = {}
+    explicitValidationStockDataHandlers: Dict[TickerKeyType, StockDataHandler] = {}
     vixDataHandler = VIXManager().data
-    financialDataHandlers: Dict[Tuple[str, str], FinancialDataHandler] = {}
-    stockSplitsHandlers: Dict[Tuple[str, str], StockSplitsHandler] = {}
-    stockDataInstances: Dict[Tuple[str,str,str], DataPointInstance] = {}
-    explicitValidationStockDataInstances: Dict[Tuple[str,str,str], DataPointInstance] = {}
-    selectedInstances = []
-    # unselectedInstances = []
-    unselectedInstances = {}
+    financialDataHandlers: Dict[TickerKeyType, FinancialDataHandler] = {}
+    stockSplitsHandlers: Dict[TickerKeyType, StockSplitsHandler] = {}
+    stockDataInstances: Dict[TickerDateKeyType, DataPointInstance] = {}
+    explicitValidationStockDataInstances: Dict[TickerDateKeyType, DataPointInstance] = {}
+    selectedInstances: List[DataPointInstance] = []
+    unselectedInstances: List[DataPointInstance] = []
     setSplitTuple = None
-    trainingInstances = []
-    validationInstances = []
-    testingInstances = []
-    trainingSet = []
-    validationSet = []
-    explicitValidationSet = []
-    testingSet = []
+    trainingInstances: List[DataPointInstance] = []
+    validationInstances: List[DataPointInstance] = []
+    testingInstances: List[DataPointInstance] = []
+    trainingSet: List[DataPointInstance] = []
+    validationSet: List[DataPointInstance] = []
+    explicitValidationSet: List[DataPointInstance] = []
+    testingSet: List[DataPointInstance] = []
     inputVectorFactory = None
     setsSlidingWindowPercentage = 0
     useAllSets = False
@@ -348,7 +348,7 @@ class DataManager():
 
         if gconfig.feature.financials.enabled:
             startt = time.time()
-            precfinset = self.financialDataHandlers[(symbolData.exchange, symbolData.symbol)].getPrecedingReports(date.fromisoformat(stockDataSet.data[stockDataIndex].date), self.precedingRange)
+            precfinset = self.financialDataHandlers[stockDataSet.getTickerTuple()].getPrecedingReports(date.fromisoformat(stockDataSet.data[stockDataIndex].date), self.precedingRange)
             self.getprecfintime += time.time() - startt
         else:
             precfinset = []
@@ -388,20 +388,24 @@ class DataManager():
         if gconfig.multicore:
             for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate), symbolList, chunksize=1, desc='Getting stock data'), desc='Creating stock handlers'):
                 if len(data) >= self.precedingRange + self.followingRange + 1:
-                    # self.stockDataHandlers[(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArg(ticker, data))
-                    self.__getattribute__(dmProperty)[(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArg(ticker, data))
+                    self.__getattribute__(dmProperty)[TickerKeyType(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArg(ticker, data))
                     
         else:
             for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):
                 data = dbm.getStockData(s.exchange, s.symbol, self.seriesType, minDate=self.minDate)
                 if len(data) >= self.precedingRange + self.followingRange + 1:
-                    # self.stockDataHandlers[(s.exchange, s.symbol)] = StockDataHandler(*sdhArg(s, data))
-                    self.__getattribute__(dmProperty)[(s.exchange, s.symbol)] = StockDataHandler(*sdhArg(s, data))
+                    self.__getattribute__(dmProperty)[TickerKeyType(s.exchange, s.symbol)] = StockDataHandler(*sdhArg(s, data))
 
         if self.shouldNormalize: self.normalize()
 
     def initializeExplicitValidationStockDataInstances(self, **kwargs):
         self.initializeStockDataInstances(stockDataHandlers=self.explicitValidationStockDataHandlers.values(), dmProperty='explicitValidationStockDataInstances', **kwargs)
+        # psints, nsints = getInstancesByClass(list(self.explicitValidationStockDataInstances.values()))
+        # ratio = len(psints) / (len(psints) + len(nsints))
+        # if ratio < gconfig.trainer.customValidationClassValueRatio:
+        #     raise ValueError('Insufficient ratio: {}'.format(ratio))
+        # else:
+        #     print('Explicit validation set ratio: {}'.format(ratio))
 
     def initializeStockDataInstances(self, stockDataHandlers: List[StockDataHandler]=None, collectOutputClassesOnly=False, dmProperty='stockDataInstances', verbose=1):
         if not stockDataHandlers:
@@ -421,8 +425,7 @@ class DataManager():
                 if collectOutputClassesOnly:
                     outputClassCounts[oupclass] += 1
                 else:
-                    # self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, h.data[sindex].date)] = DataPointInstance(
-                    self.__getattribute__(dmProperty)[(h.symbolData.exchange, h.symbolData.symbol, h.data[sindex].date)] = DataPointInstance(
+                    self.__getattribute__(dmProperty)[TickerDateKeyType(*h.getTickerTuple(), h.data[sindex].date)] = DataPointInstance(
                         self.buildInputVector,
                         h, sindex, oupclass
                     )
@@ -437,7 +440,7 @@ class DataManager():
 
         if gconfig.multicore:
             for ticker, data in tqdm.tqdm(process_map(multicore_getFinancialDataTickerTuples, symbolList, chunksize=1, desc='Getting financial data'), desc='Creating financial handlers'):
-                self.financialDataHandlers[(ticker.exchange, ticker.symbol)] = FinancialDataHandler(ticker, data)  
+                self.financialDataHandlers[TickerKeyType(ticker.exchange, ticker.symbol)] = FinancialDataHandler(ticker, data)  
 
         else:
             gettingtime = 0
@@ -451,7 +454,7 @@ class DataManager():
                 for s in tqdm.tqdm(symbolList, desc='Creating financial handlers'):  
                     if (s.exchange, s.symbol) in unusableSymbols: continue
                     if not ANALYZE1 and not ANALYZE2 and not ANALYZE3:
-                        self.financialDataHandlers[(s.exchange, s.symbol)] = FinancialDataHandler(s, dbm.getFinancialData(s.exchange, s.symbol))
+                        self.financialDataHandlers[TickerKeyType(s.exchange, s.symbol)] = FinancialDataHandler(s, dbm.getFinancialData(s.exchange, s.symbol))
                     else:
 
                         if ANALYZE3:
@@ -521,7 +524,7 @@ class DataManager():
                             if s: 
                                 
                                 # raise IndexError
-                                self.financialDataHandlers[(r.exchange, r.symbol)] = FinancialDataHandler(s, recdotlist(ret))
+                                self.financialDataHandlers[TickerKeyType(r.exchange, r.symbol)] = FinancialDataHandler(s, recdotlist(ret))
                             
                         ret = []
                         curquarter = createQuarterObj(r)
@@ -541,9 +544,10 @@ class DataManager():
                 fdhs = multicore_poolIMap(parseResAndCreateFDH, restotal)
                 creatingtime += time.time() - startt
 
+                fdh: FinancialDataHandler
                 for fdh in fdhs:
                     startt = time.time()
-                    self.financialDataHandlers[(fdh.symbolData.exchange, fdh.symbolData.symbol)] = fdh
+                    self.financialDataHandlers[fdh.getTickerKey()] = fdh
                     insertingtime += time.time() - startt
 
 
@@ -563,11 +567,11 @@ class DataManager():
 
         if gconfig.multicore:
             for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockSplitsTickerTuples), symbolList, chunksize=1, desc='Getting stock splits data'), desc='Creating stock splits handlers'):
-                self.stockSplitsHandlers[(ticker.exchange, ticker.symbol)] = StockSplitsHandler(ticker.exchange, ticker.symbol, data)
+                self.stockSplitsHandlers[TickerKeyType(ticker.exchange, ticker.symbol)] = StockSplitsHandler(ticker.exchange, ticker.symbol, data)
                     
         else:
             for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):
-                self.stockSplitsHandlers[(s.exchange, s.symbol)] = StockSplitsHandler(s.exchange, s.symbol, dbm.getStockSplits(s.exchange, s.symbol))
+                self.stockSplitsHandlers[TickerKeyType(s.exchange, s.symbol)] = StockSplitsHandler(s.exchange, s.symbol, dbm.getStockSplits(s.exchange, s.symbol))
 
     def initializeWindow(self, windowIndex):
         self.stockDataInstances.clear()
@@ -608,6 +612,7 @@ class DataManager():
             ## cover minimums
             if minimumSetsPerSymbol > 0:
                 self.unselectedInstances = []
+                h: StockDataHandler
                 for h in self.stockDataHandlers.values():
                     available = h.getAvailableSelections()
                     sampleSize = min(minimumSetsPerSymbol, len(available))
@@ -619,9 +624,9 @@ class DataManager():
                         # print(selectDates)
                         random.shuffle(selectDates)
                         for d in selectDates[:sampleSize]:
-                            self.selectedInstances.append(self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, d)])
+                            self.selectedInstances.append(self.stockDataInstances[(h.getTickerTuple(), d)])
                         for d in selectDates[sampleSize:]:
-                            self.unselectedInstances.append(self.stockDataInstances[(h.symbolData.exchange, h.symbolData.symbol, d)])
+                            self.unselectedInstances.append(self.stockDataInstances[(h.getTickerTuple(), d)])
                 if DEBUG: 
                     print(len(self.selectedInstances), 'instances selected to cover minimums')
                     print(len(self.unselectedInstances), 'instances available for remaining selection')
@@ -678,7 +683,6 @@ class DataManager():
         ## shuffle and distribute instances
         random.shuffle(self.selectedInstances)
         c1, c2 = getInstancesByClass(self.selectedInstances)
-        # b = self._checkSelectedBalance()
         trnStop = setSplitTuple[0]
         vldStop = setSplitTuple[1] + trnStop
         if DEBUG: print('stops', trnStop, vldStop)
@@ -706,8 +710,27 @@ class DataManager():
             return len(self.windows)
         return math.ceil(1 / self.setsSlidingWindowPercentage)
 
-    def _checkSelectedBalance(self):
-        pclass, nclass = getInstancesByClass(self.selectedInstances)
+    def getInstanceRatio(self, ticker:TickerKeyType=None, instanceList:List[DataPointInstance]=None, instanceDict:Dict[TickerDateKeyType,DataPointInstance]=None):
+        if not ticker and not instanceList and not instanceDict: raise ArgumentError('Missing something to check')
+
+        instances:List[DataPointInstance]
+        if ticker:
+            if type(ticker) is TickerKeyType: ticker = ticker.getTuple()
+            if ticker in self.stockDataHandlers.keys():
+                unfilteredInstances = list(self.stockDataInstances.values())
+            elif ticker in self.explicitValidationStockDataHandlers:
+                unfilteredInstances = list(self.explicitValidationStockDataInstances.values())
+            if unfilteredInstances:
+                instances = filter(lambda x: x.stockDataHandler.getTickerTuple() == ticker, unfilteredInstances)
+            else:
+                raise ArgumentError('No data instances for ticker {}'.format(ticker))
+        else:
+            if instanceList:
+                instances = instanceList
+            else:
+                instances = list(instanceDict.values())
+
+        pclass, nclass = getInstancesByClass(instances)
         return len(pclass) / (len(pclass) + len(nclass))
 
     def _getSetSlice(self, set, index):
@@ -728,10 +751,6 @@ class DataManager():
             if (not exchange and not symbol) or (exchange and exchange == x.stockDataHandler.symbolData.exchange and (not symbol or symbol == x.stockDataHandler.symbolData.symbol))
         ]
         if verbose >= 1: print(exchange, symbol, ':', len(sourceSet), '->', len(ret))
-        # ret = []
-        # for x in set:
-        #     if exchange == x.handler.symbolData.exchange and (not symbol or symbol == x.handler.symbolData.symbol):
-        #         ret.append(x)
         return ret
 
     def getKerasSets(self, classification=0, validationDataOnly=False, exchange=None, symbol=None, slice=None, verbose=1):

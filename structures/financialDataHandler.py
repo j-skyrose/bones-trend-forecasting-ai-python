@@ -7,7 +7,10 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
+from typing import Tuple
 from datetime import timedelta, date
+
+from utils.types import TickerKeyType
 from utils.other import maxQuarters, normalizeFinancials
 from utils.support import _edgarformatd
 
@@ -20,6 +23,12 @@ class FinancialDataHandler:
 
         if generalMax:
             self.normalize(generalMax)
+
+    def getTickerTuple(self) -> Tuple[str,str]:
+        return (self.symbolData.exchange, self.symbolData.symbol)
+
+    def getTickerKey(self) -> TickerKeyType:
+        return TickerKeyType(*self.getTickerTuple())
 
     def normalize(self, generalMax):
         if not self.normalized:
