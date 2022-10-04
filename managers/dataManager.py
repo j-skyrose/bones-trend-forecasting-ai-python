@@ -344,7 +344,8 @@ class DataManager():
         precset = stockDataSet.getPrecedingSet(stockDataIndex)
         self.getprecstocktime += time.time() - startt
 
-        splitsset = self.stockSplitsHandlers[stockDataSet.getTickerTuple()].getForRange(precset[0].date, precset[-1].date)
+        try: splitsset = self.stockSplitsHandlers[stockDataSet.getTickerTuple()].getForRange(precset[0].date, precset[-1].date)
+        except KeyError: splitsset = []
 
         if gconfig.feature.financials.enabled:
             startt = time.time()
@@ -363,7 +364,8 @@ class DataManager():
             'todo',
             symbolData.sector,
             symbolData.exchange,
-            splitsset
+            splitsset,
+            symbolData.asset_type == 'ETF'
         )
         self.actualbuildtime += time.time() - startt
 

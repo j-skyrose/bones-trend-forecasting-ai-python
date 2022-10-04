@@ -99,7 +99,7 @@ def shortcdict(dict, key, e, shortcValue=True):
     try:
         if shortcValue: return shortc(dict[key], e)
         else: return dict[key]
-    except KeyError:
+    except (KeyError, TypeError):
         return e
 
 def flatten(li: list):

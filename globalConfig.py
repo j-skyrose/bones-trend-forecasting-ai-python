@@ -111,10 +111,11 @@ config = recdotdict({
 
     },
     'feature': {
-        'exchange': genFeatureObj(False, FeatureExtraType.SINGLE),
+        'exchange': genFeatureObj(True, FeatureExtraType.SINGLE),
         'sector': genFeatureObj(False, FeatureExtraType.SINGLE, True), ## polygon API changed to v3, this info in DB may be outdated/incorrect due to de/re-listing of symbols by different companys
         'companyAge': genFeatureObj(False, FeatureExtraType.SINGLE, True), ## polygon API changed to v3, this info in DB may be outdated/incorrect due to de/re-listing of symbols by different companys
         'ipoAge': genFeatureObj(False, FeatureExtraType.SINGLE),
+        'etf': genFeatureObj(True, FeatureExtraType.SINGLE, True),
 
         'dayOfWeek': genFeatureObj(True, FeatureExtraType.OF),
         'dayOfMonth': genFeatureObj(True, FeatureExtraType.OF),

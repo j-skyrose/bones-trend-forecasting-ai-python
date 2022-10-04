@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta
 
 from globalConfig import config as gconfig
 from constants.enums import DataFormType, FeatureExtraType, InputVectorDataType
-from constants.values import interestColumn
+from constants.values import interestColumn, standardExchanges
 from utils.support import Singleton, flatten, recdotdict, _isoformatd, shortc, _edgarformatd
 from utils.other import maxQuarters
 from structures.stockDataHandler import StockDataHandler
@@ -64,7 +64,7 @@ class InputVectorFactory(Singleton):
 #     def toString(self):
 #         return self.logstring
 
-    def build(self, stockDataSet, vixData, financialDataSet, googleInterests, foundedDate, ipoDate, sector, exchange, stockSplits, getSplitStat=False):
+    def build(self, stockDataSet, vixData, financialDataSet, googleInterests, foundedDate, ipoDate, sector, exchange, stockSplits, etfFlag, getSplitStat=False):
         global loggedonce
         if gconfig.network.recurrent:
             inpVecStats = {e: {} for e in InputVectorDataType}
@@ -289,7 +289,8 @@ class InputVectorFactory(Singleton):
                 elif k == 'exchange':
                     vectorListType = InputVectorDataType.STATIC
                     if collectStats: startt = time.time()
-                    vectorAsList = self._getCategoricalVector(exchange, lookupList=self.dbm.getExchanges(), topBuffer=3)
+                    # vectorAsList = self._getCategoricalVector(exchange, lookupList=self.dbm.getExchanges(), topBuffer=3)
+                    vectorAsList = self._getCategoricalVector(exchange, lookupList=standardExchanges)
 
                     if collectStats: sm.ktypeexchangetime += time.time() - startt
                 elif k == 'sector':
@@ -332,6 +333,12 @@ class InputVectorFactory(Singleton):
                     vectorAsList = [((_isoformatd(stockDataSet[-1]) - date.fromisoformat(ipoDate)).days) / 40 / 365] if ipoDate else [0]
 
                     if collectStats: sm.ktypeipoagetime += time.time() - startt
+                elif k == 'etf':
+                    vectorListType = InputVectorDataType.STATIC
+                    if collectStats: startt = time.time()
+                    vectorAsList = [1] if etfFlag else [0]
+
+                    if collectStats: sm.ktypeetftime += time.time() - startt
 
                 ##############################################################################################################################
 
@@ -411,7 +418,7 @@ class InputVectorFactory(Singleton):
             })]
             mockginterests = {} ## todo
 
-            self.stats = self.build(mockstockDataSet, mockvix, mockfinancialDataSet, mockginterests, mocklistdt, mockipodt, 'Technology', 'NYSE', [], getSplitStat=True)
+            self.stats = self.build(mockstockDataSet, mockvix, mockfinancialDataSet, mockginterests, mocklistdt, mockipodt, 'Technology', 'NYSE', [], False, getSplitStat=True)
 
         return self.stats
 
