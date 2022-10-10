@@ -141,7 +141,7 @@ config = recdotdict({
                 ['Assets', 'Liabilities', 'StockholdersEquity']
             ],
         }},
-        'googleInterests': genFeatureObj(False, FeatureExtraType.INTEREST)
+        'googleInterests': genFeatureObj(True, FeatureExtraType.INTEREST)
     },
 
     'testing': {

@@ -9,8 +9,6 @@ sys.path.append(path)
 
 from constants.enums import OutputClass
 from structures.stockDataHandler import StockDataHandler
-from constants.values import interestColumn
-from utils.support import shortc
 
 class DataPointInstance:
     ## index is the anchor point, between preceding and following, so total length will always be +1
@@ -19,27 +17,13 @@ class DataPointInstance:
         self.stockDataHandler: StockDataHandler = stockDataHandler
         self.index = index
         self.outputClass = outputClass
-        self.googleInterestData = {}
 
     def getInputVector(self):
         # if self.handler.symbolData.asset_type != 'ETF' and self.handler.symbolData.asset_type != 'ETP':
         #     print('f')
         #     pass
         #     pass
-        return self.buildInputVectorFunc(self.stockDataHandler, self.index, self.googleInterestData, self.stockDataHandler.symbolData)
+        return self.buildInputVectorFunc(self.stockDataHandler, self.index, self.stockDataHandler.symbolData)
 
     def getOutputVector(self):
         return 0 if self.outputClass == OutputClass.NEGATIVE else 1
-
-    def setGoogleInterestData(self, data):
-        gdataKeys = [r.strftime('%Y-%m-%d') for r in list(data.to_dict()[interestColumn].keys())]
-
-        ## normalize
-        offset = 0.5
-        for k in gdataKeys:
-            data.at[k, interestColumn] = (data.at[k, interestColumn] / 100) - offset
-
-        self.googleInterestData = data
-    
-    def getGoogleInterestAt(self, dt):
-        return self.googleInterestData.at[dt, interestColumn]

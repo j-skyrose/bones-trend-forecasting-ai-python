@@ -1,4 +1,5 @@
 
+## for backward compatibility only, new ivFactories will not use
 interestColumn = 'interest'
 
 

@@ -21,7 +21,7 @@ from structures.api.googleTrends.request import GoogleAPI
 from globalConfig import config as gconfig
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from managers.marketDayManager import MarketDayManager
-from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FinancialReportType, OperatorDict, PrecedingRangeType, SQLHelpers, SeriesType, AccuracyType, SetType, SortDirection
+from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FinancialReportType, InterestType, OperatorDict, PrecedingRangeType, SQLHelpers, SeriesType, AccuracyType, SetType, Direction
 from utils.support import asDate, asISOFormat, asList, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, unixToDatetime
 from utils.other import buildCommaSeparatedTickerPairString
 from constants.values import unusableSymbols, apiList, standardExchanges
@@ -157,11 +157,11 @@ class DatabaseManager(Singleton):
             self.dbc.executemany(stmt, tuples)
 
     ## get data from symbol_list table
-    def getSymbols(self, exchange=None, symbol=None, assetType=None, api=None, googleTopicId=None, withDetailsMissing=False):
+    def getSymbols(self, exchange=None, symbol=None, assetType=None, api=None, googleTopicId:Union[str, SQLHelpers]=None, withDetailsMissing=False):
         stmt = 'SELECT * FROM symbols'
         args = []
         adds = []
-        if exchange or symbol or assetType or api or withDetailsMissing:
+        if exchange or symbol or assetType or api or withDetailsMissing or googleTopicId:
             stmt += ' WHERE '
             if exchange:
                 adds.append('exchange = ?')
@@ -181,9 +181,12 @@ class DatabaseManager(Singleton):
                     adds.append('(' + ' OR '.join(apiAdds) + ')')
                 else:
                     adds.append('api_'+api+' = 1')
-            if googleTopicId:
-                adds.append('google_topic_id = ?')
-                args.append(googleTopicId if googleTopicId != -1 else None)
+            if googleTopicId is not None:
+                if type(googleTopicId) == SQLHelpers:
+                    adds.append(f' google_topic_id IS {googleTopicId.value}')
+                else:
+                    adds.append(' google_topic_id = ? ')
+                    args.append(googleTopicId)
             if withDetailsMissing:
                 adds.append('((sector IS NULL AND industry IS NULL) OR (sector = \'\' and industry = \'\'))')
 
@@ -264,7 +267,7 @@ class DatabaseManager(Singleton):
         return self.__purgeUnusableTickers(self.dbc.execute(stmt, tuple(args)).fetchall(), **kwargs)
 
     ## used by collector to determine which stocks are more in need of new/updated data
-    def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, stype=None, api=None, apiSortDirection:SortDirection=SortDirection.DESCENDING, apiFilter:Union[APIState, List[APIState]]=APIState.WORKING, exchanges=standardExchanges):
+    def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, stype=None, api=None, apiSortDirection:Direction=Direction.DESCENDING, apiFilter:Union[APIState, List[APIState]]=APIState.WORKING, exchanges=standardExchanges):
         stmt = 'SELECT s.*, u.api, u.date FROM last_updates u join symbols s on u.exchange=s.exchange and u.symbol=s.symbol'
         args = []
         adds = []
@@ -501,8 +504,8 @@ class DatabaseManager(Singleton):
         DEBUG = True
         gapi = GoogleAPI()
         stmt = 'UPDATE symbols SET google_topic_id=? WHERE exchange=? AND symbol=? '
-        symbols = self.getSymbols(api=['alphavantage', 'polygon'], googleTopicId=-1)
-        topicsFound = 0
+        symbols = self.getSymbols(api=['alphavantage', 'polygon'], googleTopicId=None)
+        topicsFound = []
         alreadyFound = 0
         for s in tqdm(symbols):
             if not s.google_topic_id:
@@ -512,10 +515,12 @@ class DatabaseManager(Singleton):
                 for t in topics:
                     if t['type'] == 'Topic' and t['title'] == kw:
                         self.dbc.execute(stmt, (t['mid'], s.exchange, s.symbol))
-                        topicsFound += 1
+                        topicsFound.append(kw)
             else:
                 alreadyFound += 1
-        if DEBUG: print(topicsFound, '/', len(symbols) - alreadyFound, 'topics found')
+        if DEBUG: 
+            for t in topicsFound: print(t)
+        print(len(topicsFound), '/', len(symbols) - alreadyFound, 'topics found')
 
     def getFinancialData(self, exchange, symbol, raw=False):
         stmt = 'SELECT * FROM vwtb_edgar_financial_nums n JOIN vwtb_edgar_quarters q ON n.exchange = q.exchange AND n.symbol = q.symbol AND n.ddate = q.period WHERE n.exchange=? AND n.symbol=? ORDER BY q.period'
@@ -617,6 +622,28 @@ class DatabaseManager(Singleton):
                 args.append(symbol)
         return self.dbc.execute(stmt, tuple(args)).fetchall()
 
+    def getGoogleInterests(self, exchange=None, symbol=None, gtopicid=None, itype:InterestType=InterestType.DAILY, stream=None, artificial=None, dt=None):
+        stmt = 'SELECT * FROM google_interests gi JOIN symbols s ON gi.exchange=s.exchange AND gi.symbol=s.symbol WHERE gi.type = ? '
+        args = [itype.name]
+        if gtopicid:
+            stmt += 'AND gi.google_topic_id=? '
+            args.append(gtopicid)
+        elif exchange and symbol:
+            stmt += 'AND s.exchange=? and s.symbol=? '
+            args.extend([exchange, symbol])
+        if stream is not None:
+            stmt += ' AND gi.stream=? '
+            args.append(stream)
+        if artificial is not None:
+            stmt += ' AND gi.artificial=? '
+            args.append(artificial)
+        if dt is not None:
+            stmt += ' AND gi.date=? '
+            args.append(dt)
+        stmt += 'ORDER BY gi.date ASC'
+
+        return self.dbc.execute(stmt, tuple(args)).fetchall()
+
     ## end gets ####################################################################################################################################################################
     ####################################################################################################################################################################
     ## sets ####################################################################################################################################################################
@@ -697,21 +724,12 @@ class DatabaseManager(Singleton):
 
         ## save data_sets and corresponding google_interests
         ds_stmt = 'INSERT OR REPLACE INTO data_sets(network_id, exchange, symbol, series_type, date, network_set_id, set_type) VALUES (?,?,?,?,?,?,?)'
-        gi_stmt = 'INSERT OR REPALCE INTO google_interests(data_set_id, date, relative_interest) VALUES (?,?,?)'
         
         def _saveSet(dset, stype):
             for i in tqdm(dset, desc='Saving ' + stype.name + ' set and interests'):
                 ## save to data_sets
                 h = i.handler
                 self.dbc.execute(ds_stmt, (id, h.symbolData.exchange, h.symbolData.symbol, h.seriesType.name, h.data[i.index].date, setId, stype.name))
-                
-                ## save to google_interests
-                if gconfig.feature.googleInterests.enabled:
-                    ds_id = self.dbc.lastrowid
-                    tpls = []
-                    for dt in [d.date for d in h.getPrecedingSet(i.index)]:
-                        tpls.append((ds_id, dt, i.getGoogleInterestAt(dt)))
-                    self.dbc.executemany(gi_stmt, tpls)
             
         # for t in SetType
         _saveSet(trainingSet, SetType.TRAINING)
@@ -1084,6 +1102,11 @@ class DatabaseManager(Singleton):
     def insertStockSplit(self, exchange, symbol, date, split_from, split_to):
         stmt = 'INSERT INTO stock_splits VALUES (?,?,?,?,?)'
         tpl = (shortc(exchange, SQLHelpers.UNKNOWN.value), symbol, date, split_from, split_to)
+        self.dbc.execute(stmt, tpl)
+
+    def insertGoogleInterest(self, exchange, symbol, itype:InterestType, date:str, value, stream=0, artificial=False):
+        stmt = 'INSERT INTO google_interests VALUES (?,?,?,?,?,?,?)'
+        tpl = (exchange, symbol, date, itype.name, stream, value, artificial)
         self.dbc.execute(stmt, tpl)
 
     ## end sets ####################################################################################################################################################################
@@ -1947,6 +1970,46 @@ class DatabaseManager(Singleton):
         #             print('collision', t.exchange, t.symbol)
 
         ################################################################
+
+    ## determines sum of all interests (0-100) in given period
+    def analyzeGoogleInterests_totalInterestInCollectionPeriod(self, itype:InterestType=InterestType.DAILY, period=timedelta(weeks=34)):
+        direction = Direction.DESCENDING
+
+        symbollist = self.getSymbols(googleTopicId=SQLHelpers.NOTNULL)
+        print(f'Checking {len(symbollist)} symbols')    
+        for s in symbollist:
+            tickergid = (s.exchange, s.symbol, s.google_topic_id)
+
+            ginterests = self.getGoogleInterests(s.exchange, s.symbol, itype=itype)
+            if ginterests:
+
+                directionmodifier = -1 if direction == Direction.DESCENDING else 1
+
+                ind = len(ginterests) -1
+                periodtotals = []
+                startdate = date.fromisoformat(ginterests[-1].date)
+                try:
+                    while True:
+                        periodtotal = []
+                        enddate = startdate + (period * directionmodifier)
+                        while date.fromisoformat(ginterests[ind].date) != enddate + (timedelta(days=1) * directionmodifier):
+                            periodtotal.append(ginterests[ind].relative_interest)
+                            ind += directionmodifier
+                        
+                        periodtotals.append(periodtotal)
+                        startdate = enddate
+                        break
+                except IndexError:
+                    pass
+
+                res = []
+                for perd in periodtotals:
+                    zerocount = 0
+                    for p in perd:
+                        if p == 0: zerocount += 1
+                    res.append(('sum',sum(perd),0,zerocount,'avg',sum(perd)/len(perd),'rel0',zerocount/len(perd)))
+
+                print(*tickergid, *res)
 
 
 

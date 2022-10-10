@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta
 
 from structures.inputVectorStats import InputVectorStats
 from utils.support import recdotdict, shortc, _isoformatd
-from constants.values import interestColumn, stockOffset
+from constants.values import stockOffset
 from constants.enums import OutputClass, PrecedingRangeType
 
 from globalConfig import config
@@ -71,119 +71,6 @@ def maxQuarters(precedingDays):
     return ceil(precedingDays/90)
    
 loggedonce = False
-def _inputVector_old(dataSet, vixRef, googleInterests, listingDate, sector, getSplitStat=False):
-    global loggedonce
-    v_dayofweek = []
-    v_dayofmonth = []
-    v_monthofyear = []
-    v_stock_open = []
-    v_stock_high = []
-    v_stock_low = []
-    v_stock_close = []
-    v_stock_volume = []
-    v_vix_open = []
-    v_vix_high = []
-    v_vix_low = []
-    v_vix_close = []
-    v_googleinterest = []
-
-    v_singleinstance = []
-    ## single stats
-    if config.feature.use.listingAge: v_singleinstance.append()
-    if config.feature.use.sector: v_singleinstance.extend(getCategoricalVector(sector, lookupList=dbm.getSectors(), topBuffer=3))
-
-    ## date stats
-    for d in dataSet:
-        dt = date.fromisoformat(d.date)
-        try:
-            v = vixRef.data[d.date]
-        except:
-            print(d.date, d.date in vixRef.data.keys())
-            raise KeyError
-
-        # if config.feature.use.dayOfWeek: v_dayofweek.extend(getCategoricalVector(dt.weekday(), 7))
-        # if config.feature.use.dayOfMonth: v_dayofmonth.extend(getCategoricalVector(dt.day - 1, 31))
-        # if config.feature.use.monthOfYear: v_monthofyear.extend(getCategoricalVector(dt.month - 1, 12))
-        if config.feature.use.dayOfWeek: v_dayofweek.append(dt.weekday()/6 - 0.5)
-        if config.feature.use.dayOfMonth: v_dayofmonth.append((dt.day - 1)/monthrange(dt.year, dt.month)[1] - 0.5)
-        if config.feature.use.monthOfYear: v_monthofyear.append((dt.month - 1)/12 - 0.5)
-
-        if config.feature.use.stock.open: v_stock_open.append(d.open)
-        if config.feature.use.stock.high: v_stock_high.append(d.high)
-        if config.feature.use.stock.low: v_stock_low.append(d.low)
-        if config.feature.use.stock.close: v_stock_close.append(d.close)
-        if config.feature.use.stock.volume: v_stock_volume.append(d.volume)
-        if config.feature.use.vix.open: v_vix_open.append(v.open)
-        if config.feature.use.vix.high: v_vix_high.append(v.high)
-        if config.feature.use.vix.low: v_vix_low.append(v.low)
-        if config.feature.use.vix.close: v_vix_close.append(v.close)
-        if config.feature.use.googleInterests: v_googleinterest.append(googleInterests.at[dt, interestColumn])
-
-    # print(loggedonce)
-    if not loggedonce and not getSplitStat:
-        loggedonce = True
-        globals()['runningtotal'] = 0
-        def speclogl(string, list):
-            try: t = len(list)*len(list[0]) 
-            except TypeError: t = len(list)
-            except IndexError: t = 0
-            globals()['runningtotal'] += t
-            print(string, t, globals()['runningtotal'])
-
-        print('Input vector split:')
-        if config.feature.use.dayOfWeek: speclogl('v_dayofweek', v_dayofweek)
-        if config.feature.use.dayOfMonth: speclogl('v_dayofmonth', v_dayofmonth)
-        if config.feature.use.monthOfYear: speclogl('v_monthofyear', v_monthofyear)
-        if config.feature.use.stock.open: speclogl('v_stock_open', v_stock_open)
-        if config.feature.use.stock.high: speclogl('v_stock_high', v_stock_high)
-        if config.feature.use.stock.low: speclogl('v_stock_low', v_stock_low)
-        if config.feature.use.stock.close: speclogl('v_stock_close', v_stock_close)
-        if config.feature.use.stock.volume: speclogl('v_stock_volume', v_stock_volume)
-        if config.feature.use.vix.open: speclogl('v_vix_open', v_vix_open)
-        if config.feature.use.vix.high: speclogl('v_vix_high', v_vix_high)
-        if config.feature.use.vix.low: speclogl('v_vix_low', v_vix_low)
-        if config.feature.use.vix.close: speclogl('v_vix_close', v_vix_close)
-        if config.feature.use.googleInterests: speclogl('v_googleinterest', v_googleinterest)
-
-    if getSplitStat:
-        ivs = InputVectorStats()
-        if config.feature.use.dayOfWeek: ivs.addStatFromList('v_dayofweek', v_dayofweek)
-        if config.feature.use.dayOfMonth: ivs.addStatFromList('v_dayofmonth', v_dayofmonth)
-        if config.feature.use.monthOfYear: ivs.addStatFromList('v_monthofyear', v_monthofyear)
-        if config.feature.use.stock.open: ivs.addStatFromList('v_stock_open', v_stock_open)
-        if config.feature.use.stock.high: ivs.addStatFromList('v_stock_high', v_stock_high)
-        if config.feature.use.stock.low: ivs.addStatFromList('v_stock_low', v_stock_low)
-        if config.feature.use.stock.close: ivs.addStatFromList('v_stock_close', v_stock_close)
-        if config.feature.use.stock.volume: ivs.addStatFromList('v_stock_volume', v_stock_volume)
-        if config.feature.use.vix.open: ivs.addStatFromList('v_vix_open', v_vix_open)
-        if config.feature.use.vix.high: ivs.addStatFromList('v_vix_high', v_vix_high)
-        if config.feature.use.vix.low: ivs.addStatFromList('v_vix_low', v_vix_low)
-        if config.feature.use.vix.close: ivs.addStatFromList('v_vix_close', v_vix_close)
-        if config.feature.use.googleInterests: ivs.addStatFromList('v_googleinterest', v_googleinterest)
-
-        return ivs
-    else:
-        retarr = []
-        if config.feature.use.dayOfWeek: retarr += v_dayofweek
-        if config.feature.use.dayOfMonth: retarr += v_dayofmonth
-        if config.feature.use.monthOfYear: retarr += v_monthofyear
-        if config.feature.use.stock.open: retarr += v_stock_open
-        if config.feature.use.stock.high: retarr += v_stock_high
-        if config.feature.use.stock.low: retarr += v_stock_low
-        if config.feature.use.stock.close: retarr += v_stock_close
-        if config.feature.use.stock.volume: retarr += v_stock_volume
-        if config.feature.use.vix.open: retarr += v_vix_open
-        if config.feature.use.vix.high: retarr += v_vix_high
-        if config.feature.use.vix.low: retarr += v_vix_low
-        if config.feature.use.vix.close: retarr += v_vix_close
-        if config.feature.use.googleInterests: retarr += v_googleinterest
-        return numpy.array(
-            retarr
-            # v_dayofweek + v_dayofmonth + v_monthofyear +
-            # v_stock_open + v_stock_high + v_stock_low + v_stock_close + v_stock_volume +
-            # v_vix_open + v_vix_high + v_vix_low + v_vix_close +
-            # v_googleinterest
-        )
 
 def getInstancesByClass(instances):
     pclass = []

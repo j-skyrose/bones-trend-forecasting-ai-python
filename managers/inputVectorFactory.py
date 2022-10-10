@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta
 
 from globalConfig import config as gconfig
 from constants.enums import DataFormType, FeatureExtraType, InputVectorDataType
-from constants.values import interestColumn, standardExchanges
+from constants.values import standardExchanges
 from utils.support import Singleton, flatten, recdotdict, _isoformatd, shortc, _edgarformatd
 from utils.other import maxQuarters
 from structures.stockDataHandler import StockDataHandler
@@ -176,7 +176,8 @@ class InputVectorFactory(Singleton):
                 elif k == 'googleInterests':
                     vectorListType = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
-                    vectorAsList = [googleInterests.at[_isoformatd(d), interestColumn] for d in stockDataSet]
+                    if googleInterests: vectorAsList = [googleInterests[d.date] for d in stockDataSet]
+                    else:               vectorAsList = [0 for d in stockDataSet]
                     if collectStats: sm.ktypegoogleintereststime += time.time() - startt
                 
                 elif k == 'stockSplits':
@@ -416,7 +417,9 @@ class InputVectorFactory(Singleton):
                     'StockholdersEquity': 8750
                 }
             })]
-            mockginterests = {} ## todo
+            mockginterests = recdotdict({
+                mockipodt: 10 for x in range(precedingRange)
+            })
 
             self.stats = self.build(mockstockDataSet, mockvix, mockfinancialDataSet, mockginterests, mocklistdt, mockipodt, 'Technology', 'NYSE', [], False, getSplitStat=True)
 

@@ -20,7 +20,7 @@ from urllib.parse import quote
 
 from structures.api.googleTrends.gt_exceptions import ResponseError
 
-from constants.values import interestColumn
+interestColumn = 'interest'
 
 class GoogleAPI(object):
     """

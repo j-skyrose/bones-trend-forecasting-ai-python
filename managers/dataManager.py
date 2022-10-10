@@ -17,7 +17,7 @@ from functools import partial
 from argparse import ArgumentError
 
 from globalConfig import config as gconfig
-from constants.enums import DataFormType, OperatorDict, OutputClass, SeriesType, SetType
+from constants.enums import DataFormType, InterestType, OperatorDict, OutputClass, SeriesType, SetType
 from utils.support import Singleton, flatten, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, processDBQuartersToDicts
 from utils.other import getInstancesByClass, maxQuarters
 from constants.values import unusableSymbols
@@ -31,6 +31,7 @@ from structures.financialDataHandler import FinancialDataHandler
 from structures.stockDataHandler import StockDataHandler
 from structures.dataPointInstance import DataPointInstance
 from structures.stockSplitsHandler import StockSplitsHandler
+from structures.googleInterestsHandler import GoogleInterestsHandler
 from structures.api.googleTrends.request import GoogleAPI
 from utils.types import TickerDateKeyType, TickerKeyType
 
@@ -47,6 +48,9 @@ def multicore_getStockDataTickerTuples(ticker, seriesType, minDate):
 def multicore_getStockSplitsTickerTuples(ticker):
     return (ticker, DatabaseManager().getStockSplits(ticker.exchange, ticker.symbol))
 
+def multicore_getGoogleInterestsTickerTuples(ticker):
+    return (ticker, DatabaseManager().getGoogleInterests(ticker.exchange, ticker.symbol), DatabaseManager().getGoogleInterests(ticker.exchange, ticker.symbol, itype=InterestType.OVERALL))
+
 ## each session should only rely on one (precedingRange, followingRange) combination due to the way the handlers are setup
 ## not sure how new exchange/symbol handler setups would work with normalization info, if not initialized when datamanager is created
 
@@ -57,6 +61,7 @@ class DataManager():
     vixDataHandler = VIXManager().data
     financialDataHandlers: Dict[TickerKeyType, FinancialDataHandler] = {}
     stockSplitsHandlers: Dict[TickerKeyType, StockSplitsHandler] = {}
+    googleInterestsHandlers: Dict[TickerKeyType, GoogleInterestsHandler] = {}
     stockDataInstances: Dict[TickerDateKeyType, DataPointInstance] = {}
     explicitValidationStockDataInstances: Dict[TickerDateKeyType, DataPointInstance] = {}
     selectedInstances: List[DataPointInstance] = []
@@ -96,7 +101,7 @@ class DataManager():
         self.seriesType = seriesType
         self.threshold = threshold
         self.minDate = minDate
-        # self.setCount = setCount
+        self.setCount = setCount
         self.kerasSetCaches = {}
         self.normalizationInfo = recdotdict(normalizationInfo)
         # self.symbolList = symbolList
@@ -161,6 +166,7 @@ class DataManager():
 
             if not initializeStockDataHandlersOnly:
                 self.initializeStockSplitsHandlers(symbolList, explicitValidationSymbolList)
+                self.initializeGoogleInterestsHandlers(symbolList, explicitValidationSymbolList)
 
                 startt3 = time.time()
                 self.initializeStockDataInstances()
@@ -339,13 +345,16 @@ class DataManager():
 
         return tickerWindows
 
-    def buildInputVector(self, stockDataSet: StockDataHandler, stockDataIndex, googleInterestData, symbolData):
+    def buildInputVector(self, stockDataSet: StockDataHandler, stockDataIndex, symbolData):
         startt = time.time()
         precset = stockDataSet.getPrecedingSet(stockDataIndex)
         self.getprecstocktime += time.time() - startt
 
         try: splitsset = self.stockSplitsHandlers[stockDataSet.getTickerTuple()].getForRange(precset[0].date, precset[-1].date)
         except KeyError: splitsset = []
+
+        try: googleinterests = self.googleInterestsHandlers[stockDataSet.getTickerTuple()].getDict()
+        except KeyError: googleinterests = []
 
         if gconfig.feature.financials.enabled:
             startt = time.time()
@@ -359,7 +368,7 @@ class DataManager():
             precset,
             self.vixDataHandler,
             precfinset,
-            googleInterestData,
+            googleinterests,
             symbolData.founded,
             'todo',
             symbolData.sector,
@@ -575,11 +584,27 @@ class DataManager():
             for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):
                 self.stockSplitsHandlers[TickerKeyType(s.exchange, s.symbol)] = StockSplitsHandler(s.exchange, s.symbol, dbm.getStockSplits(s.exchange, s.symbol))
 
+    def initializeGoogleInterestsHandlers(self, symbolList, explicitValidationSymbolList=[]):
+        symbolList += explicitValidationSymbolList
+        ## purge unusable symbols
+        for s in symbolList:
+            if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
+
+        if gconfig.multicore:
+            for ticker, dailydata, overalldata in tqdm.tqdm(process_map(partial(multicore_getGoogleInterestsTickerTuples), symbolList, chunksize=1, desc='Getting Google interests data'), desc='Creating Google interests handlers'):
+                self.googleInterestsHandlers[TickerKeyType(ticker.exchange, ticker.symbol)] = GoogleInterestsHandler(ticker.exchange, ticker.symbol, dailydata, overalldata)
+                    
+        else:
+            for s in tqdm.tqdm(symbolList, desc='Creating Google interests handlers'):
+                self.googleInterestsHandlers[TickerKeyType(s.exchange, s.symbol)] = GoogleInterestsHandler(s.exchange, s.symbol, dbm.getGoogleInterests(s.exchange, s.symbol), dbm.getGoogleInterests(s.exchange, s.symbol, itype=InterestType.OVERALL))            
+
     def initializeWindow(self, windowIndex):
         self.stockDataInstances.clear()
         self.stockDataHandlers.clear()
         self.normalized = False
         self.initializeStockDataHandlers(self.windows[windowIndex])
+        self.initializeStockSplitsHandlers(self.windows[windowIndex])
+        self.initializeGoogleInterestsHandlers(self.windows[windowIndex])
         self.initializeStockDataInstances()
         self.setupSets(selectAll=True)
         self.initializedWindow = windowIndex
@@ -657,30 +682,6 @@ class DataManager():
 
             if len(self.selectedInstances) < setCount: raise IndexError('Not enough sets available: %d vs %d' % (len(self.selectedInstances), setCount))
             ## instance selection done
-
-        ## retrieve Google interests for each selected set
-        if self.config.feature.googleInterests.enabled:
-            gapi = GoogleAPI()
-            dg = True
-            dg2 = True
-            for s in tqdm.tqdm(self.selectedInstances, desc='Getting Google interests data'):
-                dset = s.handler.getPrecedingSet(s.index)
-                start_dt = date.fromisoformat(dset[0].date)
-                end_dt = date.fromisoformat(dset[-1].date)
-                
-                if dg:
-                    print('sdata', s.handler.symbolData)
-                    dg = False
-                gdata = gapi.get_historical_interest(s.handler.symbolData.google_topic_id, 
-                    year_start=start_dt.year, month_start=start_dt.month, day_start=start_dt.day,
-                    year_end=end_dt.year, month_end=end_dt.month, day_end=end_dt.day
-                )
-                if dg2:
-                    print(gdata)
-                    dg2 = False
-
-                s.setGoogleInterestData(gdata)
-
 
         ## shuffle and distribute instances
         random.shuffle(self.selectedInstances)
