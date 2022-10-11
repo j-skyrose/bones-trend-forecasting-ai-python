@@ -62,9 +62,12 @@ class Trainer:
         print('Startup time required:', time.time() - startt, 'seconds')
 
     def _getSetKWParams(self, **kwargs):
+        omitValidation = shortcdict(kwargs, 'omitValidation', False)
+
         print('Building KWParams object')
         sets = self.dm.getKerasSets(**kwargs)
         if shortcdict(kwargs, 'validationDataOnly', False):
+            if omitValidation: raise ArgumentError
             t = None
             v = sets
             ts = None
@@ -72,8 +75,12 @@ class Trainer:
         else: 
             t, v, ts = sets
         print('KWParams class sets')
-        class1set = self.dm.getKerasSets(1, True, **kwargs)
-        class2set = self.dm.getKerasSets(2, True, **kwargs)
+
+        class1set = None
+        class2set = None
+        if not omitValidation:
+            class1set = self.dm.getKerasSets(1, True, **kwargs)
+            class2set = self.dm.getKerasSets(2, True, **kwargs)
         print('Keras sets built')
         return {
             'trainingSet': t, 
@@ -89,6 +96,7 @@ class Trainer:
                 raise ArgumentError(None, 'Missing epochs, network will not train at all')
             self.instance.train(**kwargs)
         else:
+            explicitValidation = self.dm.explicitValidationSet
             self.instance.network.useAllSets = True
 
             print('Iterating through set slices')
@@ -100,16 +108,21 @@ class Trainer:
                     print('Patience:', kwargs['patience'])
 
                 print('Slice', s+1, '/', maxIterations)
-                self.instance.updateSets(**self._getSetKWParams(slice=s))
+                self.instance.updateSets(**self._getSetKWParams(slice=s, omitValidation=True if explicitValidation and s > 0 else False))
                 self.instance.train(**kwargs)
                 gc.collect()
             
-            ## re-evaluating
-            for s in range(maxIterations):
-                print('Slice', s+1, '/', maxIterations)
-                self.instance.updateSets(**self._getSetKWParams(slice=s, validationDataOnly=True))
+
+            if explicitValidation:
+                ## validation set never changes, so no loop and re-build required
                 self.instance.evaluate(reEvaluate=True)
-                gc.collect()
+            else:
+                ## re-evaluating
+                for s in range(maxIterations):
+                    print('Slice', s+1, '/', maxIterations)
+                    self.instance.updateSets(**self._getSetKWParams(slice=s, validationDataOnly=True))
+                    self.instance.evaluate(reEvaluate=True)
+                    gc.collect()
             self.instance.network.printAccuracyStats()
 
     def saveNetwork(self, withSets=False):

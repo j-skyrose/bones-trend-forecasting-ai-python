@@ -185,7 +185,7 @@ class DataManager():
     @classmethod
     def forTraining(cls, seriesType=SeriesType.DAILY, **kwargs):
         print('forTraining starting')
-        normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType)
+        normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType, **kwargs)
         print('got normalization data')
         
         normalizationInfo = {}
@@ -411,12 +411,6 @@ class DataManager():
 
     def initializeExplicitValidationStockDataInstances(self, **kwargs):
         self.initializeStockDataInstances(stockDataHandlers=self.explicitValidationStockDataHandlers.values(), dmProperty='explicitValidationStockDataInstances', **kwargs)
-        # psints, nsints = getInstancesByClass(list(self.explicitValidationStockDataInstances.values()))
-        # ratio = len(psints) / (len(psints) + len(nsints))
-        # if ratio < gconfig.trainer.customValidationClassValueRatio:
-        #     raise ValueError('Insufficient ratio: {}'.format(ratio))
-        # else:
-        #     print('Explicit validation set ratio: {}'.format(ratio))
 
     def initializeStockDataInstances(self, stockDataHandlers: List[StockDataHandler]=None, collectOutputClassesOnly=False, dmProperty='stockDataInstances', verbose=1):
         if not stockDataHandlers:
@@ -443,7 +437,7 @@ class DataManager():
 
         if collectOutputClassesOnly: return outputClassCounts
         
-    def initializeFinancialDataHandlers(self, symbolList, explicitValidationSymbolList):
+    def initializeFinancialDataHandlers(self, symbolList, explicitValidationSymbolList=[]):
         symbolList += explicitValidationSymbolList
         ANALYZE1 = False
         ANALYZE2 = False
@@ -570,7 +564,7 @@ class DataManager():
                 print('insertingtime',insertingtime,'seconds')
                 print('total',gettingtime+massagingtime+creatingtime+insertingtime,'seconds')
 
-    def initializeStockSplitsHandlers(self, symbolList, explicitValidationSymbolList):
+    def initializeStockSplitsHandlers(self, symbolList, explicitValidationSymbolList=[]):
         symbolList += explicitValidationSymbolList
         ## purge unusable symbols
         for s in symbolList:
@@ -581,7 +575,7 @@ class DataManager():
                 self.stockSplitsHandlers[TickerKeyType(ticker.exchange, ticker.symbol)] = StockSplitsHandler(ticker.exchange, ticker.symbol, data)
                     
         else:
-            for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):
+            for s in tqdm.tqdm(symbolList, desc='Creating stock splits handlers'):
                 self.stockSplitsHandlers[TickerKeyType(s.exchange, s.symbol)] = StockSplitsHandler(s.exchange, s.symbol, dbm.getStockSplits(s.exchange, s.symbol))
 
     def initializeGoogleInterestsHandlers(self, symbolList, explicitValidationSymbolList=[]):
@@ -612,6 +606,9 @@ class DataManager():
 
     def setupExplicitValidationSet(self):
         self.explicitValidationSet = list(self.explicitValidationStockDataInstances.values())
+        if gconfig.testing.enabled:
+            random.shuffle(self.explicitValidationSet)
+            self.explicitValidationSet = self.explicitValidationSet[:self.setCount]
         random.shuffle(self.explicitValidationSet)
 
     def setupSets(self, setCount=None, setSplitTuple=None, minimumSetsPerSymbol=0, selectAll=False):
@@ -621,6 +618,10 @@ class DataManager():
         if self.useAllSets or selectAll:
             self.unselectedInstances = []
             self.selectedInstances = list(self.stockDataInstances.values())
+
+            if gconfig.testing.enabled:
+                random.shuffle(self.selectedInstances)
+                self.selectedInstances = self.selectedInstances[:self.setCount]
 
             ## determine window size for iterating through all sets            
             psints, nsints = getInstancesByClass(self.selectedInstances)
@@ -756,7 +757,7 @@ class DataManager():
         if verbose >= 1: print(exchange, symbol, ':', len(sourceSet), '->', len(ret))
         return ret
 
-    def getKerasSets(self, classification=0, validationDataOnly=False, exchange=None, symbol=None, slice=None, verbose=1):
+    def getKerasSets(self, classification=0, validationDataOnly=False, exchange=None, symbol=None, slice=None, omitValidation=False, verbose=1):
         if self.useAllSets and not self.useOptimizedSplitMethodForAllSets and shortc(slice, 0) > self.getNumberOfWindowIterations() - 1: raise IndexError()
         # if self.setsSlidingWindowPercentage and slice is None: raise ValueError('Keras set setup will overload memory, useAllSets set but not slice indicated')
 
@@ -837,7 +838,8 @@ class DataManager():
             validationSet = self._getSetSlice(validationSet, slice)
             testingSet = self._getSetSlice(testingSet, slice)
 
-        validationData = constructDataSet(validationSet)
+        if omitValidation:  validationData = None
+        else:               validationData = constructDataSet(validationSet)
         if validationDataOnly: return validationData
         trainingData = constructDataSet(trainingSet)
         testingData = constructDataSet(testingSet)
