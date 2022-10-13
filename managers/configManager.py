@@ -9,7 +9,7 @@ sys.path.append(path)
 
 from utils.support import Singleton
 import configparser
-configFilepath = os.path.join(path, 'data/config.ini')
+configFilepath = os.path.join(path, 'config.ini')
 
 class ConfigManager(Singleton):
     def __init__(self):
