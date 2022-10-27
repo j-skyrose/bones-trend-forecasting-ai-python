@@ -10,11 +10,12 @@ sys.path.append(path)
 import numpy, re, time
 from calendar import monthrange
 from datetime import date, datetime, timedelta
+from typing import Dict
 
 from globalConfig import config as gconfig
 from constants.enums import DataFormType, FeatureExtraType, InputVectorDataType
-from constants.values import standardExchanges
-from utils.support import Singleton, flatten, recdotdict, _isoformatd, shortc, _edgarformatd
+from constants.values import standardExchanges, minGoogleDate
+from utils.support import Singleton, flatten, recdotdict, _isoformatd, shortc, _edgarformatd, shortcdict
 from utils.other import maxQuarters
 from structures.stockDataHandler import StockDataHandler
 from managers.statsManager import StatsManager
@@ -64,7 +65,7 @@ class InputVectorFactory(Singleton):
 #     def toString(self):
 #         return self.logstring
 
-    def build(self, stockDataSet, vixData, financialDataSet, googleInterests, foundedDate, ipoDate, sector, exchange, stockSplits, etfFlag, getSplitStat=False):
+    def build(self, stockDataSet, vixData, financialDataSet, googleInterests: Dict[str,float], foundedDate, ipoDate, sector, exchange, stockSplits, etfFlag, getSplitStat=False):
         global loggedonce
         if gconfig.network.recurrent:
             inpVecStats = {e: {} for e in InputVectorDataType}
@@ -176,8 +177,19 @@ class InputVectorFactory(Singleton):
                 elif k == 'googleInterests':
                     vectorListType = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
-                    if googleInterests: vectorAsList = [googleInterests[d.date] for d in stockDataSet]
-                    else:               vectorAsList = [0 for d in stockDataSet]
+                    # if googleInterests: vectorAsList = [googleInterests[d.date] for d in stockDataSet]
+                    # else:               vectorAsList = [0 for d in stockDataSet]
+                    mindate = minGoogleDate.isoformat()
+                    vectorAsList = []
+                    for index,d in enumerate(stockDataSet):
+                        vectorAsList.extend([
+                            1 if d.date < mindate else 0,               ## date is before any Google data is available, 0 !== 0
+                            1 if index > len(stockDataSet) - 4 else 0,  ## data is not available on date due to how recent it is, 0 !== 0
+                            1 if not googleInterests else 0,            ## data unknown, may have not been collected due to lack of topic ID
+                            shortcdict(googleInterests, d.date, 0) if googleInterests and index <= len(stockDataSet) - 4 else 0
+                            # googleInterests[d.date] if index <= len(stockDataSet) - 4 else 0
+                        ])
+
                     if collectStats: sm.ktypegoogleintereststime += time.time() - startt
                 
                 elif k == 'stockSplits':

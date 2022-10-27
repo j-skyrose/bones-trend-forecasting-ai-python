@@ -10,10 +10,11 @@ sys.path.append(path)
 import time, json, re
 import requests
 from requests.models import Response
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Dict, List, Union
 
 from constants.exceptions import APIError, APITimeout
+from constants.values import minGoogleDate
 
 DEBUG = False
 
@@ -108,7 +109,7 @@ class Google:
         newReq['requestOptions']['property'] = original['property']
         return newReq
 
-    def getHistoricalInterests(self, keyword, start=date(2004,1,1), end=date.today()) -> List[Dict[str, Union[date,int]]]:
+    def getHistoricalInterests(self, keyword, start=minGoogleDate, end=date.today()) -> List[Dict[str, Union[date,int]]]:
         '''Data is based on random sampling of searches, highly likely to be inconsistent between scraping and the actual webpage, especially for low search volumes'''
         
         ## rearrange dates if necessary
@@ -128,9 +129,15 @@ class Google:
         ## massage data
         returndata = []
         for d in resp['default']['timelineData']:
-            startdate = datetime.fromtimestamp(int(d['time']) + (self.timezone + 60) * 60).date().isoformat() ## offset +1h to account for DST, no need to have it land exactly at midnight
+            startdate = datetime.fromtimestamp(int(d['time']) + (self.timezone + 60) * 60).date() ## offset +1h to account for DST, no need to have it land exactly at midnight
             try:
-                enddate = datetime.strptime(d['formattedTime'].split('-')[1], '%d %b %Y').date()
+                ftimeparts = d['formattedTime'].split(' ')
+                if len(ftimeparts) < 3: ## i.e. monthly
+                    edate = ftimeparts[0][:3] + ' ' + ftimeparts[1] ## trim month to 3 characters
+                    enddate = datetime.strptime(edate, '%b %Y').date() + timedelta(weeks=6) ## push to next month
+                    enddate -= timedelta(days=enddate.day) ## reduce back to last day of previous (actual) month
+                else: ## i.e. weekly
+                    enddate = datetime.strptime(d['formattedTime'].split('–')[1].strip().replace('Sept', 'Sep'), '%d %b %Y').date()
             except IndexError:
                 enddate = None
             

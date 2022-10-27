@@ -9,24 +9,20 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import random, math, numpy, tqdm, time, pickle
-from tensorflow import keras
+import tqdm
 from timeit import default_timer as timer
 from multiprocessing import Pool, cpu_count
-from datetime import date
 from typing import Dict, List
 
 from globalConfig import config as gconfig
-from constants.enums import OutputClass, SeriesType, SetType
+from constants.enums import OutputClass, SeriesType
 from utils.support import Singleton, recdotdict, shortc
 from constants.values import unusableSymbols
 from managers.databaseManager import DatabaseManager
 from managers.vixManager import VIXManager
 from managers.inputVectorFactory import InputVectorFactory
-from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.stockDataHandler import StockDataHandler
 from structures.dataPointInstance import DataPointInstance
-from structures.api.googleTrends.request import GoogleAPI
 
 DEBUG = True
 MULTITHREAD = False

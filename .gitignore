@@ -14,3 +14,7 @@ miscellaneous/
 *.marshal
 *.ods
 *.ods#
+
+## ec2 export stuff
+scripts/sp-export/
+scripts/sp-export.tar

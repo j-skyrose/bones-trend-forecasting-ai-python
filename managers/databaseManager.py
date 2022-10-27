@@ -19,10 +19,9 @@ from managers.dbCacheManager import DBCacheManager
 from structures.api.googleTrends.request import GoogleAPI
 
 from globalConfig import config as gconfig
-from structures.neuralNetworkInstance import NeuralNetworkInstance
 from managers.marketDayManager import MarketDayManager
 from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FinancialReportType, InterestType, OperatorDict, PrecedingRangeType, SQLHelpers, SeriesType, AccuracyType, SetType, Direction
-from utils.support import asDate, asISOFormat, asList, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, unixToDatetime
+from utils.support import asDate, asISOFormat, asList, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, unixToDatetime
 from utils.other import buildCommaSeparatedTickerPairString
 from constants.values import unusableSymbols, apiList, standardExchanges
 
@@ -40,11 +39,11 @@ from constants.values import unusableSymbols, apiList, standardExchanges
 ## end ad hoc SQL execution ################################################################################################
 
 class DatabaseManager(Singleton):
-    def init(self):
+    def init(self, dbpath=os.path.join(path, 'data/sp2Database.db')):
         atexit.register(self.close)
-        self.connect = sqlite3.connect(os.path.join(path, 'data/sp2Database.db'), timeout=15)
+        self.connect = sqlite3.connect(dbpath, timeout=15)
         # self.connect.row_factory = sqlite3.Row
-        self.connect.row_factory = self.__dict_factory
+        self.connect.row_factory = recdotdict_factory
         self.dbc = self.connect.cursor()
 
         ## caching
@@ -70,17 +69,6 @@ class DatabaseManager(Singleton):
         self.dbc.execute('BEGIN')
     def commitBatch(self): self.dbc.execute('COMMIT')
     def rollbackBatch(self): self.dbc.execute('ROLLBACK')
-
-    def __dict_factory(self, c, r):
-        d = {}
-        for idx, col in enumerate(c.description):
-            if col[0] == 'timestamp' and re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}', shortc(r[idx], '')):
-                d[col[0]] = datetime.strptime(r[idx], '%Y-%m-%d %X')
-            elif col[0].startswith('pickled'):
-                d[col[0]] = pickle.loads(r[idx])
-            else: d[col[0]] = r[idx]
-        return recdotdict(d)
-
 
     def _getHistoricalDataCount(self):
         if not self.historicalDataCount:
@@ -499,12 +487,12 @@ class DatabaseManager(Singleton):
         return ' AND ' + column + (' not' if notIn else '') + ' in (\'' + '\',\''.join(lst) + '\')'
 
     ## generally one time use
-    def getGoogleTopicIDsForSymbols(self):
+    def getGoogleTopicIDsForSymbols(self, symbolList=None):
         print('Getting topic IDs from Google')
         DEBUG = True
         gapi = GoogleAPI()
         stmt = 'UPDATE symbols SET google_topic_id=? WHERE exchange=? AND symbol=? '
-        symbols = self.getSymbols(api=['alphavantage', 'polygon'], googleTopicId=None)
+        symbols = shortc(symbolList, self.getSymbols(api=['alphavantage', 'polygon'], googleTopicId=SQLHelpers.NULL))
         topicsFound = []
         alreadyFound = 0
         for s in tqdm(symbols):
@@ -622,24 +610,32 @@ class DatabaseManager(Singleton):
                 args.append(symbol)
         return self.dbc.execute(stmt, tuple(args)).fetchall()
 
-    def getGoogleInterests(self, exchange=None, symbol=None, gtopicid=None, itype:InterestType=InterestType.DAILY, stream=None, artificial=None, dt=None):
-        stmt = 'SELECT * FROM google_interests gi JOIN symbols s ON gi.exchange=s.exchange AND gi.symbol=s.symbol WHERE gi.type = ? '
-        args = [itype.name]
+    def getGoogleInterests(self, exchange=None, symbol=None, gtopicid=None, itype:InterestType=InterestType.DAILY, stream=None, artificial=None, dt=None, raw=False):
+        stmt = ''
+        args = []
         if gtopicid:
-            stmt += 'AND gi.google_topic_id=? '
+            stmt = f'SELECT * FROM google_interests{"_raw" if raw else ""} gi JOIN symbols s ON gi.exchange=s.exchange AND gi.symbol=s.symbol WHERE gi.google_topic_id=? '
             args.append(gtopicid)
         elif exchange and symbol:
-            stmt += 'AND s.exchange=? and s.symbol=? '
+            stmt += f'SELECT * FROM google_interests{"_raw" if raw else ""} gi WHERE gi.exchange=? and gi.symbol=? '
             args.extend([exchange, symbol])
-        if stream is not None:
-            stmt += ' AND gi.stream=? '
-            args.append(stream)
-        if artificial is not None:
-            stmt += ' AND gi.artificial=? '
-            args.append(artificial)
+
+        if raw:
+            stmt += 'AND gi.type = ? '
+            args.append(itype.name)
+
+            if itype is not None:
+                stmt += ' AND gi.type=? '
+                args.append(itype.name)
+            if stream is not None:
+                stmt += ' AND gi.stream=? '
+                args.append(stream)
+            if artificial is not None:
+                stmt += ' AND gi.artificial=? '
+                args.append(artificial)
         if dt is not None:
             stmt += ' AND gi.date=? '
-            args.append(dt)
+            args.append(asISOFormat(dt))
         stmt += 'ORDER BY gi.date ASC'
 
         return self.dbc.execute(stmt, tuple(args)).fetchall()
@@ -737,7 +733,21 @@ class DatabaseManager(Singleton):
         _saveSet(testingSet, SetType.TESTING)
 
     ## insert or update network table data
-    def pushNeuralNetwork(self, nn: NeuralNetworkInstance):
+    def pushNeuralNetwork(self, 
+        nn ##: NeuralNetworkInstance ## removed to reduce inter-module dependencies on tensorflow, for EC2 collection
+    ):
+    #     nnid: int,
+    #     nndefaultInputVectorFactory: bool,
+    #     nninputVectorFactory,
+    #     nnstats
+    # ):
+    #     nn = recdotdict({
+    #         'id': nnid,
+    #         'defaultInputVectorFactory': nndefaultInputVectorFactory,
+    #         'inputVectorFactory': nninputVectorFactory,
+    #         'stats': nnstats
+    #     })
+
         if nn.defaultInputVectorFactory:
             with open(os.path.join(path, 'managers/inputVectorFactory.py'), 'rb') as f:
                 factoryblob = f.read()
@@ -1104,10 +1114,13 @@ class DatabaseManager(Singleton):
         tpl = (shortc(exchange, SQLHelpers.UNKNOWN.value), symbol, date, split_from, split_to)
         self.dbc.execute(stmt, tpl)
 
-    def insertGoogleInterest(self, exchange, symbol, itype:InterestType, date:str, value, stream=0, artificial=False):
-        stmt = 'INSERT INTO google_interests VALUES (?,?,?,?,?,?,?)'
-        tpl = (exchange, symbol, date, itype.name, stream, value, artificial)
-        self.dbc.execute(stmt, tpl)
+    def insertRawGoogleInterest(self, exchange, symbol, itype:InterestType, date, value, stream=0, artificial=False, upsert=False):
+        stmt = 'INSERT{} INTO google_interests_raw VALUES (?,?,?,?,?,?,?)'.format(' OR IGNORE' if upsert else '')
+        lst = [exchange, symbol, asISOFormat(date), itype.name, stream]
+        self.dbc.execute(stmt, lst + [value, artificial])
+        if upsert:
+            stmt = 'UPDATE google_interests_raw SET relative_interest=? WHERE exchange=? AND symbol=? AND date=? AND type=? AND stream=?'
+            self.dbc.execute(stmt, [value] + lst)
 
     ## end sets ####################################################################################################################################################################
     ####################################################################################################################################################################
@@ -1980,7 +1993,7 @@ class DatabaseManager(Singleton):
         for s in symbollist:
             tickergid = (s.exchange, s.symbol, s.google_topic_id)
 
-            ginterests = self.getGoogleInterests(s.exchange, s.symbol, itype=itype)
+            ginterests = self.getGoogleInterests(s.exchange, s.symbol, itype=itype, raw=True)
             if ginterests:
 
                 directionmodifier = -1 if direction == Direction.DESCENDING else 1
@@ -2011,7 +2024,148 @@ class DatabaseManager(Singleton):
 
                 print(*tickergid, *res)
 
+    ## correcting issue where only first day of week/month has WEEKLY/MONTHLY Google Interest data, should be duplicated for all days in week/month
+    def fillOutXlyGIData(self, itype=InterestType.MONTHLY, dryrun=False):
+        monthly = itype == InterestType.MONTHLY
+        symbols = self.getSymbols()
+        for s in symbols:
+            print('Checking', s.exchange, s.symbol)
+            gidata = self.getGoogleInterests(s.exchange, s.symbol, itype=itype, raw=True)
+            if len(gidata) > 2: ## has more than first and last dates
+                if gidata[-1 if monthly else -2].date != '2022-09-30': ## week/month dates not already filled out
+                    print('Fixing', s.exchange, s.symbol)
+                    for gidx in range(len(gidata)):
+                        curdate = date.fromisoformat(gidata[gidx].date)
+                        if gidx != len(gidata) - 1: ## last
+                            ## further integrity check next data point is in next week/month
+                            if monthly and curdate.month == date.fromisoformat(gidata[gidx+1].date).month:
+                                    raise IndexError(f'GIDX-(monthly):{gidx} - {curdate.month} -> {date.fromisoformat(gidata[gidx+1].date).month}')
+                            elif curdate + timedelta(days=1) == date.fromisoformat(gidata[gidx+1].date):
+                                    raise IndexError(f'GIDX-(weekly):{gidx} - {curdate} -> {date.fromisoformat(gidata[gidx+1].date)}')
 
+                        
+                        rinterest = gidata[gidx].relative_interest
+                        loopdate = curdate + timedelta(days=1)
+                        while (loopdate.month == curdate.month) if monthly else (loopdate.weekday() != 6):
+                            if not dryrun: self.insertRawGoogleInterest(s.exchange, s.symbol, itype, loopdate, rinterest)
+                            else: print('Inserting', s.exchange, s.symbol, itype, loopdate, rinterest)
+                            loopdate += timedelta(days=1)
+        self.commit()
+
+
+    ## builds a DB copy with just enough info for Google Interests collector to run and input data to
+    def buildGIDBCopy(self, verbose=0):
+        dest_db_path = os.path.join(path, f'data\\gidbcopy-{str(int(time.time()))}.db')
+        src_cursor = self.dbc
+        dest_db = sqlite3.connect(dest_db_path, timeout=15)
+        dest_cursor = dest_db.cursor()
+
+        dest_cursor.execute('PRAGMA foreign_keys=0')
+
+        ## write all tables to new DB
+        src_tables = src_cursor.execute('SELECT * from sqlite_master WHERE type=\'table\'').fetchall()
+        for table in src_tables:
+            try:
+                dest_cursor.execute(table['sql'])
+            except sqlite3.OperationalError as e:
+                if verbose > 0: print(f'Operational Error: {e}')
+                pass
+
+
+        def getValueQS(num): 
+            if type(num) is recdotdict: num = len(num)
+            return ','.join(('?',) * num)
+
+        ## write only symbols with Google Topic IDs
+        src_tickers = self.getSymbols(googleTopicId=SQLHelpers.NOTNULL)
+        # src_tickers = []
+        # messedupgidatatickers = src_cursor.execute('select * from google_interests where relative_interest=100 and date>=\'2022-10-01\'').fetchall()
+        # for t in messedupgidatatickers:
+        #     src_tickers.append(src_cursor.execute('SELECT * FROM symbols WHERE exchange=? AND symbol=?', (t.exchange, t.symbol)).fetchone())
+        for t in src_tickers:
+            dest_cursor.execute(f'INSERT INTO symbols VALUES ({getValueQS(src_tickers[0])})', list(t.values()))
+
+        # write only max and min dated data for each symbol for google_interests and historical_data tables
+        for t in tqdm(src_tickers, desc='Transfering stock and GI data') if verbose > 0 else src_tickers:
+            histdata = self.getStockData(t.exchange, t.symbol, SeriesType.DAILY)
+            if len(histdata) == 0:
+                print(f'No stock data, deleting {t.exchange}:{t.symbol}')
+                dest_cursor.execute('DELETE FROM symbols WHERE exchange=? and symbol=?', (t.exchange, t.symbol))
+                continue
+            stmt = f'INSERT INTO historical_data VALUES ({getValueQS(histdata[0])})'
+            dest_cursor.execute(stmt, list(histdata[0].values()))
+            dest_cursor.execute(stmt, list(histdata[-1].values()))
+
+            # gidata = self.getGoogleInterests(t.exchange, t.symbol, raw=True)
+            for itype in InterestType:
+                gidata = src_cursor.execute('SELECT * FROM google_interests_raw WHERE exchange=? and symbol=? and type=?', (t.exchange, t.symbol, itype.name)).fetchall()
+                if len(gidata) > 0:
+                    stmt = f'INSERT INTO google_interests_raw VALUES ({getValueQS(gidata[0])})'
+                    dest_cursor.execute(stmt, list(gidata[0].values()))
+                    dest_cursor.execute(stmt, list(gidata[-1].values()))
+        
+        dest_db.commit()
+        dest_db.close()
+
+        ## for batch script
+        sys.stdout.write(dest_db_path) 
+        sys.stdout.write('\n')
+
+    ## take stock of data from DB copy used for collecting Google Interests data
+    def analyzeGIDBCopy(self, src_db_path):
+        src_db = sqlite3.connect(src_db_path, timeout=15)
+        src_db.row_factory = recdotdict_factory
+        src_cursor = src_db.cursor()
+
+        ## DB copy should all have topic IDs, stock data, and probably some GI data already
+        symbolerrors = src_cursor.execute('SELECT * FROM symbols WHERE google_topic_id IS NULL').fetchall()
+        for s in symbolerrors:
+            print (f'{s.exchange}:{s.symbol} had topic ID removed', end=' ')
+            gidata = src_cursor.execute('SELECT * FROM google_interests_raw WHERE exchange=? AND symbol=?', (s.exchange, s.symbol)).fetchall()
+            if len(gidata) == 0:
+                print('and no data')
+            elif len(gidata) < 3:
+                print('and no data collected')
+            else:
+                print('and had some more data collected')
+
+            hdata = src_cursor.execute('SELECT * FROM historical_data WHERE exchange=? and symbol=?', (s.exchange, s.symbol)).fetchall()
+            print('GI:', gidata[0].date, '->', gidata[-1].date)
+            print('HS:', hdata[0].date, '->', hdata[-1].date)
+
+
+        # print()
+        # symbols = src_cursor.execute('SELECT * FROM symbols').fetchall()
+        # for s in symbols:
+        #     gidata = src_cursor.execute('SELECT * FROM google_interests_raw WHERE exchange=? AND symbol=?', (s.exchange, s.symbol)).fetchall()
+        #     print (f'{s.exchange}:{s.symbol} - f{len(gidata)} data points')
+
+## 3677029
+
+    ## import Google Interests data from a DB copy from elsewhere (e.g. EC2 instance)
+    def importFromGIDBCopy(self, src_db_path, verbose=0):
+        dest_cursor = self.dbc
+        src_db = sqlite3.connect(src_db_path, timeout=15)
+        src_db.row_factory = recdotdict_factory
+        src_cursor = src_db.cursor()
+
+        def getValueQS(num): 
+            if type(num) is recdotdict: num = len(num)
+            return ','.join(('?',) * num)
+
+        ## update deleted topic IDs
+        symbolerrors = src_cursor.execute('SELECT * FROM symbols WHERE google_topic_id IS NULL').fetchall()
+        for s in symbolerrors:
+            dest_cursor.execute('UPDATE symbols SET google_topic_id=NULL WHERE exchange=? AND symbol=?', (s.exchange, s.symbol))
+        print(f'Deleted {len(symbolerrors)} topic IDs')
+
+        ## transfer GI data
+        gidata = src_cursor.execute('SELECT * FROM google_interests_raw ORDER BY exchange, symbol, date, type').fetchall()
+        for g in tqdm(gidata, desc='Inserting data') if verbose > 0 else gidata:
+            dest_cursor.execute(f'INSERT OR IGNORE INTO google_interests_raw VALUES ({getValueQS(gidata[0])})', list(g.values()))
+        print(f'Inserted {len(gidata)} data points')
+
+        self.commit()
 
     ## end limited use utility ####################################################################################################################################################################
     ####################################################################################################################################################################
@@ -2113,8 +2267,26 @@ if __name__ == '__main__':
     # d.addAPI('polygon')
     # print(d.getSymbols(api='alphavantage').fetchone()['api_alphavantage'])
 
-    # d.getNormalizationData(SeriesType.DAILY)
-    # d.getGoogleTopicIDsForSymbols()
+
+        ## check if any 100 daily dates are within the same week, which will cause problems when framing using weekly and monthly data
+        gidata = d.dbc.execute('select * from google_interests_raw where relative_interest=100 and type=\'DAILY\' order by exchange,symbol,date').fetchall()
+        curticker = None
+        lastdate = None
+        count=0
+        print('gidata', len(gidata))
+        for g in gidata:
+            if curticker != (g.exchange, g.symbol):
+                curticker = (g.exchange, g.symbol)
+            else:
+                curdate = date.fromisoformat(g.date)
+                if (curdate - lastdate).days < 7:
+                    if (curdate.weekday() + 1) % 7 > (lastdate.weekday() + 1) % 7:
+                        print(curticker, g.date, lastdate.isoformat())
+                        count+=1
+                        # d.dbc.execute('delete from google_interests_raw where exchange=? and symbol=? and type=?', (g.exchange, g.symbol, InterestType.DAILY.name))
+            lastdate = date.fromisoformat(g.date)
+        print(count, 'found with close 100 dates')
+
 
     # d.pushNeuralNetwork('1615006455', recdotdict({
     #     'changeThreshold': 0.1, 

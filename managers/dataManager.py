@@ -49,7 +49,7 @@ def multicore_getStockSplitsTickerTuples(ticker):
     return (ticker, DatabaseManager().getStockSplits(ticker.exchange, ticker.symbol))
 
 def multicore_getGoogleInterestsTickerTuples(ticker):
-    return (ticker, DatabaseManager().getGoogleInterests(ticker.exchange, ticker.symbol), DatabaseManager().getGoogleInterests(ticker.exchange, ticker.symbol, itype=InterestType.OVERALL))
+    return (ticker, DatabaseManager().getGoogleInterests(ticker.exchange, ticker.symbol))
 
 ## each session should only rely on one (precedingRange, followingRange) combination due to the way the handlers are setup
 ## not sure how new exchange/symbol handler setups would work with normalization info, if not initialized when datamanager is created
@@ -350,15 +350,17 @@ class DataManager():
         precset = stockDataSet.getPrecedingSet(stockDataIndex)
         self.getprecstocktime += time.time() - startt
 
+        anchordate = date.fromisoformat(stockDataSet.data[stockDataIndex].date)
+
         try: splitsset = self.stockSplitsHandlers[stockDataSet.getTickerTuple()].getForRange(precset[0].date, precset[-1].date)
         except KeyError: splitsset = []
 
-        try: googleinterests = self.googleInterestsHandlers[stockDataSet.getTickerTuple()].getDict()
+        try: googleinterests = self.googleInterestsHandlers[stockDataSet.getTickerTuple()].getPrecedingRange(anchordate.isoformat(), self.precedingRange)
         except KeyError: googleinterests = []
 
         if gconfig.feature.financials.enabled:
             startt = time.time()
-            precfinset = self.financialDataHandlers[stockDataSet.getTickerTuple()].getPrecedingReports(date.fromisoformat(stockDataSet.data[stockDataIndex].date), self.precedingRange)
+            precfinset = self.financialDataHandlers[stockDataSet.getTickerTuple()].getPrecedingReports(anchordate, self.precedingRange)
             self.getprecfintime += time.time() - startt
         else:
             precfinset = []
@@ -585,12 +587,15 @@ class DataManager():
             if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
 
         if gconfig.multicore:
-            for ticker, dailydata, overalldata in tqdm.tqdm(process_map(partial(multicore_getGoogleInterestsTickerTuples), symbolList, chunksize=1, desc='Getting Google interests data'), desc='Creating Google interests handlers'):
-                self.googleInterestsHandlers[TickerKeyType(ticker.exchange, ticker.symbol)] = GoogleInterestsHandler(ticker.exchange, ticker.symbol, dailydata, overalldata)
+            for ticker, relativedata in tqdm.tqdm(process_map(partial(multicore_getGoogleInterestsTickerTuples), symbolList, chunksize=1, desc='Getting Google interests data'), desc='Creating Google interests handlers'):
+                key = TickerKeyType(ticker.exchange, ticker.symbol)
+                self.googleInterestsHandlers[key] = GoogleInterestsHandler(*key.getTuple(), relativedata)
                     
         else:
             for s in tqdm.tqdm(symbolList, desc='Creating Google interests handlers'):
-                self.googleInterestsHandlers[TickerKeyType(s.exchange, s.symbol)] = GoogleInterestsHandler(s.exchange, s.symbol, dbm.getGoogleInterests(s.exchange, s.symbol), dbm.getGoogleInterests(s.exchange, s.symbol, itype=InterestType.OVERALL))            
+                key = TickerKeyType(s.exchange, s.symbol)
+                self.googleInterestsHandlers[key] = GoogleInterestsHandler(*key.getTuple(), dbm.getGoogleInterests(s.exchange, s.symbol))
+
 
     def initializeWindow(self, windowIndex):
         self.stockDataInstances.clear()

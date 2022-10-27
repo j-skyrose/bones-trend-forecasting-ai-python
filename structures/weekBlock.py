@@ -13,10 +13,10 @@ from typing import Dict, List, Tuple
 class WeekBlock:
     # data: Dict[str,float] = {}
 
-    def __init__(self, kvs:List[Tuple[str,float]]) -> None:
+    def __init__(self, kvPairs:List[Tuple[str,float]]) -> None:
         self.data: Dict[str,float] = {}
-        kvs.sort(key=lambda a: a[0])
-        for k,v in kvs:
+        kvPairs.sort(key=lambda a: a[0])
+        for k,v in kvPairs:
             self.data[k] = v
 
     def __eq__(self, __o: object) -> bool:

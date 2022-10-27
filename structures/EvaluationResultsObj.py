@@ -7,7 +7,6 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import tensorflow as tf
 from structures.evaluateObj import EvaluateObj
 from constants.enums import AccuracyType, LossAccuracy
 from utils.support import recdotdict

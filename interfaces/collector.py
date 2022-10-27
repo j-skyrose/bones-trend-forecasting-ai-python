@@ -24,7 +24,7 @@ from structures.api.google import Google
 from constants.exceptions import APILimitReached, APIError, APITimeout
 from utils.support import recdotdict, shortcdict
 from constants.enums import APIState, FinancialReportType, FinancialStatementType, InterestType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
-from constants.values import tseNoCommissionSymbols
+from constants.values import tseNoCommissionSymbols, minGoogleDate
 
 dbm: DatabaseManager = DatabaseManager()
 
@@ -669,10 +669,28 @@ class Collector:
     ## collect google interests and insert to DB
     def startGoogleInterestCollection(self, itype:InterestType=InterestType.DAILY, direction:Direction=Direction.ASCENDING, collectStatsOnly=False):
         gapi = Google()
-        mindate = date(2004,1,1)
+
         # maxdate = date.today() - timedelta(days=1 if itype == InterestType.DAILY else ((date.today().weekday() + 2) % 7))
-        maxdate = date.today() - timedelta(days=1) ## DAILY
-        priority_zeropercentagethreshold = 0.1
+        # maxdate = date.today() - timedelta(days=1) ## DAILY
+        maxdate = date.today()
+        ## up-to-date GI data is only available after 3 days
+        if itype == InterestType.DAILY:
+            # ## adjust to most recent Saturday more than 4 days ago
+            # maxdate = date.today() - timedelta(days=date.today().weekday() + 2 + (7 if date.today().weekday() < 3 else 0))
+            ## use date from 4 days ago
+            maxdate -= timedelta(days=4)
+        else: ## WEEKLY or MONTHLY
+            ## too close to beginning of month, need to go further back to get previous previous month
+            if date.today().day < 4:
+                maxdate -= timedelta(days=14)
+            maxdate -= timedelta(days=maxdate.day)
+
+        daily_period = timedelta(weeks=34) ## anything much more will start returning weekly blocks
+        weekly_period = timedelta(weeks=266) ## anything much more will start returning monthly blocks
+        period = weekly_period if itype == InterestType.WEEKLY else daily_period
+
+        useprioritythreshold = False
+        priority_zeropercentagethreshold = 0.9
         def getZeroPercentage(gi, period=183): ## ~6 months
             zerocount = 0
             for g in gi[-period:]:
@@ -685,7 +703,7 @@ class Collector:
         stats_nostockdata = 0
         successfulRequestCount = 0
         totalDataPointsCollected = 0
-        def finish():                                                   ##          random sleep    
+        def finish(): 
             if collectStatsOnly:
                 total = stats_uptodate + stats_notstarted + stats_partiallycollected + stats_nostockdata
                 print(f'{total} tickers checked')
@@ -694,51 +712,69 @@ class Collector:
                 print(f'{stats_notstarted} are not started')
                 print(f'{stats_nostockdata} have no stock data')
             else:
-                print(f'{successfulRequestCount} requests made')            ## 1514     1576
-                print(f'{totalDataPointsCollected} data points collected')  ## 274443   284661
+                print(f'{successfulRequestCount} requests made')
+                print(f'{totalDataPointsCollected} data points collected')
 
         symbollist = dbm.getSymbols(googleTopicId=SQLHelpers.NOTNULL)
+
         while len(symbollist):
-            if not collectStatsOnly: print(f'Checking {len(symbollist)} symbols with <={priority_zeropercentagethreshold*100}% zeroes')
+            if not collectStatsOnly: print(f'Checking {len(symbollist)} symbols{f" with <={priority_zeropercentagethreshold*100}% zeroes" if useprioritythreshold else ""}')
             else: print(f'Collecting stats for {len(symbollist)} tickers')
             for s in symbollist:
-                tickergid = (s.exchange, s.symbol, s.google_topic_id)
+                tickergidString = f'{s.exchange:10s} {s.symbol:5s} {s.google_topic_id:15s}' #(s.exchange, s.symbol, s.google_topic_id)
 
                 sdata = dbm.getStockData(s.exchange, s.symbol, SeriesType.DAILY)
                 if not sdata:
-                    print(*tickergid, '- no stock data')
+                    print(tickergidString, '- no stock data')
                     stats_nostockdata += 1
                     continue
 
-                ginterests = dbm.getGoogleInterests(s.exchange, s.symbol, itype=itype)
+                ginterests = dbm.getGoogleInterests(s.exchange, s.symbol, itype=itype, raw=True)
 
                 startdate = None
-                if ginterests:
-                    if direction == Direction.DESCENDING:
-                        if sdata[0].date < ginterests[0].date:
-                            startdate = date.fromisoformat(ginterests[0].date) - timedelta(days=1)
+                cur_direction = None
+                if itype == InterestType.MONTHLY:
+                    cur_direction = Direction.ASCENDING
+                    if ginterests:
+                         if date.fromisoformat(ginterests[-1].date) < maxdate:
+                            startdate = date.fromisoformat(ginterests[0].date)
                     else:
-                        if sdata[-1].date > ginterests[-1].date:
-                            startdate = date.fromisoformat(ginterests[-1].date) + timedelta(days=1)
+                        startdate = min(
+                            maxdate - timedelta(weeks=278), ## offset >275? weeks to trigger monthly buckets
+                            max(
+                                minGoogleDate, 
+                                date.fromisoformat(sdata[0].date) - timedelta(weeks=5) ## need to offset further to actually get month data for first stock data month
+                            )
+                        )
                 else:
-                    startdate = maxdate
-                    direction = Direction.DESCENDING
-                    print('no ginterests')
+                    if ginterests:
+                        cur_direction = direction
+                        if cur_direction == Direction.DESCENDING:
+                            if sdata[0].date < ginterests[0].date:
+                                startdate = date.fromisoformat(ginterests[0].date) - timedelta(days=1)
+                        else:
+                            if sdata[-1].date > ginterests[-1].date:
+                                startdate = date.fromisoformat(ginterests[-1].date) + timedelta(days=1)
+                    else:
+                        cur_direction = Direction.DESCENDING
+                        startdate = maxdate
+                        print('no ginterests')
 
                 ## already up to date
-                if not startdate or startdate < mindate:
-                    print(*tickergid, 'already up-to-date')
+                if not startdate or startdate < minGoogleDate or (cur_direction == Direction.ASCENDING and startdate > maxdate):
+                    print(tickergidString, 'already up-to-date')
                     stats_uptodate += 1
+                    symbollist.remove(s)
                     continue
                 ## priority skip if not meeting threshold
-                elif ginterests and getZeroPercentage(ginterests) > priority_zeropercentagethreshold:
-                    print(*tickergid, '- priority threshold not met')
+                elif ginterests and useprioritythreshold and getZeroPercentage(ginterests) > priority_zeropercentagethreshold:
+                    print(tickergidString, f'{priority_zeropercentagethreshold} priority threshold not met')
                     stats_partiallycollected += 1
                     continue
                 else:
-                    print(*tickergid)
+                    print(tickergidString)
                     if ginterests: 
-                        print(direction, sdata[0].date, ginterests[0].date, sdata[-1].date, ginterests[-1].date)
+                        print(cur_direction, '|  HS:', sdata[0].date, '->', sdata[-1].date, '|  GI:', ginterests[0].date, '->', ginterests[-1].date)
                         stats_partiallycollected += 1
                     else:
                         stats_notstarted += 1
@@ -746,11 +782,11 @@ class Collector:
                 
 
                 def fullyUpdated():
-                    if direction == Direction.DESCENDING:
+                    if cur_direction == Direction.DESCENDING:
                         return startdate < date.fromisoformat(sdata[0].date)
                     else:
-                        # if startdate > maxdate: return True
-                        return startdate > date.fromisoformat(sdata[-1].date)
+                        return startdate > maxdate
+                        # return startdate > date.fromisoformat(sdata[-1].date)
 
                 stream = None
                 ## insert interests data in chronological order into DB
@@ -763,14 +799,22 @@ class Collector:
 
                     ## determine stream
                     if stream is None:
-                        res = dbm.getGoogleInterests(s.exchange, s.symbol, itype=itype, dt=data[0]['startDate'])
+                        res = dbm.getGoogleInterests(s.exchange, s.symbol, itype=itype, dt=data[0]['startDate'], raw=True)
                         if len(res) > 0: stream = res[0].stream + 1
                         else: stream = 0
 
                     for g in data:
-                        dbm.insertGoogleInterest(s.exchange, s.symbol, itype, g['startDate'], g['relative_interest']) ## DAILY
+                        if g['endDate']: ## weekly or monthly
+                            for d in [(g['startDate'] + timedelta(days=d)) for d in range((g['endDate'] - g['startDate']).days + 1)]:
+                                dbm.insertRawGoogleInterest(s.exchange, s.symbol, itype, d, g['relative_interest'], upsert=itype==InterestType.MONTHLY)
+                        else: ## daily
+                            dbm.insertRawGoogleInterest(s.exchange, s.symbol, itype, g['startDate'], g['relative_interest'])
 
                     totalDataPointsCollected += len(data)
+
+                if itype == InterestType.MONTHLY:
+                    ## only one loop will run, so covers all data
+                    period = timedelta(days=(maxdate - startdate).days)
 
                 ## collect all interests historical data first
                 gdata = []
@@ -778,16 +822,18 @@ class Collector:
                 prioritybreak = False
                 somedatagathered=False
                 while not fullyUpdated() and not apierrorbreak:
-                    directionmodifier = -1 if direction == Direction.DESCENDING else 1
+                    directionmodifier = -1 if cur_direction == Direction.DESCENDING else 1
                     # ASCENDING: startdate -> endate
                     # DESCENDING: enddate <- startdate
-                    enddate = startdate + (timedelta(weeks=34) * directionmodifier)
+                    enddate = startdate + (period * directionmodifier)
                     if enddate > maxdate: enddate = maxdate
 
                     ## Google does not have/allow data before 2004-01-01
-                    if startdate < mindate: break
-                    if enddate < mindate and startdate >= mindate:
-                        enddate = mindate
+                    if startdate < minGoogleDate: break
+                    if enddate < minGoogleDate and startdate >= minGoogleDate:
+                        enddate = minGoogleDate
+                    elif cur_direction == Direction.DESCENDING and enddate.weekday() < 6:
+                        enddate += timedelta(days=abs(6-enddate.weekday()))
 
                     ## exponential backoff loop for API timeouts
                     g = []
@@ -796,15 +842,12 @@ class Collector:
                         try:
                             g = gapi.getHistoricalInterests(s.google_topic_id, startdate, enddate)
                             successfulRequestCount += 1
-                            randomsleepinterval = random()*2.5*random()*3
-                            print(f'Sleeping for {randomsleepinterval} seconds between call')
-                            timer.sleep(randomsleepinterval)
                             backoff = 60
                         except APITimeout:
                             insertGData(gdata)
                             gdata = []
 
-                            if backoff > 8 * 60:
+                            if backoff >= 4 * 60:
                                 print('Backoff exceeds limit, exiting')
                                 finish()
                                 return
@@ -827,7 +870,7 @@ class Collector:
 
                     gdata.extend(g)
                     ## priority skip if not meeting threshold
-                    if not somedatagathered and getZeroPercentage(gdata) > priority_zeropercentagethreshold:
+                    if not somedatagathered and useprioritythreshold and getZeroPercentage(gdata) > priority_zeropercentagethreshold:
                         print('Priority threshold not met')
                         prioritybreak = True
                         break
@@ -839,6 +882,8 @@ class Collector:
                 if not prioritybreak:
                     symbollist.remove(s)
                 print()
+                # finish()
+                # return
 
             priority_zeropercentagethreshold += 0.1
             if collectStatsOnly: break
@@ -898,8 +943,8 @@ if __name__ == '__main__':
             # c.startAPICollection_exploratoryAlphavantageAPIUpdates()
             # c.startSplitsCollection('polygon')
             # c.startAPICollection('neo', SeriesType.DAILY)
-            # c.startGoogleInterestCollection(direction=Direction.DESCENDING)
-            c.startGoogleInterestCollection(direction=Direction.DESCENDING, collectStatsOnly=True)
+            c.startGoogleInterestCollection(direction=Direction.DESCENDING)
+            # c.startGoogleInterestCollection(direction=Direction.DESCENDING, collectStatsOnly=True)
             pass
         except KeyboardInterrupt:
             # dbm.staging_condenseFounded()

@@ -8,113 +8,53 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 from typing import Dict
-
-from globalConfig import config as gconfig
-from structures.dailyDataHandler import DailyDataHandler
+from utils.support import recdotobj
 
 class GoogleInterestsHandler:
     # exchange = None
     # symbol = None
-    # dailyData: DailyDataManager = None
-    # ## will include predicted values
-    # overallData: Dict[str,int] = {}
-    # relativeDataDict: Dict[str,float] = {}
+    # data: Dict[str,float]
 
-    def __init__(self, exchange, symbol, dailydata, overalldata):
+    def __init__(self, exchange, symbol, relativedata):
         self.exchange = exchange
         self.symbol = symbol
-        self.dailyData: DailyDataHandler = None
-        ## will include predicted values
-        self.overallData: Dict[str,int] = {}
-        self.relativeDataDict: Dict[str,float] = {}
-
-        if len(dailydata) == 0: return
-
-        self.dailyData = DailyDataHandler(dailydata)
-
-        ## if no overall data, generate based on stream 0
-        if gconfig.testing.enabled and not overalldata:
-            maxweeksum = 0
-            dailyblocks = self.dailyData.getStream(0).blocks
-            for b in dailyblocks:
-                if b.sum() > maxweeksum: maxweeksum = b.sum()
-            for b in dailyblocks:
-                for d in b.data.keys():
-                    self.overallData[d] = b.sum() / maxweeksum * 100   
-        else:
-            for d in overalldata:
-                self.overallData[d.date] = d.relative_interest
-
-        ## verify stream 0 daily data has a match in overall data set
-        stream0blocks = self.dailyData.getStream(0).blocks
-        for bindex in range(len(stream0blocks)):
-            d = stream0blocks[bindex].getStartDate() if bindex < len(stream0blocks)-1 else stream0blocks[bindex].getEndDate()
-            if d not in self.overallData.keys():
-                raise ValueError(f'Missing Google Interest overall data point for {d}')
-                
-        ## verify adjacent streams share an overlapping block
-        for sindex in range(self.dailyData.numberOfStreams()-1):
-            if self.dailyData.getStream(sindex).getLastFullBlock() != self.dailyData.getStream(sindex+1).getFirstFullBlock():
-                raise ValueError(f'Missing Google Interest overlapping blocks between stream {sindex} and {sindex+1}')
-
-
-        ## compare overlap between streams and determine back-modifier
-        for sindex in range(self.dailyData.numberOfStreams()-1):
-            week1block = self.dailyData.getStream(sindex).getLastFullBlock()
-            week1newblock = self.dailyData.getStream(sindex+1).getFirstFullBlock()
-
-            #####
-            ## predict overall values for stream sindex+1, past the overlapping block
-            factor = self.overallData[week1block.getEndDate()] / week1block.sum()
-            
-            nextStreamManager = self.dailyData.getStream(sindex+1)
-            ## if last block is partial, prepare an approximated sum
-            lastBlockIsPartial = nextStreamManager.getLastBlock().isPartial()
-            weekdaySums = [0 for x in range(7)]
-
-            pastoverlapingblock = False
-            for b in nextStreamManager.blocks:
-                ## approximated sum preparation
-                if lastBlockIsPartial and not b.isPartial():
-                    blockvals = list(b.data.values())
-                    for w in range(7):
-                        weekdaySums[w] += blockvals[w]
-
-                ## skip overlap week
-                if not pastoverlapingblock:
-                    if not b.isPartial(): pastoverlapingblock = True
-                    continue
-
-                ## predict overall value for the week and write
-                weeksum = b.sum()
-                if b.isPartial():
-                    approximateWeekdayPercentages = [weekdaySums[w] / sum(weekdaySums) for w in range(7)]
-                    weeksum /= sum(approximateWeekdayPercentages[:len(b.data)])
-                for d in b.data.keys():
-                    self.overallData[d] = weeksum * factor
-
-
-            ## overall values have shifted, back modification required
-            if week1newblock.sum() < week1block.sum():
-                backfactor = week1newblock.sum() / week1block.sum()
-                lastdate = week1block.getEndDate()
-                for d in self.overallData.keys():
-                    self.overallData[d] *= backfactor
-                    ## stop once end of original data is reached
-                    if d == lastdate:
-                        break
-
-            elif week1newblock.sum() != week1block.sum():
-                ## equal is an expected scenario, indicates no shift for overall values
-                raise Exception('Unexpected comparison result of overlap sums')
-
-        ## calculate relative interest for each day based on daily and overall numbers
-        for k,v in self.dailyData.getConsolidatedDict().items():
-            self.relativeDataDict[k] = v * self.overallData[k] / 100
-        
+        self.dataDict: Dict[str,float] = {}
+        for r in relativedata:
+            self.dataDict[r.date] = r.relative_interest
 
     def getTickerTuple(self):
         return (self.exchange, self.symbol)
 
-    def getDict(self):
-        return self.relativeDataDict
+    ## precending range of data, adjusted so max is 100
+    ## dt = day before anchor date, so will have stock data
+    ## offset as up-to-date data would only be available after 3 days
+    def getPrecedingRange(self, dt: str, precrange, offset=2) -> Dict[str,float]:
+        offsetStarted = False
+        retdict = {}
+        for k,v in reversed(list(self.dataDict.items())):
+            if not offsetStarted:
+                if k == dt: offsetStarted = True
+            elif offset > 0:
+                offset -= 1
+            else:
+                retdict[k] = v
+                if len(retdict) == precrange: break
+        
+        if len(retdict) > 0:
+            ## adjust data up
+            maxv = max(retdict.values())
+            if maxv > 0:
+                for k in retdict.keys():
+                    retdict[k] *= (100 / maxv)
+
+        return retdict
+
+
+if __name__ == '__main__':
+    ## testing
+    data=recdotobj([{'date':'2022-01-01', 'relative_interest':83},{'date':'2022-01-02', 'relative_interest':86},{'date':'2022-01-03', 'relative_interest':89},{'date':'2022-01-04', 'relative_interest':92},{'date':'2022-01-05', 'relative_interest':95},{'date':'2022-01-06', 'relative_interest':98},{'date':'2022-01-07', 'relative_interest':61},{'date':'2022-01-08', 'relative_interest':64},{'date':'2022-01-09', 'relative_interest':67},{'date':'2022-01-10', 'relative_interest':70},{'date':'2022-01-11', 'relative_interest':73},{'date':'2022-01-12', 'relative_interest':76},{'date':'2022-01-13', 'relative_interest':79},{'date':'2022-01-14', 'relative_interest':82},{'date':'2022-01-15', 'relative_interest':85},{'date':'2022-01-16', 'relative_interest':88},{'date':'2022-01-17', 'relative_interest':91},{'date':'2022-01-18', 'relative_interest':94},{'date':'2022-01-19', 'relative_interest':97},{'date':'2022-01-20', 'relative_interest':100}])
+    g = GoogleInterestsHandler('','',data)
+    print(g.getPrecedingRange('2022-01-12', 8))
+
+    
+    

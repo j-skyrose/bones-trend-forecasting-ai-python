@@ -9,10 +9,6 @@ sys.path.append(path)
 
 os.environ['FOR_DISABLE_CONSOLE_CTRL_HANDLER'] = '1'
 import math, time
-from tensorflow.keras.optimizers import Adam
-from tensorflow import keras
-from keras.callbacks import EarlyStopping
-from keras.callbacks import ModelCheckpoint
 
 from managers.dataManager import DataManager
 from managers.neuralNetworkManager import NeuralNetworkManager
@@ -143,6 +139,11 @@ class TrainingInstance():
 
 
 
+
+# from tensorflow.keras.optimizers import Adam
+# from tensorflow import keras
+# from keras.callbacks import EarlyStopping
+# from keras.callbacks import ModelCheckpoint
 
 # # useSavedNetwork = '1615007016'
 # # useSavedNetwork = '1616075899'

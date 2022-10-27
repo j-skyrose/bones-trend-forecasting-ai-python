@@ -8,7 +8,7 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 
-import numpy, re, math, calendar, json
+import numpy, re, math, calendar, json, pickle
 from datetime import date, datetime, timedelta
 from multiprocessing import Pool, cpu_count
 from typing import Callable, Dict, Union
@@ -101,6 +101,17 @@ def shortcdict(dict, key, e, shortcValue=True):
         else: return dict[key]
     except (KeyError, TypeError):
         return e
+
+## for SQLite connect.row_factory
+def recdotdict_factory(cursor, row):
+    retdict = {}
+    for idx, col in enumerate(cursor.description):
+        if col[0] == 'timestamp' and re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}', shortc(row[idx], '')):
+            retdict[col[0]] = datetime.strptime(row[idx], '%Y-%m-%d %X')
+        elif col[0].startswith('pickled'):
+            retdict[col[0]] = pickle.loads(row[idx])
+        else: retdict[col[0]] = row[idx]
+    return recdotdict(retdict)
 
 def flatten(li: list):
     return list(_flattenGen(li))

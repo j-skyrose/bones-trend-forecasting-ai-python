@@ -1,7 +1,11 @@
+from datetime import date
+
 
 ## for backward compatibility only, new ivFactories will not use
 interestColumn = 'interest'
 
+
+minGoogleDate = date(2004,1,1)
 
 apiList = ['polygon', 'fmp', 'alphavantage']
 standardExchanges = ['BATS','NASDAQ','NYSE','NYSE ARCA','NYSE MKT', 'TSX', 'NEO'

@@ -27,7 +27,8 @@ class SeriesType(Enum):
 
 class InterestType(Enum):
     DAILY = 'DAILY'
-    OVERALL = 'OVERALL'
+    WEEKLY = 'WEEKLY'
+    MONTHLY = 'MONTHLY'
 
 class APIState(Enum):
     INVALID = -1
