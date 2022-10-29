@@ -75,6 +75,7 @@ class InputVectorFactory(Singleton):
 
         retarr = []
         seriesarr = []
+        seriesmatrix = []
         semiseriesarr = []
         staticarr = []
         ## loop thru all feature keys recursively and incrementally add them to the end of the vector
@@ -177,8 +178,6 @@ class InputVectorFactory(Singleton):
                 elif k == 'googleInterests':
                     vectorListType = InputVectorDataType.SERIES
                     if collectStats: startt = time.time()
-                    # if googleInterests: vectorAsList = [googleInterests[d.date] for d in stockDataSet]
-                    # else:               vectorAsList = [0 for d in stockDataSet]
                     mindate = minGoogleDate.isoformat()
                     vectorAsList = []
                     for index,d in enumerate(stockDataSet):
@@ -202,6 +201,9 @@ class InputVectorFactory(Singleton):
                     # vectorAsList = [1 if d.date in stockSplitDict.keys() else 0 for d in stockDataSet]
                     # vectorAsList += [stockSplitDict[d.date] if d.date in stockSplitDict.keys() else 0 for d in stockDataSet]
                     vectorAsList = [(1 if splitBooleanAndNotRatio else stockSplitDict[d.date]) if d.date in stockSplitDict.keys() else 0 for d in stockDataSet for splitBooleanAndNotRatio in [True, False]]
+
+                    # seriesmatrix.append([1 if d.date in stockSplitDict.keys() else 0 for d in stockDataSet])
+                    # seriesmatrix.append([stockSplitDict[d.date] if d.date in stockSplitDict.keys() else 0 for d in stockDataSet])
                     if collectStats: sm.ktypestocksplitstime += time.time() - startt
 
 
@@ -372,7 +374,7 @@ class InputVectorFactory(Singleton):
                         elif vectorListType == InputVectorDataType.SEMISERIES:
                             semiseriesarr += vectorAsList
                         else:
-                            seriesarr += vectorAsList
+                            seriesmatrix.append(vectorAsList)
                 else:
                     inpVecStats[compositeKey] = len(vectorAsList)
                     retarr += vectorAsList
@@ -382,6 +384,24 @@ class InputVectorFactory(Singleton):
         #     loggedonce = True
         #     print('Input vector split:')
         #     print(spcl.toString())
+        if gconfig.network.recurrent:
+            steplength = []
+            for r in seriesmatrix:
+                steplength.append(int(len(r) / len(stockDataSet)))
+            
+            ## flatten matrix in column order
+            # startt = time.time()
+            for c in range(len(stockDataSet)):
+                for r in range(len(seriesmatrix)):
+                    stepl = steplength[r]
+                    val = seriesmatrix[r][c*stepl:(c+1)*stepl]
+                    seriesarr.extend(val)
+            # print('loop time', time.time() - startt)
+            # startt = time.time()
+            # seriesarr = [seriesmatrix[r][c*steplength[r]:(c+1)*steplength[r]] for c in range(len(stockDataSet)) for r in range(len(seriesmatrix))]
+            # seriesarr = flatten(seriesarr)
+            # print('comp + flatten time', time.time() - startt) ## 3x slower than loop + extend method
+
 
         if getSplitStat:
             return recdotdict(inpVecStats)
@@ -397,44 +417,46 @@ class InputVectorFactory(Singleton):
             return ret
 
 
+    def _buildMockData(self, precedingRange=1):
+        mocklistdt = '1970-01-01'
+        mockipodt = '1999-01-01'
+        mockstockDataSet = [recdotdict({
+            'date': mockipodt,
+            'open': 5,
+            'high': 5,
+            'low': 5,
+            'close': 5,
+            'volume': 5
+        }) for x in range(precedingRange)]
+        mockvix = recdotdict({
+            mockipodt: {
+                'date': mockipodt,
+                'open': 7,
+                'high': 7,
+                'low': 7,
+                'close': 7
+            } for x in range(precedingRange)
+        })
+        mockfinancialDataSet = [recdotdict({
+            'period': '20120112',
+            'filed': '20090606',
+            'quarter': 2,
+            'nums': {
+                'Assets': 9000,
+                'Liabilities': 250,
+                'StockholdersEquity': 8750
+            }
+        })]
+        mockginterests = recdotdict({
+            mockipodt: 6 for x in range(precedingRange)
+        })
+
+        return mockstockDataSet, mockvix, mockfinancialDataSet, mockginterests, mocklistdt, mockipodt
+
 
     def getStats(self, precedingRange=1):
         if not self.stats or precedingRange != 1:
-            mocklistdt = '1970-01-01'
-            mockipodt = '1999-01-01'
-            mockstockDataSet = [recdotdict({
-                'date': mockipodt,
-                'open': 0,
-                'high': 0,
-                'low': 0,
-                'close': 0,
-                'volume': 0
-            }) for x in range(precedingRange)]
-            mockvix = recdotdict({
-                mockipodt: {
-                    'date': mockipodt,
-                    'open': 0,
-                    'high': 0,
-                    'low': 0,
-                    'close': 0
-                } for x in range(precedingRange)
-            })
-            mockfinancialDataSet = [recdotdict({
-                'period': '20120112',
-                'filed': '20090606',
-                'quarter': 2,
-                'nums': {
-                    'Assets': 9000,
-                    'Liabilities': 250,
-                    'StockholdersEquity': 8750
-                }
-            })]
-            mockginterests = recdotdict({
-                mockipodt: 10 for x in range(precedingRange)
-            })
-
-            self.stats = self.build(mockstockDataSet, mockvix, mockfinancialDataSet, mockginterests, mocklistdt, mockipodt, 'Technology', 'NYSE', [], False, getSplitStat=True)
-
+            self.stats = self.build(*self._buildMockData(precedingRange), 'Technology', 'NYSE', [], False, getSplitStat=True)
         return self.stats
 
     def getInputSize(self, precedingRange=1):
@@ -454,3 +476,8 @@ if __name__ == '__main__':
     print(ivf.getInputSize())
     # print(ivf.getInputSize(200))
     print(ivf.getStats())
+
+    _,_,seriesSize = ivf.getInputSize()
+    precrange = 3
+    _,_,seriesArr = ivf.build(*ivf._buildMockData(precrange), 'Technology', 'NYSE', [], False)
+    print(numpy.reshape(seriesArr, (precrange, seriesSize)))
