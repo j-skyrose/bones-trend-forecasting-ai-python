@@ -206,7 +206,9 @@ class NeuralNetworkInstance:
             )
 
         model.compile(
-            loss='categorical_crossentropy' if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL else 'binary_crossentropy',
+            loss='categorical_crossentropy' if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL else 
+            # 'binary_crossentropy',
+            'binary_focal_crossentropy', ## helps to apply a "focal factor" to down-weight easy examples and focus more on hard examples
                     # optimizer=SGD(optimizer['learningRate'], optimizer['momentum'], optimizer['decay'], optimizer['nesterov']),
                     optimizer=optimizer, ## Adam(amsgrad=True)
                     metrics=['accuracy'])

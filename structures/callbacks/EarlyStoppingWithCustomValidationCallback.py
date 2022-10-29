@@ -11,8 +11,9 @@ import gc, numpy
 from keras.callbacks import EarlyStopping
 
 class EarlyStoppingWithCustomValidation(EarlyStopping):
-    def __init__(self, network=None, batchSize=None, custom_validation_data=None, custom_validation_data_values=[], override_stops_on_value=None, **kwargs):
+    def __init__(self, network=None, batchSize=None, custom_validation_data=None, custom_validation_data_values=[], override_stops_on_value=None, additionalLabel='CUSTOM', **kwargs):
         super().__init__(**kwargs)
+        self.additionalLabel = additionalLabel
         self.network = network
         self.batchSize = batchSize
         self.override_stops_on_value = override_stops_on_value
@@ -43,16 +44,16 @@ class EarlyStoppingWithCustomValidation(EarlyStopping):
                 logs['val_accuracy'] += results[1] * dval
 
         # print('epoch end out',logs)
-        if self.verbose > 0: print('Custom', self.monitor, ':', logs.get(self.monitor))
+        if self.verbose > 0: print(' -', self.additionalLabel, self.monitor, ':', logs.get(self.monitor))
 
         ## prevent early stopping on no improvement if value is stuck on the same as what got configured
         ## hack: default to 0 and increase by smallest possible value so latest epoch is considered best until a non-expected value appears
-        if self.override_stops_on_value:
+        if self.override_stops_on_value is not None:
             if logs.get(self.monitor) == self.override_stops_on_value:
                 self.override_running_increment += numpy.nextafter(numpy.float32(0), numpy.float32(1))
                 logs[self.monitor] = 0 + self.override_running_increment
 
         super().on_epoch_end(epoch, logs)
         if self.wait >= self.patience and epoch > 0 and self.restore_best_weights and self.best_weights is not None and self.verbose > 0: ## from super.on_epoch_end
-            print('Best custom', self.monitor, ':', self.best)
+            print('Best', self.additionalLabel, self.monitor, ':', self.best)
         

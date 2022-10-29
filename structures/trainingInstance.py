@@ -79,13 +79,32 @@ class TrainingInstance():
                     epochs=sys.maxsize,
                     batch_size=self.config.batchSize, verbose=verbose,
                     validation_data=validation_data,
-                    callbacks=[DeviationFromBasedEarlyStopping(minEpochs=minEpochs, validation_accuracy=1)]
+                    callbacks=[
+                        # DeviationFromBasedEarlyStopping(minEpochs=minEpochs, validation_accuracy=1)
+                        ## push network to max POSITIVE cases first, then pull it back to NEGATIVE during actual training
+                        EarlyStoppingWithCustomValidation(
+                            additionalLabel='POSITIVE',
+                            network = self.network, batchSize=self.config.batchSize, verbose=verbose, restore_best_weights=True,
+                            
+                            custom_validation_data=None if validationType == AccuracyType.OVERALL else [
+                                self.validationDataHandler.getTuple(AccuracyType.POSITIVE)
+                            ],
+                            custom_validation_data_values=[1] if validationType != AccuracyType.OVERALL else None,
+                            monitor='val_accuracy', mode='max',
+                            # monitor='val_loss', mode='min',
+                            override_stops_on_value=0,
+
+                            patience=math.ceil(patience/4)
+                        )
+                    ]
                 )
 
             callbacks = [TimeBasedEarlyStopping(stopTime=stopTime, timeDuration=timeDuration)]
             if patience: 
                 callbacks.append(EarlyStoppingWithCustomValidation(
                     network = self.network, batchSize=self.config.batchSize,
+                    verbose=verbose, restore_best_weights=True,
+
                     custom_validation_data= None if validationType == AccuracyType.OVERALL else [
                         self.validationDataHandler.getTuple(AccuracyType.POSITIVE),
                         self.validationDataHandler.getTuple(AccuracyType.NEGATIVE)
@@ -95,7 +114,7 @@ class TrainingInstance():
                     # monitor='val_loss', mode='min',
                     override_stops_on_value=(1-gconfig.trainer.customValidationClassValueRatio),
 
-                    verbose=verbose, patience=patience, restore_best_weights=True
+                    patience=patience
                 ))
 
             if stopTime and verbose > 0: 
