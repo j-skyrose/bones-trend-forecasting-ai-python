@@ -190,7 +190,7 @@ class Collector:
         self.activeThreads -= 1
         print(api,'collector complete','\nThreads remaining',self.activeThreads)
 
-    def startAPICollection(self, api, stype: SeriesType=SeriesType.DAILY):
+    def startAPICollection(self, api, stype: SeriesType=SeriesType.DAILY, googleTopicIDRequired=False):
         typeAPIs = ['alphavantage'] #self.apiManager.getAPIList(sort=True)
         nonTypeAPIs = ['polygon']
 
@@ -215,7 +215,7 @@ class Collector:
                 
             else:
                 ## gather symbols for this collection run
-                lastUpdatedList = dbm.getLastUpdatedCollectorInfo(stype=stype, api=api).fetchall()
+                lastUpdatedList = dbm.getLastUpdatedCollectorInfo(stype=stype, api=api, googleTopicIDRequired=googleTopicIDRequired).fetchall()
                 if DEBUG: print('lastUpdatedList length',len(lastUpdatedList))
 
                 if api == 'alphavantage':
@@ -685,6 +685,8 @@ class Collector:
                 maxdate -= timedelta(days=14)
             maxdate -= timedelta(days=maxdate.day)
 
+        # maxdate = date(2022,10,1) - timedelta(days=1)
+
         daily_period = timedelta(weeks=34) ## anything much more will start returning weekly blocks
         weekly_period = timedelta(weeks=266) ## anything much more will start returning monthly blocks
         period = weekly_period if itype == InterestType.WEEKLY else daily_period
@@ -841,6 +843,11 @@ class Collector:
                     while not g:
                         try:
                             g = gapi.getHistoricalInterests(s.google_topic_id, startdate, enddate)
+                            if len(g) == 0:
+                                if somedatagathered:
+                                    break
+                                else:
+                                    raise APIError(400)
                             successfulRequestCount += 1
                             backoff = 60
                         except APITimeout:
@@ -943,6 +950,7 @@ if __name__ == '__main__':
             # c.startAPICollection_exploratoryAlphavantageAPIUpdates()
             # c.startSplitsCollection('polygon')
             # c.startAPICollection('neo', SeriesType.DAILY)
+            # c.startAPICollection('polygon', SeriesType.DAILY, googleTopicIDRequired=True)
             c.startGoogleInterestCollection(direction=Direction.DESCENDING)
             # c.startGoogleInterestCollection(direction=Direction.DESCENDING, collectStatsOnly=True)
             pass

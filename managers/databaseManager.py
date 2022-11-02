@@ -255,11 +255,11 @@ class DatabaseManager(Singleton):
         return self.__purgeUnusableTickers(self.dbc.execute(stmt, tuple(args)).fetchall(), **kwargs)
 
     ## used by collector to determine which stocks are more in need of new/updated data
-    def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, stype=None, api=None, apiSortDirection:Direction=Direction.DESCENDING, apiFilter:Union[APIState, List[APIState]]=APIState.WORKING, exchanges=standardExchanges):
+    def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, stype=None, api=None, googleTopicIDRequired=False, apiSortDirection:Direction=Direction.DESCENDING, apiFilter:Union[APIState, List[APIState]]=APIState.WORKING, exchanges=standardExchanges):
         stmt = 'SELECT s.*, u.api, u.date FROM last_updates u join symbols s on u.exchange=s.exchange and u.symbol=s.symbol'
         args = []
         adds = []
-        if exchange or symbol or stype:
+        if exchange or symbol or stype or googleTopicIDRequired:
             stmt += ' WHERE '
             adds.append('(' + ' OR '.join(['api_{}={}'.format(a, st.value) for a in ([api] if api else apiList) for st in (apiFilter if type(apiFilter) is list else [apiFilter])]) + ')')
             if exchange:
@@ -274,6 +274,8 @@ class DatabaseManager(Singleton):
             if stype:
                 adds.append('type = ?')
                 args.append(stype.function.replace('TIME_SERIES_',''))
+            if googleTopicIDRequired:
+                adds.append('google_topic_id IS NOT NULL')
             stmt += ' AND '.join(adds)
 
         stmt += ' ORDER BY ' + (('api_{} {}, '.format(api, apiSortDirection.value)) if api else '') + 'api_polygon ASC, date ASC'
@@ -487,7 +489,7 @@ class DatabaseManager(Singleton):
         return ' AND ' + column + (' not' if notIn else '') + ' in (\'' + '\',\''.join(lst) + '\')'
 
     ## generally one time use
-    def getGoogleTopicIDsForSymbols(self, symbolList=None):
+    def getGoogleTopicIDsForSymbols(self, symbolList=None, dryrun=False):
         print('Getting topic IDs from Google')
         DEBUG = True
         gapi = GoogleAPI()
@@ -497,12 +499,13 @@ class DatabaseManager(Singleton):
         alreadyFound = 0
         for s in tqdm(symbols):
             if not s.google_topic_id:
-                ex = s.exchange.replace(' ','')
+                ex = s.exchange.replace(' ','').replace('TSX','TSE').replace('MKT', 'AMERICAN')
                 kw = ex + ':' + s.symbol
                 topics = gapi.suggestions(kw)
                 for t in topics:
                     if t['type'] == 'Topic' and t['title'] == kw:
-                        self.dbc.execute(stmt, (t['mid'], s.exchange, s.symbol))
+                        if not dryrun: self.dbc.execute(stmt, (t['mid'], s.exchange, s.symbol))
+                        else: print(t['mid'], s.exchange, s.symbol)
                         topicsFound.append(kw)
             else:
                 alreadyFound += 1
@@ -2269,36 +2272,48 @@ if __name__ == '__main__':
 
 
         ## check if any 100 daily dates are within the same week, which will cause problems when framing using weekly and monthly data
-        gidata = d.dbc.execute('select * from google_interests_raw where relative_interest=100 and type=\'DAILY\' order by exchange,symbol,date').fetchall()
-        curticker = None
-        lastdate = None
-        count=0
-        print('gidata', len(gidata))
-        for g in gidata:
-            if curticker != (g.exchange, g.symbol):
-                curticker = (g.exchange, g.symbol)
-            else:
-                curdate = date.fromisoformat(g.date)
-                if (curdate - lastdate).days < 7:
-                    if (curdate.weekday() + 1) % 7 > (lastdate.weekday() + 1) % 7:
-                        print(curticker, g.date, lastdate.isoformat())
-                        count+=1
-                        # d.dbc.execute('delete from google_interests_raw where exchange=? and symbol=? and type=?', (g.exchange, g.symbol, InterestType.DAILY.name))
-            lastdate = date.fromisoformat(g.date)
-        print(count, 'found with close 100 dates')
+        # gidata = d.dbc.execute('select * from google_interests_raw where relative_interest=100 and type=\'DAILY\' order by exchange,symbol,date').fetchall()
+        # curticker = None
+        # lastdate = None
+        # count=0
+        # print('gidata', len(gidata))
+        # for g in gidata:
+        #     if curticker != (g.exchange, g.symbol):
+        #         curticker = (g.exchange, g.symbol)
+        #     else:
+        #         curdate = date.fromisoformat(g.date)
+        #         if (curdate - lastdate).days < 7:
+        #             if (curdate.weekday() + 1) % 7 > (lastdate.weekday() + 1) % 7:
+        #                 print(curticker, g.date, lastdate.isoformat())
+        #                 count+=1
+        #                 # d.dbc.execute('delete from google_interests_raw where exchange=? and symbol=? and type=?', (g.exchange, g.symbol, InterestType.DAILY.name))
+        #     lastdate = date.fromisoformat(g.date)
+        # print(count, 'found with close 100 dates')
+
+        
+        # gapi = GoogleAPI()
+        # for s in tqdm(['BATRA','CLSN', 'FMTX', 'XLRN', 'ZGNX', 'ZIXI']):
+        #     # ex = s.exchange.replace(' ','')
+        #     kw = 'NASDAQ' + ':' + s
+        #     topics = gapi.suggestions(kw)
+        #     for t in topics:
+        #         print(t)
+        #         if t['type'] == 'Topic' and t['title'] == kw:
+        #             # self.dbc.execute(stmt, (t['mid'], s.exchange, s.symbol))
+        #             # topicsFound.append(kw)
+        #             print(kw, t['mid'])
 
 
-    # d.pushNeuralNetwork('1615006455', recdotdict({
-    #     'changeThreshold': 0.1, 
-    #     'precedingRange': 52, 
-    #     'followingRange': 4, 
-    #     'highMax': 125.86740668907949, 
-    #     'volumeMax': 4300572.902793559, 
-    #     'accuracyType': AccuracyType.OVERALL, 
-    #     'overallAccuracy': 0.9926470518112183, 
-    #     'negativeAccuracy': 1.0, 
-    #     'positiveAccuracy': 0.0, 
-    #     'epochs': 5}))
+        ## deleting google interest data under conditions, e.g. interest = 100 for dates past threshold 2022-09-30
+        src_tickers = []
+        messedupgidatatickers = d.dbc.execute('select DISTINCT exchange,symbol from google_interests_raw where date>=\'2022-10-01\' and type=\'DAILY\'').fetchall()
+        for t in messedupgidatatickers:
+            src_tickers.append(d.dbc.execute('SELECT * FROM symbols WHERE exchange=? AND symbol=?', (t.exchange, t.symbol)).fetchone())
+        for t in src_tickers:
+            # dest_cursor.execute(f'INSERT INTO symbols VALUES ({getValueQS(src_tickers[0])})', list(t.values()))
+            d.dbc.execute('DELETE FROM google_interests_raw WHERE exchange=? AND symbol=? AND type=\'DAILY\' and date>=\'2022-10-01\'', (t.exchange, t.symbol))
+            print(t.exchange, t.symbol)
+        #########################################################################################################
 
 
     # d.loadVIXArchive(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'raw/vixarchive.xls'))

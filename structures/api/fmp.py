@@ -83,6 +83,7 @@ class FMP:
         )
 
     ## todo
+    # TSX symbols might need to be suffixed by '.TO'
     def query(self, type, symbol):
         print('making request', self.url, self.apiKey, type.function, symbol)
         resp = requests.get(self.url, params={

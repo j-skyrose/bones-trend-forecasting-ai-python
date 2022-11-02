@@ -69,12 +69,12 @@ def processRawGoogleInterests(exchange=None, symbol=None):
         for bindex in range(len(stream0blocks)):
             d = stream0blocks[bindex].getStartDate() if bindex < len(stream0blocks)-1 else stream0blocks[bindex].getEndDate()
             if d not in overallDataDict.keys():
-                raise ValueError(f'Missing Google Interest overall data point for {d}')
+                raise ValueError(f'Missing Google Interest overall data point for {d} -- {s.exchange}:{s.symbol}')
 
         ## verify adjacent streams share an overlapping block
         for sindex in range(ddh.numberOfStreams()-1):
             if ddh.getStream(sindex).getLastFullBlock() != ddh.getStream(sindex+1).getFirstFullBlock():
-                raise ValueError(f'Missing Google Interest overlapping blocks between stream {sindex} and {sindex+1}')
+                raise ValueError(f'Missing Google Interest overlapping blocks between stream {sindex} and {sindex+1} -- {s.exchange}:{s.symbol}')
 
         ## compare overlap between streams and determine back-modifier
         for sindex in range(ddh.numberOfStreams()-1):
