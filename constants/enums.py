@@ -156,6 +156,11 @@ class OperatorDict(Enum):
     GREATERTHANOREQUAL= operator.ge, '<=', None, 'gte'
     GREATERTHAN =       operator.gt, '<', None, 'gt'
 
+class MarketType(Enum):
+    CANADA = 'CANADA'
+    US = 'US'
+    CANADA_US_SHARED = 'CANADA_US_SHARED'
+
 if __name__ == '__main__':
     print(AccuracyType.OVERALL.name, AccuracyType.OVERALL.value, AccuracyType.OVERALL.statsName)
     print(FinancialReportType.YEAR.name, FinancialReportType.YEAR.value)

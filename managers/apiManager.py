@@ -83,7 +83,7 @@ class APIManager(Singleton):
             if a.remaining == 0:
                 if not updateOnly: raise APILimitReached
         else:
-            a.updatedOn = currentVal
+            if not updateOnly: a.updatedOn = currentVal
             a.remaining = a.limit
 
         return a.remaining

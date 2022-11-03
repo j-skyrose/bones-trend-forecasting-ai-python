@@ -15,8 +15,8 @@ from datetime import date, datetime, timedelta
 
 from structures.inputVectorStats import InputVectorStats
 from utils.support import recdotdict, shortc, _isoformatd
-from constants.values import stockOffset
-from constants.enums import OutputClass, PrecedingRangeType
+from constants.values import stockOffset, canadaExchanges, usExchanges
+from constants.enums import MarketType, OutputClass, PrecedingRangeType
 
 from globalConfig import config
 
@@ -116,6 +116,11 @@ def buildCommaSeparatedTickerPairString(tupleList: List):
     for d in tupleList:
         returnstr += ',(\'' + d[0] + '\',\'' + d[1] + '\')'
     return returnstr
+
+def getMarketType(exchange):
+    if exchange in canadaExchanges: return MarketType.CANADA
+    elif exchange in usExchanges: return MarketType.US    
+    else: raise ValueError(f'Exchange {exchange} not found in exchange lists')
 
 
 if __name__ == '__main__':

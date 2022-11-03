@@ -311,18 +311,25 @@ class DatabaseManager(Singleton):
         stmt = 'SELECT n.*, ivf.factory, ivf.config FROM networks n JOIN input_vector_factories ivf on n.factoryId = ivf.id'
         return self.dbc.execute(stmt).fetchall()
 
+    ## setup helper for iterating through historical data in chronological order, stock by stock
+    def getHistoricalStartEndDates(self, exchange=None, symbol=None, type:SeriesType=SeriesType.DAILY):
+        stmt = 'SELECT min(date) as start, max(date) as finish, exchange, symbol FROM historical_data WHERE type=? '
+        tuple = (type.name,)
+        if exchange:
+            stmt += 'AND exchange=? '
+            tuple += (exchange, )
+        if symbol:
+            stmt += 'AND symbol=? '
+            tuple += (symbol, )
+        stmt += 'GROUP BY exchange, symbol'
+        return self.dbc.execute(stmt, tuple).fetchall()
+
     ## more of a helper function to fillHistoricalGaps
     def getDailyHistoricalGaps(self, exchange=None, symbol=None):
         ALL = not (exchange and symbol)
         DEBUG = False
-        stmt = 'SELECT min(date) as start, max(date) as finish, exchange, symbol FROM historical_data WHERE type=? '
-        tuple = (SeriesType.DAILY.name,)
-        if not ALL:
-            stmt += 'AND exchange=? AND symbol=? '
-            tuple += (exchange, symbol)
-        else:
-            stmt += 'GROUP BY exchange, symbol'
-        results = self.dbc.execute(stmt, tuple).fetchall()
+
+        results = self.getHistoricalStartEndDates(exchange, symbol)
         if DEBUG: print('result count', len(results))
 
         dateGaps = {} if ALL else []
@@ -352,7 +359,7 @@ class DatabaseManager(Singleton):
 
                 ## holiday checker
                 if cyear != cdate.year:
-                    holidays = MarketDayManager.getMarketHolidays(cdate.year)
+                    holidays = MarketDayManager.getMarketHolidays(cdate.year, r.exchange)
                     cyear = cdate.year
                     if DEBUG: print('holidays for', cyear, holidays)
                 if cdate in holidays:
@@ -361,7 +368,9 @@ class DatabaseManager(Singleton):
 
                 ## actual gap checker
                 if cdate != date.fromisoformat(data[dindex].date):
-                    if DEBUG: print('is gap')
+                    if DEBUG: 
+                        ddt = date.fromisoformat(data[dindex].date)
+                        print('is gap')
                     if ALL:
                         try:
                             dateGaps[cdate].append((r.exchange, r.symbol))
@@ -1352,7 +1361,10 @@ class DatabaseManager(Singleton):
 
     ## generally only used after VIX update dumps
     ## fill any data gaps with artificial data using last real trading day
-    def fillVIXHistoricalGaps(self, dryrun=False):
+    ## artificial 0 = real data
+    ## artificial 1 = fake data
+    ## artificial 2 = fake data for US market holiday
+    def fillVIXHistoricalGaps(self, fillForNonUSMarkets=True, dryrun=False):
         DEBUG = True
         ## get date range
         stmt = 'SELECT min(date) as start, max(date) as finish FROM cboe_volatility_index'
@@ -1385,17 +1397,21 @@ class DatabaseManager(Singleton):
                 holidays = MarketDayManager.getMarketHolidays(cdate.year)
                 cyear = cdate.year
                 if DEBUG: print('holidays for', cyear, holidays)
-            if cdate in holidays:
-                if DEBUG: print('is holiday')
-                continue
 
             ## actual gap checker
             if cdate != date.fromisoformat(data[dindex].date):
-                # print(cdate.weekday(), cdate in holidays)
-                if not dryrun: 
-                    self.dbc.execute(stmt, (str(cdate), prevclose, prevclose, prevclose, prevclose, True))
+                artificial = 1
+                if cdate in holidays:
+                    if fillForNonUSMarkets:
+                        artificial = 2
+                    else:
+                        if DEBUG: print('is holiday')
+                        continue
+                
+                if not dryrun:
+                    self.dbc.execute(stmt, (str(cdate), prevclose, prevclose, prevclose, prevclose, artificial))
                 else: 
-                    print(str(cdate), prevclose)
+                    print(str(cdate), prevclose, artificial)
                 gapsFilled += 1
                 # if debugcount > 20: break
                 pass
@@ -1412,7 +1428,7 @@ class DatabaseManager(Singleton):
         self.historicalDataCount = None
 
         ALL = not (exchange and symbol)
-        stmt = 'INSERT OR REPLACE INTO historical_data VALUES (?,?,?,?,?,?,?,?,?,?)'
+        stmt = 'INSERT INTO historical_data VALUES (?,?,?,?,?,?,?,?,?,?)'
         tuples = []
         gaps = []
         if type == SeriesType.DAILY:
