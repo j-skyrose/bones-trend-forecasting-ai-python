@@ -190,7 +190,7 @@ class Collector:
         self.activeThreads -= 1
         print(api,'collector complete','\nThreads remaining',self.activeThreads)
 
-    def startAPICollection(self, api, stype: SeriesType=SeriesType.DAILY, googleTopicIDRequired=False):
+    def startAPICollection(self, api, stype: SeriesType=SeriesType.DAILY):
         typeAPIs = ['alphavantage'] #self.apiManager.getAPIList(sort=True)
         nonTypeAPIs = ['polygon']
 
@@ -215,7 +215,7 @@ class Collector:
                 
             else:
                 ## gather symbols for this collection run
-                lastUpdatedList = dbm.getLastUpdatedCollectorInfo(stype=stype, api=api, googleTopicIDRequired=googleTopicIDRequired).fetchall()
+                lastUpdatedList = dbm.getLastUpdatedCollectorInfo(stype=stype, api=api, googleTopicID=Direction.DESCENDING).fetchall()
                 if DEBUG: print('lastUpdatedList length',len(lastUpdatedList))
 
                 if api == 'alphavantage':
@@ -946,12 +946,12 @@ if __name__ == '__main__':
             # dbm.staging_condenseSector()
             # dbm.symbols_pullStagedFounded()
             # dbm.symbols_pullStagedSector()
-            # c.startAPICollection('polygon', SeriesType.MINUTE)
+            c.startAPICollection('alphavantage', SeriesType.DAILY)
             # c.startAPICollection_exploratoryAlphavantageAPIUpdates()
             # c.startSplitsCollection('polygon')
             # c.startAPICollection('neo', SeriesType.DAILY)
-            # c.startAPICollection('polygon', SeriesType.DAILY, googleTopicIDRequired=True)
-            c.startGoogleInterestCollection(direction=Direction.DESCENDING)
+            # c.startAPICollection('polygon', SeriesType.DAILY)
+            # c.startGoogleInterestCollection(direction=Direction.DESCENDING)
             # c.startGoogleInterestCollection(direction=Direction.DESCENDING, collectStatsOnly=True)
             pass
         except KeyboardInterrupt:

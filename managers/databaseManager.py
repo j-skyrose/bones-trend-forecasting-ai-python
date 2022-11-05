@@ -255,31 +255,40 @@ class DatabaseManager(Singleton):
         return self.__purgeUnusableTickers(self.dbc.execute(stmt, tuple(args)).fetchall(), **kwargs)
 
     ## used by collector to determine which stocks are more in need of new/updated data
-    def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, stype=None, api=None, googleTopicIDRequired=False, apiSortDirection:Direction=Direction.DESCENDING, apiFilter:Union[APIState, List[APIState]]=APIState.WORKING, exchanges=standardExchanges):
+    def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, stype=None, api=None, googleTopicID:Union[SQLHelpers,Direction]=None, apiSortDirection:Direction=Direction.DESCENDING, apiFilter:Union[APIState, List[APIState]]=APIState.WORKING, exchanges=standardExchanges):
         stmt = 'SELECT s.*, u.api, u.date FROM last_updates u join symbols s on u.exchange=s.exchange and u.symbol=s.symbol'
-        args = []
         adds = []
-        if exchange or symbol or stype or googleTopicIDRequired:
+        args = []
+
+        if exchange:
+            adds.append('u.exchange = ?')
+            args.append(exchange)
+        elif exchanges:
+            adds.append('(' + ' OR '.join(['u.exchange=?' for a in exchanges]) + ')')
+            args.extend(exchanges)
+        if symbol:
+            adds.append('u.symbol = ?')
+            args.append(symbol)
+        if stype:
+            adds.append('type = ?')
+            args.append(stype.function.replace('TIME_SERIES_',''))
+        if type(googleTopicID) == str:
+            adds.append('google_topic_id=?')
+            args.append(googleTopicID)
+        elif type(googleTopicID) == SQLHelpers:
+            adds.append('google_topic_id IS ?')
+            args.append(googleTopicID)
+
+        if adds:
             stmt += ' WHERE '
             adds.append('(' + ' OR '.join(['api_{}={}'.format(a, st.value) for a in ([api] if api else apiList) for st in (apiFilter if type(apiFilter) is list else [apiFilter])]) + ')')
-            if exchange:
-                adds.append('u.exchange = ?')
-                args.append(exchange)
-            elif exchanges:
-                adds.append('(' + ' OR '.join(['u.exchange=?' for a in exchanges]) + ')')
-                args.extend(exchanges)
-            if symbol:
-                adds.append('u.symbol = ?')
-                args.append(symbol)
-            if stype:
-                adds.append('type = ?')
-                args.append(stype.function.replace('TIME_SERIES_',''))
-            if googleTopicIDRequired:
-                adds.append('google_topic_id IS NOT NULL')
             stmt += ' AND '.join(adds)
 
-        stmt += ' ORDER BY ' + (('api_{} {}, '.format(api, apiSortDirection.value)) if api else '') + 'api_polygon ASC, date ASC'
-
+        stmt += ' ORDER BY ' + \
+            (f'api_{api} {apiSortDirection.value}, ' if api else '') + \
+            'api_polygon ASC,' + \
+            (f'google_topic_id {googleTopicID.value}, ' if type(googleTopicID) == Direction else '') + \
+            'date ASC'
 
         return self.dbc.execute(stmt, tuple(args))
 
