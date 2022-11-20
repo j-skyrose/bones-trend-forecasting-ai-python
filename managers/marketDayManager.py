@@ -16,6 +16,9 @@ from constants.enums import MarketType
 from utils.support import Singleton
 from utils.other import getMarketType
 
+# http://www.market-holidays.com/2022
+# https://www.workingdays.ca/workingdays_holidays_2010_Toronto%20Stock%20Exchange.htm#
+
 class MarketDayManager(Singleton):
     marketHolidays: dict = {MarketType.CANADA_US_SHARED: {}}
     marketHalfDays: dict = {}
