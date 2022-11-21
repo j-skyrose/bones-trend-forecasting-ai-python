@@ -181,11 +181,12 @@ class InputVectorFactory(Singleton):
                     mindate = minGoogleDate.isoformat()
                     vectorAsList = []
                     for index,d in enumerate(stockDataSet):
+                        giHasDate = d.date in googleInterests
                         vectorAsList.extend([
-                            1 if d.date < mindate else 0,               ## date is before any Google data is available, 0 !== 0
-                            1 if index > len(stockDataSet) - 4 else 0,  ## data is not available on date due to how recent it is, 0 !== 0
-                            1 if not googleInterests else 0,            ## data unknown, may have not been collected due to lack of topic ID
-                            shortcdict(googleInterests, d.date, 0) if googleInterests and index <= len(stockDataSet) - 4 else 0
+                            1 if d.date < mindate else 0,               ## date is before any Google data is available, 0 !=~ 0
+                            1 if index > len(stockDataSet) - 4 else 0,  ## data is not available on date due to how recent it is, 0 !=~ 0
+                            1 if not giHasDate else 0,                  ## data unknown, may have not been collected yet or due to lack of topic ID
+                            googleInterests[d.date] if giHasDate and index <= len(stockDataSet) - 4 else 0
                             # googleInterests[d.date] if index <= len(stockDataSet) - 4 else 0
                         ])
 
