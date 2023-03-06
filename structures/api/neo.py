@@ -18,9 +18,9 @@ class NEO:
     def __init__(self, url):
         self.url = url
 
-    def __responseHandler(self, resp: Response):
+    def __responseHandler(self, resp: Response, verbose=0):
         try:
-            print('made request', resp.url)
+            if verbose > 0: print('made request', resp.url)
 
             if resp.ok:
                 rjson = resp.json()
@@ -31,7 +31,7 @@ class NEO:
                     raise APIError
                 elif len(rjson.keys()) == 1: raise APITimeout
 
-                print('got response', rjson)
+                if verbose==1: print('got response', rjson)
 
                 return rjson
             else:
@@ -68,18 +68,19 @@ class NEO:
             #     "status": "TRADING"
             # }
 
-    def query(self, symbol, fromDate, toDate):
+    def query(self, symbol, fromDate, toDate, verbose=0):
         rjson = self.__responseHandler(
             requests.get(self.url + '/historical_data/' + symbol, params={
                 'startDate': fromDate,
                 'endDate': toDate
-            })
+            }),
+            verbose
         )
         data = {}
         for d in rjson['payload']:
             data[datetime.utcfromtimestamp(d['date']/1000).date().isoformat()] = d
 
-        print(len(data.keys()),'data points retrieved')
+        if verbose > 0: print(len(data.keys()),'data points retrieved')
         return data
 
 # {

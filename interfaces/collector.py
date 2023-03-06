@@ -265,7 +265,7 @@ class Collector:
             results = []
             while sdate < date.today():
                 try:
-                    results.append(self.apiManager.query(api, symbol, fromDate=sdate, toDate=sdate + timedelta(days=chunkSize)))
+                    results.append(self.apiManager.query(api, symbol, fromDate=sdate, toDate=sdate + timedelta(days=chunkSize), verbose=0.5))
                 except APIError:
                     pass
                 sdate += timedelta(days=chunkSize)

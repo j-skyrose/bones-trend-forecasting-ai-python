@@ -116,7 +116,7 @@ class APIManager(Singleton):
         if qdate:
             queryArgs = (qdate, verbose)
         elif fromDate and toDate:
-            queryArgs = (symbol, fromDate, toDate)
+            queryArgs = (symbol, fromDate, toDate, verbose)
         else:
             queryArgs = (stype, symbol, exchange)
         return self._executeRequestWrapper(
