@@ -119,7 +119,15 @@ class Predictor(Singleton):
 
         inputVector = network.inputVectorFactory.build(
             self.__getPrecedingRangeData(network, exchange, symbol, anchorDate),
-            self.vixm.data, financialData, None, symbolinfo.founded, None, symbolinfo.sector, exchange
+            self.vixm.data, 
+            financialData, 
+            self.dm.googleInterestsHandlers[(exchange, symbol)].getPrecedingRange(anchorDate, network.stats.precedingRange), 
+            symbolinfo.founded, 
+            None, 
+            symbolinfo.sector, 
+            exchange,
+            [],
+            symbolinfo.asset_type == 'ETF'
         )
         if gconfig.testing.predictor:
             self.testing_inputVectorBuildTime += time.time() - startt
@@ -130,7 +138,7 @@ class Predictor(Singleton):
     def predictAll(cls, networkid, 
         anchorDate=None, #date.today().isoformat(),
         anchorDates=[],
-        withWeighting=True,
+        postPredictionWeighting=True,
         # exchange=None, exchanges=[], excludeExchanges=[]
         numberofWeightingsLimit=0,
         verbose=1,
@@ -147,7 +155,7 @@ class Predictor(Singleton):
         anchorDates = [asDate(dt) for dt in anchorDates]
 
         anchorDateArg = max(anchorDates)
-        nn, tickers = self._initialize(networkid=networkid, anchorDate=anchorDateArg, needInstanceSetup=withWeighting, **kwargs)
+        nn, tickers = self._initialize(networkid=networkid, anchorDate=anchorDateArg, postPredictionWeighting=postPredictionWeighting, **kwargs)
         if len(tickers) == 0:
             print('No tickers available for anchor date of', anchorDateArg)
             return
@@ -242,9 +250,7 @@ class Predictor(Singleton):
             print('testing_inputVectorBuildTime', self.testing_inputVectorBuildTime, 'seconds')
             print('testing_predictTime', self.testing_predictTime, 'seconds')
 
-        if verbose > 0 and len(anchorDates) < 2:
-            ## weight the prediction accuracy
-            weightedAccuracies = {}
+        if verbose > 0 and len(anchorDates) < 2 and postPredictionWeighting:
 
             key = AccuracyType.OVERALL
             # if nn.stats.accuracyType == AccuracyType.POSITIVE:
@@ -333,9 +339,9 @@ if __name__ == '__main__':
     # Predictor.predictAll('1633809914', '2021-12-11', exchanges=['NYSE', 'NASDAQ']) ## 0.05 - 10d
     # Predictor.predictAll('1631423638', '2021-11-20', exchanges=['NYSE', 'NASDAQ'], numberOfWeightingsLimit=200) ## 0.1 - 30d
     # p.predictAll('1631423638', exchanges=['NYSE', 'NASDAQ']) ## 0.1 - 30d
-    # Predictor.predictAll('1641959005', '2021-12-28', exchanges=['NYSE', 'NASDAQ']) ## 0.05 - 10d - recurrent
-    # Predictor.predict('NYSE', 'GME', '2021-12-28', '1641959005') ## 0.05 - 10d - recurrent
-    Predictor.predict('NYSE', 'GME', networkid='1641959005', anchorDates=['2021-12-28', '2021-12-31']) ## 0.05 - 10d - recurrent
+    Predictor.predictAll('1678667196', '2022-06-07', exchanges=['NYSE', 'NASDAQ'], numberofWeightingsLimit=500, assetTypes=['CS', 'CLA', 'CLB', 'CLC']) ## 0.05 - 10d - recurrent
+    # Predictor.predict('NYSE', 'GME', '2021-12-28', '1678667196')
+    # Predictor.predict('NYSE', 'GME', networkid='1641959005', anchorDates=['2021-12-28', '2021-12-31']) ## 0.05 - 10d - recurrent
 
 
     # for x in range(365):

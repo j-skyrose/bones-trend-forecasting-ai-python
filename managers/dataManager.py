@@ -42,14 +42,14 @@ dbm: DatabaseManager = DatabaseManager()
 def multicore_getFinancialDataTickerTuples(ticker):
     return (ticker, DatabaseManager().getFinancialData(ticker.exchange, ticker.symbol))
 
-def multicore_getStockDataTickerTuples(ticker, seriesType, minDate):
-    return (ticker, DatabaseManager().getStockData(ticker.exchange, ticker.symbol, seriesType, minDate))
+def multicore_getStockDataTickerTuples(ticker, seriesType, minDate, queryLimit):
+    return (ticker, DatabaseManager().getStockData(ticker.exchange, ticker.symbol, seriesType, minDate, queryLimit=queryLimit))
 
 def multicore_getStockSplitsTickerTuples(ticker):
     return (ticker, DatabaseManager().getStockSplits(ticker.exchange, ticker.symbol))
 
-def multicore_getGoogleInterestsTickerTuples(ticker):
-    return (ticker, DatabaseManager().getGoogleInterests(ticker.exchange, ticker.symbol))
+def multicore_getGoogleInterestsTickerTuples(ticker, queryLimit):
+    return (ticker, DatabaseManager().getGoogleInterests(ticker.exchange, ticker.symbol, queryLimit=queryLimit))
 
 ## each session should only rely on one (precedingRange, followingRange) combination due to the way the handlers are setup
 ## not sure how new exchange/symbol handler setups would work with normalization info, if not initialized when datamanager is created
@@ -85,7 +85,7 @@ class DataManager():
         setCount=None, setSplitTuple=None, minimumSetsPerSymbol=0, useAllSets=False,
         inputVectorFactory=InputVectorFactory(), normalizationInfo={}, symbolList:List=[],
         analysis=False, statsOnly=False, initializeStockDataHandlersOnly=False, useOptimizedSplitMethodForAllSets=True,
-        anchorDate=None, forPredictor=False,
+        anchorDate=None, forPredictor=False, postPredictionWeighting=False,
         minDate=None,
         explicitValidationSymbolList:List=[],
         normalize=False,
@@ -153,6 +153,11 @@ class DataManager():
                     self.windows[windex][i] = dbm.getSymbols(exchange=self.windows[windex][i].exchange, symbol=self.windows[windex][i].symbol)[0]
         ## not useAllSets and not useOptimizedSplitMethodForAllSets
         else:
+            ## reduce amount of unneccessary data retrieved and maintained in memory during run
+            queryLimit=None
+            if forPredictor and not postPredictionWeighting:
+                queryLimit = self.precedingRange + 1
+
             ## pull and setup financial reports ref
             if gconfig.feature.financials.enabled:
                 startt2 = time.time()
@@ -160,13 +165,13 @@ class DataManager():
                 print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
 
             startt2 = time.time()
-            self.initializeStockDataHandlers(symbolList)
+            self.initializeStockDataHandlers(symbolList, queryLimit=queryLimit)
 
             print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
 
             if not initializeStockDataHandlersOnly:
                 self.initializeStockSplitsHandlers(symbolList, explicitValidationSymbolList)
-                self.initializeGoogleInterestsHandlers(symbolList, explicitValidationSymbolList)
+                self.initializeGoogleInterestsHandlers(symbolList, explicitValidationSymbolList, queryLimit=queryLimit)
 
                 startt3 = time.time()
                 self.initializeStockDataInstances()
@@ -210,6 +215,13 @@ class DataManager():
             **kwargs
         )
 
+    ## deviates from full initialization as per the below
+    ''' 
+        reduces symbol list based on what has up to date data
+        forPredictor: 
+            puts all stock data instances into the validation set
+            sets a query limit to reduce data in memory if weighting is not planned after prediction 
+    '''  
     @classmethod
     def forPredictor(cls, nn: NeuralNetworkInstance, **kwargs):
         normalizationInfo = nn.stats.getNormalizationInfo()
@@ -385,7 +397,7 @@ class DataManager():
     def initializeExplicitValidationStockDataHandlers(self, symbolList: List):
         self.initializeStockDataHandlers(symbolList, 'explicitValidationStockDataHandlers')
 
-    def initializeStockDataHandlers(self, symbolList: List, dmProperty='stockDataHandlers'):
+    def initializeStockDataHandlers(self, symbolList: List, dmProperty='stockDataHandlers', queryLimit: int=None):
         ## purge unusable symbols
         for s in symbolList:
             if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
@@ -399,14 +411,14 @@ class DataManager():
             self.followingRange
         ]
         if gconfig.multicore:
-            for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate), symbolList, chunksize=1, desc='Getting stock data'), desc='Creating stock handlers'):
-                if len(data) >= self.precedingRange + self.followingRange + 1:
+            for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate, queryLimit=queryLimit), symbolList, chunksize=1, desc='Getting stock data'), desc='Creating stock handlers'):
+                if queryLimit or len(data) >= self.precedingRange + self.followingRange + 1:
                     self.__getattribute__(dmProperty)[TickerKeyType(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArg(ticker, data))
                     
         else:
             for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):
-                data = dbm.getStockData(s.exchange, s.symbol, self.seriesType, minDate=self.minDate)
-                if len(data) >= self.precedingRange + self.followingRange + 1:
+                data = dbm.getStockData(s.exchange, s.symbol, self.seriesType, minDate=self.minDate, queryLimit=queryLimit)
+                if queryLimit or len(data) >= self.precedingRange + self.followingRange + 1:
                     self.__getattribute__(dmProperty)[TickerKeyType(s.exchange, s.symbol)] = StockDataHandler(*sdhArg(s, data))
 
         if self.shouldNormalize: self.normalize()
@@ -580,21 +592,21 @@ class DataManager():
             for s in tqdm.tqdm(symbolList, desc='Creating stock splits handlers'):
                 self.stockSplitsHandlers[TickerKeyType(s.exchange, s.symbol)] = StockSplitsHandler(s.exchange, s.symbol, dbm.getStockSplits(s.exchange, s.symbol))
 
-    def initializeGoogleInterestsHandlers(self, symbolList, explicitValidationSymbolList=[]):
+    def initializeGoogleInterestsHandlers(self, symbolList, explicitValidationSymbolList=[], queryLimit: int=None):
         symbolList += explicitValidationSymbolList
         ## purge unusable symbols
         for s in symbolList:
             if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
 
         if gconfig.multicore:
-            for ticker, relativedata in tqdm.tqdm(process_map(partial(multicore_getGoogleInterestsTickerTuples), symbolList, chunksize=1, desc='Getting Google interests data'), desc='Creating Google interests handlers'):
+            for ticker, relativedata in tqdm.tqdm(process_map(partial(multicore_getGoogleInterestsTickerTuples, queryLimit=queryLimit), symbolList, chunksize=1, desc='Getting Google interests data'), desc='Creating Google interests handlers'):
                 key = TickerKeyType(ticker.exchange, ticker.symbol)
                 self.googleInterestsHandlers[key] = GoogleInterestsHandler(*key.getTuple(), relativedata)
                     
         else:
             for s in tqdm.tqdm(symbolList, desc='Creating Google interests handlers'):
                 key = TickerKeyType(s.exchange, s.symbol)
-                self.googleInterestsHandlers[key] = GoogleInterestsHandler(*key.getTuple(), dbm.getGoogleInterests(s.exchange, s.symbol))
+                self.googleInterestsHandlers[key] = GoogleInterestsHandler(*key.getTuple(), dbm.getGoogleInterests(s.exchange, s.symbol, queryLimit=queryLimit))
 
 
     def initializeWindow(self, windowIndex):

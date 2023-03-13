@@ -300,11 +300,12 @@ class DatabaseManager(Singleton):
 
     ## get all historical data for ticker and seriesType
     ## sorted date ascending
-    def getStockData(self, exchange: str, symbol: str, type: SeriesType, minDate=None, fillGaps=False):
+    def getStockData(self, exchange: str, symbol: str, type: SeriesType, minDate=None, fillGaps=False, queryLimit=None):
         stmt = 'SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ' 
         # return self._queryOrGetCache(stmt, (exchange, symbol, type.name), self._getHistoricalDataCount(), exchange+';'+symbol+';'+type.name)
         if minDate:    stmt += 'AND date > \'' + minDate + '\''
         stmt += ' ORDER BY date'
+        if queryLimit: stmt += ' LIMIT ' + str(queryLimit)
 
         data = self.dbc.execute(stmt, (exchange.upper(), symbol.upper(), type.name)).fetchall()
 
@@ -631,7 +632,7 @@ class DatabaseManager(Singleton):
                 args.append(symbol)
         return self.dbc.execute(stmt, tuple(args)).fetchall()
 
-    def getGoogleInterests(self, exchange=None, symbol=None, gtopicid=None, itype:InterestType=InterestType.DAILY, stream=None, artificial=None, dt=None, raw=False):
+    def getGoogleInterests(self, exchange=None, symbol=None, gtopicid=None, itype:InterestType=InterestType.DAILY, stream=None, artificial=None, dt=None, raw=False, queryLimit=None):
         stmt = ''
         args = []
         if gtopicid:
@@ -658,6 +659,7 @@ class DatabaseManager(Singleton):
             stmt += ' AND gi.date=? '
             args.append(asISOFormat(dt))
         stmt += 'ORDER BY gi.date ASC'
+        if queryLimit: stmt += ' LIMIT ' + str(queryLimit)
 
         return self.dbc.execute(stmt, tuple(args)).fetchall()
 
