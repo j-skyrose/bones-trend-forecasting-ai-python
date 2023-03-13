@@ -166,9 +166,9 @@ class Predictor(Singleton):
             else:
                 print('Starting predictions for', len(tickers), 'tickers') ## starting on', anchorDate)
 
-        pc = 0
-        pc_exceptions = 0
-        pcl = []
+        predictionCounter = 0
+        predictionExceptionCounter = 0
+        predictionList = []
         predictionInputVectors = {e: [] for e in InputVectorDataType} if gconfig.network.recurrent else []
         predictionTickers = []
         if gconfig.network.recurrent:
@@ -205,12 +205,13 @@ class Predictor(Singleton):
             except (ValueError, tf.errors.InvalidArgumentError, SufficientlyUpdatedDataNotAvailable, KeyError, AnchorDateAheadOfLastDataDate, TypeError) as e:
             # except IndexError:
                 # print(e)
+                # raise e
 
-                pc_exceptions += 1
+                predictionExceptionCounter += 1
 
                 pass
 
-            if gconfig.testing.enabled and pc > 2:
+            if gconfig.testing.enabled and predictionCounter > 2:
                 break
 
         if gconfig.network.recurrent:
@@ -223,26 +224,25 @@ class Predictor(Singleton):
         if verbose == 1: print('Predicting...')
         if gconfig.testing.predictor:
             startt = time.time()
-
-        res = nn.predict(predictionInputVectors, batchInput=True, raw=gconfig.predictor.ifBinaryUseRaw, verbose=verbose)
+        predictResults = nn.predict(predictionInputVectors, batchInput=True, raw=gconfig.predictor.ifBinaryUseRaw, verbose=verbose)
         if gconfig.testing.predictor:
             self.testing_predictTime += time.time() - startt
 
         if singleSymbol and len(anchorDates) < 2:
-            p = res[0][0]
-            res = numpy.round(p) if gconfig.predictor.ifBinaryUseRaw else p
+            p = predictResults[0][0]
+            predictResults = numpy.round(p) if gconfig.predictor.ifBinaryUseRaw else p
         else:
             lstlength = len(predictionTickers) if len(anchorDates) < 2 else len(anchorDates)
             loopHandle = tqdm.trange(lstlength, desc='Unpacking...') if verbose > 0 else range(lstlength)
             for ti in loopHandle:
-                p = res[ti][0] #.numpy()
+                p = predictResults[ti][0] #.numpy()
                 t = predictionTickers[ti]
                 val = numpy.round(p) if gconfig.predictor.ifBinaryUseRaw else p
                 if singleSymbol:
-                    pcl.append((anchorDates[ti], val))
+                    predictionList.append((anchorDates[ti], val))
                 elif val == 1:
-                    pcl.append((t.exchange, t.symbol, p))
-            if singleSymbol: res = pcl
+                    predictionList.append((t.exchange, t.symbol, p))
+            if singleSymbol: predictResults = predictionList
 
         if gconfig.testing.predictor:
             print('testing_getSymbolsTime', self.testing_getSymbolsTime, 'seconds')
@@ -262,7 +262,7 @@ class Predictor(Singleton):
             weightedAccuracyLambda = lambda v: reduce(operator.mul, list(v), 1) * 100
             weightingsCount = 0
             try:
-                tqdmhandle = tqdm.tqdm(sorted(pcl, key=lambda x: x[2], reverse=True), desc='Weighting...')
+                tqdmhandle = tqdm.tqdm(sorted(predictionList, key=lambda x: x[2], reverse=True), desc='Weighting...')
                 for s in tqdmhandle:
                     exchange, symbol, prediction = s
                 
@@ -311,13 +311,12 @@ class Predictor(Singleton):
             print('Factors: predictions, network, sector, symbol, precrange')
 
 
-
-            print(pc_exceptions, '/', len(tickers), 'had exceptions')
-            print(len(weightedAccuracies), '/', len(tickers) - pc_exceptions, 'predicted to exceed threshold from', dt.isoformat(), 'to', (dt + timedelta(days=nn.stats.followingRange)).isoformat()) ## todo: to should be market days
+            print(predictionExceptionCounter, '/', len(tickers), 'had exceptions')
+            print(len(weightedAccuracies), '/', len(tickers) - predictionExceptionCounter, 'predicted to exceed threshold from', dt.isoformat(), 'to', (dt + timedelta(days=nn.stats.followingRange)).isoformat()) ## todo: to should be market days
 
         ## todo, show final date
 
-        return res if singleSymbol else weightedAccuracies
+        return predictResults if singleSymbol else weightedAccuracies
 
 if __name__ == '__main__':
     # p: Predictor = Predictor()
