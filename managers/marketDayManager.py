@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta
 
 from globalConfig import config as gconfig
 from constants.enums import MarketType
-from utils.support import Singleton
+from utils.support import Singleton, getIndex
 from utils.other import getMarketType
 
 # http://www.market-holidays.com/2022
@@ -92,6 +92,31 @@ class MarketDayManager(Singleton):
             days = self._getMarketDaysStartingFromYear(startingFrom.year)
 
         return [d.date() for d in days if (True if not startingFrom else d >= startingFrom)]
+
+    @classmethod
+    def advance(cls, startDate: date=date.today(), amount: int=1) -> date:
+        ## assume ~265 market days per year
+
+        cdate = startDate
+        marketdays = cls().getMarketDays(year=cdate.year)
+        ind = getIndex(marketdays, lambda d: d==cdate)
+        if ind is None: raise ValueError('Start date is not a market day')
+
+        for i in range(50):
+            if ind + amount > len(marketdays) - 1:
+                amount = amount - (len(marketdays) - ind)
+                marketdays = cls().getMarketDays(year=cdate.year+1)
+                cdate = marketdays[0]
+                ind = 0
+            elif ind + amount < 0:
+                amount = amount + ind + 1
+                marketdays = cls().getMarketDays(year=cdate.year-1)
+                cdate = marketdays[-1]
+                ind = len(marketdays) - 1
+            else:
+                return marketdays[ind + amount]
+            
+        raise IndexError('Unable to determine vanced date')
 
     def _getMarketDaysForYear(self, year):
         if year not in self.marketDays:

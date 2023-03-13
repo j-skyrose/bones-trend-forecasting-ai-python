@@ -172,7 +172,7 @@ class Predictor(Singleton):
         predictionInputVectors = {e: [] for e in InputVectorDataType} if gconfig.network.recurrent else []
         predictionTickers = []
         if gconfig.network.recurrent:
-            staticsize, semiseriessize, seriessize = InputVectorFactory().getInputSize()
+            staticsize, semiseriessize, seriessize = nn.inputVectorFactory.getInputSize()
 
         loopingTickers = True
         loopHandle = tickers
@@ -221,6 +221,7 @@ class Predictor(Singleton):
                 predictionInputVectors[InputVectorDataType.SERIES]
             ]
 
+        ## run batch predict for all vectors
         if verbose == 1: print('Predicting...')
         if gconfig.testing.predictor:
             startt = time.time()
@@ -228,6 +229,7 @@ class Predictor(Singleton):
         if gconfig.testing.predictor:
             self.testing_predictTime += time.time() - startt
 
+        ## (unpack and) massage prediction outputs
         if singleSymbol and len(anchorDates) < 2:
             p = predictResults[0][0]
             predictResults = numpy.round(p) if gconfig.predictor.ifBinaryUseRaw else p
@@ -250,71 +252,82 @@ class Predictor(Singleton):
             print('testing_inputVectorBuildTime', self.testing_inputVectorBuildTime, 'seconds')
             print('testing_predictTime', self.testing_predictTime, 'seconds')
 
-        if verbose > 0 and len(anchorDates) < 2 and postPredictionWeighting:
+        if len(anchorDates) < 2:
+            if singleSymbol:
+                if predictionExceptionCounter:
+                    print('There was an exception for this ticker')
+                else:
+                    print(('{}redicted to'.format('P' if predictResults == 1 else 'Not p')) if gconfig.predictor.ifBinaryUseRaw else '{:.2f}% chance ticker will'.format(predictResults*100), 'exceed threshold from', dt.isoformat(), 'to', MarketDayManager.advance(dt, nn.stats.followingRange).isoformat())
+            else:
+                tickersMeetingThreshold = len(predictionList)
+                ## perform additional weighting on the predict results accuracies
+                if postPredictionWeighting:
+                    weightedAccuracies = {}
 
-            key = AccuracyType.OVERALL
-            # if nn.stats.accuracyType == AccuracyType.POSITIVE:
-            #     key = AccuracyType.NEGATIVE
-            # elif nn.stats.accuracyType == AccuracyType.NEGATIVE:
-            #     key = AccuracyType.POSITIVE
+                    key = AccuracyType.OVERALL
+                    # if nn.stats.accuracyType == AccuracyType.POSITIVE:
+                    #     key = AccuracyType.NEGATIVE
+                    # elif nn.stats.accuracyType == AccuracyType.NEGATIVE:
+                    #     key = AccuracyType.POSITIVE
 
-            networkFactor = getattr(nn.stats, key.statsName)
-            weightedAccuracyLambda = lambda v: reduce(operator.mul, list(v), 1) * 100
-            weightingsCount = 0
-            try:
-                tqdmhandle = tqdm.tqdm(sorted(predictionList, key=lambda x: x[2], reverse=True), desc='Weighting...')
-                for s in tqdmhandle:
-                    exchange, symbol, prediction = s
-                
-                    if gconfig.testing.predictor:
-                        startt = time.time()
-                    symbolInfo = self.dbc.getSymbols(exchange=exchange, symbol=symbol)[0]
-                    if gconfig.testing.predictor:
-                        self.wt_testing_getSymbolsTime += time.time() - startt
+                    networkFactor = getattr(nn.stats, key.statsName)
+                    weightedAccuracyLambda = lambda v: reduce(operator.mul, list(v), 1) * 100
+                    weightingsCount = 0
+                    try:
+                        tqdmhandle = tqdm.tqdm(sorted(predictionList, key=lambda x: x[2], reverse=True), desc='Weighting...')
+                        for s in tqdmhandle:
+                            exchange, symbol, prediction = s
 
-                    sectorFactor = 1
-                    if symbolInfo.sector:
+                            if gconfig.testing.predictor:
+                                startt = time.time()
+                            symbolInfo = self.dbc.getSymbols(exchange=exchange, symbol=symbol)[0]
+                            if gconfig.testing.predictor:
+                                self.wt_testing_getSymbolsTime += time.time() - startt
+
+                            sectorFactor = 1
+                            if symbolInfo.sector:
+                                pass
+
+                            ## network analysis factors
+                            # nanm = NetworkAnalysisManager(nn)
+                            # symbolFactor = nanm.getStockAccuracy(exchange, symbol)
+                            # precedingRangeFactor = nanm.getStockPrecedingRangeTypesAccuracy(determinePrecedingRangeType(self.__getPrecedingRangeData(nn, exchange, symbol, anchorDates[0])))
+
+
+                            # weightedAccuracies[s] = (prediction, networkFactor, sectorFactor, symbolFactor, precedingRangeFactor)
+                            weightedAccuracies[s] = (prediction, networkFactor, sectorFactor)
+                            weightingsCount += 1
+                            if numberofWeightingsLimit and weightingsCount >= numberofWeightingsLimit:
+                                break
+
+                            c = 0
+                            postfixstr = ''
+                            for k, v in sorted(weightedAccuracies.items(), key=lambda x: weightedAccuracyLambda(x[1]), reverse=True):
+                                if c > 2: break
+                                if c > 0:
+                                    postfixstr += ' || '
+                                c += 1
+                                postfixstr += k[0] + ';' + k[1] + ': {:.3f}%'.format(float(weightedAccuracyLambda(v)))
+
+                            tqdmhandle.set_postfix_str(postfixstr)
+
+
+                    except (InternalError, KeyboardInterrupt):
                         pass
-                
-                    ## network analysis factors
-                    nanm = NetworkAnalysisManager(nn)
-                    symbolFactor = nanm.getStockAccuracy(exchange, symbol)
-                    precedingRangeFactor = nanm.getStockPrecedingRangeTypesAccuracy(determinePrecedingRangeType(self.__getPrecedingRangeData(nn, exchange, symbol, anchorDates[0])))
+
+                    tickersMeetingThreshold = len(weightedAccuracies)
+
+                    if gconfig.testing.predictor:
+                        print('wt_testing_getSymbolsTime', self.wt_testing_getSymbolsTime, 'seconds')
+                        print('wt_testing_getStockAccuracyTime', self.wt_testing_getStockAccuracyTime, 'seconds::')
+
+                    for k, v in sorted(weightedAccuracies.items(), key=lambda x: weightedAccuracyLambda(x[1])):
+                        print(k, ':', weightedAccuracyLambda(v), '%  <-', v)
+                    print('Factors: predictions, network, sector, symbol, precrange')
 
 
-                    weightedAccuracies[s] = (prediction, networkFactor, sectorFactor, symbolFactor, precedingRangeFactor)
-                    weightingsCount += 1
-                    if numberofWeightingsLimit and weightingsCount >= numberofWeightingsLimit:
-                        break
-
-                    c = 0
-                    postfixstr = ''
-                    for k, v in sorted(weightedAccuracies.items(), key=lambda x: weightedAccuracyLambda(x[1]), reverse=True):
-                        if c > 2: break
-                        if c > 0:
-                            postfixstr += ' || '
-                        c += 1
-                        postfixstr += k[0] + ';' + k[1] + ': {:.3f}%'.format(float(weightedAccuracyLambda(v)))
-                    
-                    tqdmhandle.set_postfix_str(postfixstr)
-
-
-            except (InternalError, KeyboardInterrupt):
-                pass
-
-            if gconfig.testing.predictor:
-                print('wt_testing_getSymbolsTime', self.wt_testing_getSymbolsTime, 'seconds')
-                print('wt_testing_getStockAccuracyTime', self.wt_testing_getStockAccuracyTime, 'seconds::')
-
-            for k, v in sorted(weightedAccuracies.items(), key=lambda x: weightedAccuracyLambda(x[1])):
-                print(k, ':', weightedAccuracyLambda(v), '%  <-', v)
-            print('Factors: predictions, network, sector, symbol, precrange')
-
-
-            print(predictionExceptionCounter, '/', len(tickers), 'had exceptions')
-            print(len(weightedAccuracies), '/', len(tickers) - predictionExceptionCounter, 'predicted to exceed threshold from', dt.isoformat(), 'to', (dt + timedelta(days=nn.stats.followingRange)).isoformat()) ## todo: to should be market days
-
-        ## todo, show final date
+                print(predictionExceptionCounter, '/', len(tickers), 'had exceptions')
+                print(tickersMeetingThreshold, '/', len(tickers) - predictionExceptionCounter, 'predicted to exceed threshold from', dt.isoformat(), 'to', MarketDayManager.advance(dt, nn.stats.followingRange).isoformat())
 
         return predictResults if singleSymbol else weightedAccuracies
 
