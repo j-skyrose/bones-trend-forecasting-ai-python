@@ -161,6 +161,12 @@ class MarketType(Enum):
     US = 'US'
     CANADA_US_SHARED = 'CANADA_US_SHARED'
 
+class DataManagerType(Enum):
+    ANALYSIS = 'ANALYSIS'
+    PREDICTION = 'PREDICTION'
+    STATS = 'STATS'
+    DEFAULT = 'DEFAULT'
+
 if __name__ == '__main__':
     print(AccuracyType.OVERALL.name, AccuracyType.OVERALL.value, AccuracyType.OVERALL.statsName)
     print(FinancialReportType.YEAR.name, FinancialReportType.YEAR.value)

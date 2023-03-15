@@ -17,7 +17,7 @@ from functools import partial
 from argparse import ArgumentError
 
 from globalConfig import config as gconfig
-from constants.enums import DataFormType, InterestType, OperatorDict, OutputClass, SeriesType, SetType
+from constants.enums import DataFormType, InterestType, OperatorDict, OutputClass, SeriesType, SetType, DataManagerType
 from utils.support import Singleton, flatten, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, processDBQuartersToDicts
 from utils.other import getInstancesByClass, maxQuarters
 from constants.values import unusableSymbols
@@ -89,10 +89,19 @@ class DataManager():
         minDate=None,
         explicitValidationSymbolList:List=[],
         normalize=False,
+        maxPageSize=0, skipAllDataInitialization=False,
         **kwargs
         # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
         # neuralNetwork: NeuralNetworkInstance=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[]
     ):
+        ## check for inappropriate argument combinations
+        if useAllSets and not useOptimizedSplitMethodForAllSets:
+            raise ArgumentError("Optimized split took lots of calculation and should be cached/saved, this should not be available yet")
+        if explicitValidationSymbolList and setSplitTuple and setSplitTuple[1] != 0:
+            raise ArgumentError('Cannot use an explicit validation set and a validation split')
+        if maxPageSize and useAllSets:
+            raise ArgumentError('Simultaneous use of pages and windows should be avoided, behavior not tested')
+        
         startt = time.time()
         self.config = inputVectorFactory.config
         self.inputVectorFactory = inputVectorFactory
@@ -101,21 +110,44 @@ class DataManager():
         self.seriesType = seriesType
         self.threshold = threshold
         self.minDate = minDate
-        self.setCount = setCount
-        self.kerasSetCaches = {}
         self.normalizationInfo = recdotdict(normalizationInfo)
-        # self.symbolList = symbolList
+
+        ## (training/validation/testing) set initialization-related parameters
+        self.setCount = setCount
+        self.minimumSetsPerSymbol = minimumSetsPerSymbol
+        self.initializeStockDataHandlersOnly = initializeStockDataHandlersOnly
+        self.type: DataManagerType
+        if analysis: self.type = DataManagerType.ANALYSIS
+        elif forPredictor: self.type = DataManagerType.PREDICTION
+        elif statsOnly: self.type = DataManagerType.STATS
+        else: self.type = DataManagerType.DEFAULT
+        ##
+
+        ## purge invalid/inappropriate tickers
+        for s in explicitValidationSymbolList:
+            if (s.exchange, s.symbol) in unusableSymbols:
+                explicitValidationSymbolList.remove(s)
+        inappropriateSymbols = [(s.exchange, s.symbol) for s in explicitValidationSymbolList]
+        for s in symbolList:
+            if (s.exchange, s.symbol) in unusableSymbols + inappropriateSymbols:
+                symbolList.remove(s)
+
+        self.explicitValidationSymbolList = explicitValidationSymbolList
+        ##
+
+        ## for page-based initialization of all data, grouped by ticker
+        self.symbolList = symbolList
+        self.usePaging = maxPageSize > 0
+        self.pageSize = maxPageSize
+        self.currentPage = 1
+        ##
+
+        ## for page/window-based initialization of keras sets, for training
         self.useAllSets = useAllSets
         self.useOptimizedSplitMethodForAllSets = useOptimizedSplitMethodForAllSets
         self.initializedWindow = None
         self.shouldNormalize = normalize
-        # self.explicitValidationSymbolList = explicitValidationSymbolList
-
-        ## check for inappropriate argument combinations
-        if useAllSets and not useOptimizedSplitMethodForAllSets:
-            raise ArgumentError("Optimized split took lots of calculation and should be cached/saved, this should not be available yet")
-        if explicitValidationSymbolList and setSplitTuple and setSplitTuple[1] != 0:
-            raise ArgumentError('Cannot use an explicit validation set and a validation split')
+        ##
 
         ## default setSplitTuple determination
         if not setSplitTuple:
@@ -127,15 +159,6 @@ class DataManager():
             if not explicitValidationSymbolList and setSplitTuple[1] == 0:
                 raise ValueError('No validation set messes things up')
             self.setSplitTuple = setSplitTuple
-
-        ## purge invalid/inappropriate tickers
-        for s in explicitValidationSymbolList:
-            if (s.exchange, s.symbol) in unusableSymbols:
-                explicitValidationSymbolList.remove(s)
-        inappropriateSymbols = [(s.exchange, s.symbol) for s in explicitValidationSymbolList]
-        for s in symbolList:
-            if (s.exchange, s.symbol) in unusableSymbols + inappropriateSymbols:
-                symbolList.remove(s)
 
 
         if explicitValidationSymbolList:
@@ -153,38 +176,52 @@ class DataManager():
                     self.windows[windex][i] = dbm.getSymbols(exchange=self.windows[windex][i].exchange, symbol=self.windows[windex][i].symbol)[0]
         ## not useAllSets and not useOptimizedSplitMethodForAllSets
         else:
-            ## reduce amount of unneccessary data retrieved and maintained in memory during run
-            queryLimit=None
+            ## reduce amount of unneccessary data retrieved and maintained in memory during lifecycle
+            self.queryLimit=None
             if forPredictor and not postPredictionWeighting:
-                queryLimit = self.precedingRange + 1
+                self.queryLimit = self.precedingRange + 1
 
-            ## pull and setup financial reports ref
-            if gconfig.feature.financials.enabled:
-                startt2 = time.time()
-                self.initializeFinancialDataHandlers(symbolList, explicitValidationSymbolList)
-                print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
+            if not skipAllDataInitialization:
+                initSymbolList = symbolList
+                if self.usePaging:
+                    initSymbolList = self.getSymbolListPage(1)
+                
+                self._initializeAllData(initSymbolList, self.currentPage if self.usePaging else None)
+        
+        print('DataManager init complete. Took', time.time() - startt, 'seconds')
 
+    def initializeAllDataForPage(self, page):
+        if not self.usePaging: raise ArgumentError('Manager not setup with paging')
+        self._initializeAllData(self.getSymbolListPage(page), refresh=True)
+        gc.collect() ## help clean up old/cleared data
+
+    def _initializeAllData(self, symbolList, refresh=False):
+        ## pull and setup financial reports ref
+        if gconfig.feature.financials.enabled:
             startt2 = time.time()
-            self.initializeStockDataHandlers(symbolList, queryLimit=queryLimit)
+            self.initializeFinancialDataHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh)
+            print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
 
-            print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
+        startt2 = time.time()
+        self.initializeStockDataHandlers(symbolList, queryLimit=self.queryLimit, refresh=refresh)
 
-            if not initializeStockDataHandlersOnly:
-                self.initializeStockSplitsHandlers(symbolList, explicitValidationSymbolList)
-                self.initializeGoogleInterestsHandlers(symbolList, explicitValidationSymbolList, queryLimit=queryLimit)
+        print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
 
+        if not self.initializeStockDataHandlersOnly:
+            self.initializeStockSplitsHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh)
+            self.initializeGoogleInterestsHandlers(symbolList, self.explicitValidationSymbolList, queryLimit=self.queryLimit, refresh=refresh)
+
+            if self.type != DataManagerType.PREDICTION:
                 startt3 = time.time()
-                self.initializeStockDataInstances()
+                self.initializeStockDataInstances(refresh=refresh)
                 print('Stock data instance initialization time:', time.time() - startt3, 'seconds')
 
-                if setCount is not None:
-                    self.setupSets(setCount, setSplitTuple, minimumSetsPerSymbol)
-                elif analysis or forPredictor:
+                if self.setCount is not None:
+                    self.setupSets(self.setCount, self.setSplitTuple, self.minimumSetsPerSymbol)
+                elif self.type == DataManagerType.ANALYSIS:
                     self.setupSets(len(self.stockDataInstances.values()), (0,1), selectAll=True)
-                elif statsOnly:
+                elif self.type == DataManagerType.STATS:
                     self.setupSets(1, (1,0), 0)
-
-        print('DataManager init complete. Took', time.time() - startt, 'seconds')
 
     ## TODO: optimized class methods, forTraining needs to have option of providing a networkid for use in getting the ticker window split
     @classmethod
@@ -397,10 +434,13 @@ class DataManager():
     def initializeExplicitValidationStockDataHandlers(self, symbolList: List):
         self.initializeStockDataHandlers(symbolList, 'explicitValidationStockDataHandlers')
 
-    def initializeStockDataHandlers(self, symbolList: List, dmProperty='stockDataHandlers', queryLimit: int=None):
+    def initializeStockDataHandlers(self, symbolList: List, dmProperty='stockDataHandlers', queryLimit: int=None, refresh=False):
         ## purge unusable symbols
         for s in symbolList:
             if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
+
+        ## purge old data
+        if refresh: self.__getattribute__(dmProperty).clear()
 
         sdhArg = lambda ticker, data: [
             ticker,
@@ -426,9 +466,12 @@ class DataManager():
     def initializeExplicitValidationStockDataInstances(self, **kwargs):
         self.initializeStockDataInstances(stockDataHandlers=self.explicitValidationStockDataHandlers.values(), dmProperty='explicitValidationStockDataInstances', **kwargs)
 
-    def initializeStockDataInstances(self, stockDataHandlers: List[StockDataHandler]=None, collectOutputClassesOnly=False, dmProperty='stockDataInstances', verbose=1):
+    def initializeStockDataInstances(self, stockDataHandlers: List[StockDataHandler]=None, collectOutputClassesOnly=False, dmProperty='stockDataInstances', refresh=False, verbose=1):
         if not stockDataHandlers:
             stockDataHandlers = self.stockDataHandlers.values()
+
+        ## purge old data
+        if refresh: self.__getattribute__(dmProperty).clear()
 
         outputClassCounts = { o: 0 for o in OutputClass }
 
@@ -451,7 +494,10 @@ class DataManager():
 
         if collectOutputClassesOnly: return outputClassCounts
         
-    def initializeFinancialDataHandlers(self, symbolList, explicitValidationSymbolList=[]):
+    def initializeFinancialDataHandlers(self, symbolList, explicitValidationSymbolList=[], refresh=False):
+        ## purge old data
+        if refresh: self.financialDataHandlers.clear()
+
         symbolList += explicitValidationSymbolList
         ANALYZE1 = False
         ANALYZE2 = False
@@ -578,11 +624,14 @@ class DataManager():
                 print('insertingtime',insertingtime,'seconds')
                 print('total',gettingtime+massagingtime+creatingtime+insertingtime,'seconds')
 
-    def initializeStockSplitsHandlers(self, symbolList, explicitValidationSymbolList=[]):
+    def initializeStockSplitsHandlers(self, symbolList, explicitValidationSymbolList=[], refresh=False):
         symbolList += explicitValidationSymbolList
         ## purge unusable symbols
         for s in symbolList:
             if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
+
+        ## purge old data
+        if refresh: self.stockSplitsHandlers.clear()
 
         if gconfig.multicore:
             for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockSplitsTickerTuples), symbolList, chunksize=1, desc='Getting stock splits data'), desc='Creating stock splits handlers'):
@@ -592,11 +641,14 @@ class DataManager():
             for s in tqdm.tqdm(symbolList, desc='Creating stock splits handlers'):
                 self.stockSplitsHandlers[TickerKeyType(s.exchange, s.symbol)] = StockSplitsHandler(s.exchange, s.symbol, dbm.getStockSplits(s.exchange, s.symbol))
 
-    def initializeGoogleInterestsHandlers(self, symbolList, explicitValidationSymbolList=[], queryLimit: int=None):
+    def initializeGoogleInterestsHandlers(self, symbolList, explicitValidationSymbolList=[], queryLimit: int=None, refresh=False):
         symbolList += explicitValidationSymbolList
         ## purge unusable symbols
         for s in symbolList:
             if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
+
+        ## purge old data
+        if refresh: self.googleInterestsHandlers.clear()
 
         if gconfig.multicore:
             for ticker, relativedata in tqdm.tqdm(process_map(partial(multicore_getGoogleInterestsTickerTuples, queryLimit=queryLimit), symbolList, chunksize=1, desc='Getting Google interests data'), desc='Creating Google interests handlers'):
@@ -610,13 +662,11 @@ class DataManager():
 
 
     def initializeWindow(self, windowIndex):
-        self.stockDataInstances.clear()
-        self.stockDataHandlers.clear()
         self.normalized = False
-        self.initializeStockDataHandlers(self.windows[windowIndex])
-        self.initializeStockSplitsHandlers(self.windows[windowIndex])
-        self.initializeGoogleInterestsHandlers(self.windows[windowIndex])
-        self.initializeStockDataInstances()
+        self.initializeStockDataHandlers(self.windows[windowIndex], refresh=True)
+        self.initializeStockSplitsHandlers(self.windows[windowIndex], refresh=True)
+        self.initializeGoogleInterestsHandlers(self.windows[windowIndex], refresh=True)
+        self.initializeStockDataInstances(refresh=True)
         self.setupSets(selectAll=True)
         self.initializedWindow = windowIndex
         gc.collect()
@@ -730,6 +780,17 @@ class DataManager():
         if self.useAllSets and self.useOptimizedSplitMethodForAllSets:
             return len(self.windows)
         return math.ceil(1 / self.setsSlidingWindowPercentage)
+    
+    ## returns the slice of symbol list that corresponds to the given page (1 -> ~len(symbolList)/pageSize)
+    def getSymbolListPage(self, page):
+        if not self.usePaging: raise NotImplementedError()
+        if page < 1 or (page-1)*self.pageSize > len(self.symbolList): raise ArgumentError(None, 'Invalid page number argument')
+        return self.symbolList[math.floor((page-1)*self.pageSize):math.floor(page*self.pageSize)]
+    
+    ## returns how many pages the initial symbol list is divided into
+    def getSymbolListPageCount(self):
+        if not self.usePaging: raise NotImplementedError()
+        return math.ceil(len(self.symbolList)/self.pageSize)
 
     def getInstanceRatio(self, ticker:TickerKeyType=None, instanceList:List[DataPointInstance]=None, instanceDict:Dict[TickerDateKeyType,DataPointInstance]=None):
         if not ticker and not instanceList and not instanceDict: raise ArgumentError('Missing something to check')

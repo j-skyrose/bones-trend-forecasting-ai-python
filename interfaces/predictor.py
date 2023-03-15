@@ -31,7 +31,6 @@ from globalConfig import config as gconfig
 ivf: InputVectorFactory = InputVectorFactory()
 
 class Predictor(Singleton):
-    dm: DataManager = None
     vixm: VIXManager = VIXManager()
     dbc: DatabaseManager = DatabaseManager()
     nnm: NeuralNetworkManager = NeuralNetworkManager()
@@ -64,12 +63,12 @@ class Predictor(Singleton):
                     break
             
         if needNewDataManager or not self.dm:
-            self.dm = DataManager.forPredictor(nn, **kwargs)
+            self.dm: DataManager = DataManager.forPredictor(nn, **kwargs)
 
         self.exchanges = exchanges
         self.symbols = symbols
 
-        return nn, self.dbc.getLastUpdatedInfo(nn.stats.seriesType, kwargs['anchorDate'], dateModifier=OperatorDict.LESSTHANOREQUAL, **kwargs)
+        return nn
 
     @classmethod
     def resetTestTimes(self):
@@ -155,7 +154,10 @@ class Predictor(Singleton):
         anchorDates = [asDate(dt) for dt in anchorDates]
 
         anchorDateArg = max(anchorDates)
-        nn, tickers = self._initialize(networkid=networkid, anchorDate=anchorDateArg, postPredictionWeighting=postPredictionWeighting, **kwargs)
+        nn = self._initialize(networkid=networkid, anchorDate=anchorDateArg, postPredictionWeighting=postPredictionWeighting, 
+                              skipAllDataInitialization='maxPageSize' in kwargs,
+                              **kwargs)
+        tickers = self.dm.symbolList
         if len(tickers) == 0:
             print('No tickers available for anchor date of', anchorDateArg)
             return
@@ -174,45 +176,52 @@ class Predictor(Singleton):
         if gconfig.network.recurrent:
             staticsize, semiseriessize, seriessize = nn.inputVectorFactory.getInputSize()
 
+        ## build input vectors for all tickers; iterating through pages of symbol list
         loopingTickers = True
-        loopHandle = tickers
-        if len(anchorDates) > 1:
-            loopingTickers = False
-            loopHandle = anchorDates
-        if verbose > 0:
-            loopHandle = tqdm.tqdm(loopHandle, desc='Building...')
-        
-        for tkrORdt in loopHandle:
-            if loopingTickers:  
-                dt = anchorDates[0]
-                texchange = tkrORdt.exchange
-                tsymbol = tkrORdt.symbol
-            else:               
-                dt = tkrORdt
-                texchange = kwargs['exchanges'][0]
-                tsymbol = kwargs['symbols'][0]
-            try:
-                inptpl = self.__buildPredictInputTuple(nn, texchange, tsymbol, anchorDate=dt.isoformat())
-                if gconfig.network.recurrent:
-                    predictionInputVectors[InputVectorDataType.STATIC].append(inptpl[0].reshape(-1, staticsize))
-                    if gconfig.feature.financials.enabled:
-                        predictionInputVectors[InputVectorDataType.SEMISERIES].append(inptpl[1].reshape(-1, nn.stats.precedingRange, semiseriessize))
-                    predictionInputVectors[InputVectorDataType.SERIES].append(inptpl[2].reshape(-1, nn.stats.precedingRange, seriessize))
+        maxPage = self.dm.getSymbolListPageCount() if self.dm.usePaging else None
+        pageLoopHandle = range(1, maxPage+1) if self.dm.usePaging else [0]
+        for page in pageLoopHandle:
+            loopHandle = tickers
+            if self.dm.usePaging:
+                self.dm.initializeAllDataForPage(page)
+                loopHandle = self.dm.getSymbolListPage(page)
+            if len(anchorDates) > 1:
+                loopingTickers = False
+                loopHandle = anchorDates
+            if verbose > 0:
+                loopHandle = tqdm.tqdm(loopHandle, desc='Building{}...'.format(' page {}/{}'.format(page, maxPage) if self.dm.usePaging else ''))
+            
+            for tkrORdt in loopHandle:
+                if loopingTickers:
+                    dt = anchorDates[0]
+                    texchange = tkrORdt.exchange
+                    tsymbol = tkrORdt.symbol
                 else:
-                    predictionInputVectors.append(inptpl)
+                    dt = tkrORdt
+                    texchange = kwargs['exchanges'][0]
+                    tsymbol = kwargs['symbols'][0]
+                try:
+                    inptpl = self.__buildPredictInputTuple(nn, texchange, tsymbol, anchorDate=dt.isoformat())
+                    if gconfig.network.recurrent:
+                        predictionInputVectors[InputVectorDataType.STATIC].append(inptpl[0].reshape(-1, staticsize))
+                        if gconfig.feature.financials.enabled:
+                            predictionInputVectors[InputVectorDataType.SEMISERIES].append(inptpl[1].reshape(-1, nn.stats.precedingRange, semiseriessize))
+                        predictionInputVectors[InputVectorDataType.SERIES].append(inptpl[2].reshape(-1, nn.stats.precedingRange, seriessize))
+                    else:
+                        predictionInputVectors.append(inptpl)
                 
-                predictionTickers.append(tkrORdt)
-            except (ValueError, tf.errors.InvalidArgumentError, SufficientlyUpdatedDataNotAvailable, KeyError, AnchorDateAheadOfLastDataDate, TypeError) as e:
-            # except IndexError:
-                # print(e)
-                # raise e
+                    predictionTickers.append(tkrORdt)
+                except (ValueError, tf.errors.InvalidArgumentError, SufficientlyUpdatedDataNotAvailable, KeyError, AnchorDateAheadOfLastDataDate, TypeError) as e:
+                # except IndexError:
+                    # print(e)
+                    # raise e
 
-                predictionExceptionCounter += 1
+                    predictionExceptionCounter += 1
 
-                pass
+                    pass
 
-            if gconfig.testing.enabled and predictionCounter > 2:
-                break
+                if gconfig.testing.enabled and predictionCounter > 2:
+                    break
 
         if gconfig.network.recurrent:
             predictionInputVectors = [
@@ -327,7 +336,7 @@ class Predictor(Singleton):
 
 
                 print(predictionExceptionCounter, '/', len(tickers), 'had exceptions')
-                print(tickersMeetingThreshold, '/', len(tickers) - predictionExceptionCounter, 'predicted to exceed threshold from', dt.isoformat(), 'to', MarketDayManager.advance(dt, nn.stats.followingRange).isoformat())
+                print(tickersMeetingThreshold, '/', len(tickers) - predictionExceptionCounter, 'predicted to exceed threshold from', dt.isoformat(), 'to', MarketDayManager.advance(MarketDayManager.getLastMarketDay(dt), nn.stats.followingRange).isoformat())
 
         return predictResults if singleSymbol else weightedAccuracies
 
@@ -351,7 +360,7 @@ if __name__ == '__main__':
     # Predictor.predictAll('1633809914', '2021-12-11', exchanges=['NYSE', 'NASDAQ']) ## 0.05 - 10d
     # Predictor.predictAll('1631423638', '2021-11-20', exchanges=['NYSE', 'NASDAQ'], numberOfWeightingsLimit=200) ## 0.1 - 30d
     # p.predictAll('1631423638', exchanges=['NYSE', 'NASDAQ']) ## 0.1 - 30d
-    Predictor.predictAll('1678667196', '2022-06-07', exchanges=['NYSE', 'NASDAQ'], numberofWeightingsLimit=500, assetTypes=['CS', 'CLA', 'CLB', 'CLC']) ## 0.05 - 10d - recurrent
+    Predictor.predictAll('1678667196', '2023-03-11', exchanges=['NYSE', 'NASDAQ'], numberofWeightingsLimit=500, assetTypes=['CS', 'CLA', 'CLB', 'CLC'], maxPageSize=500) ## 0.05 - 10d - recurrent
     # Predictor.predict('NYSE', 'GME', '2021-12-28', '1678667196')
     # Predictor.predict('NYSE', 'GME', networkid='1641959005', anchorDates=['2021-12-28', '2021-12-31']) ## 0.05 - 10d - recurrent
 
