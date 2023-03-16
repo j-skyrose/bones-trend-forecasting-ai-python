@@ -112,13 +112,16 @@ class APIManager(Singleton):
 
         return recdotobj(self.__executeAPIRequest(apiHandle, lambda: requestFunc(apiHandle), verbose))
 
-    def query(self, api, symbol=None, stype=None, qdate=None, exchange=None, fromDate=None, toDate=None, verbose=0):
+    def query(self, api, symbol=None, stype=None, qdate=None, exchange=None, fromDate=None, toDate=None, avCompact=False, verbose=0):
+        ## polygon
         if qdate:
             queryArgs = (qdate, verbose)
+        ## neo
         elif fromDate and toDate:
             queryArgs = (symbol, fromDate, toDate, verbose)
+        ## alphavantage
         else:
-            queryArgs = (stype, symbol, exchange)
+            queryArgs = (stype, symbol, exchange, avCompact)
         return self._executeRequestWrapper(
             api,
             lambda apih: apih.api.query(*queryArgs),

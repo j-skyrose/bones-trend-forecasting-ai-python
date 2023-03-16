@@ -48,7 +48,12 @@ class Collector:
         try:
             for sp in symbols:
                 try:
-                    dbm.insertData(sp.exchange, sp.symbol, type.name, api, self.apiManager.query(api, sp.symbol, type, exchange=sp.exchange))
+                    dbm.insertData(
+                        sp.exchange, sp.symbol, type.name, api, 
+                        self.apiManager.query(api, sp.symbol, 
+                                              ## av made DAILY a premium API, but DAILY_ADJUSTED provides same info and more
+                                              SeriesType.DAILY_ADJUSTED if api == 'alphavantage' and type == SeriesType.DAILY else type, 
+                                              exchange=sp.exchange))
                     self.__updateSymbolsAPIField(api, sp.exchange, sp.symbol, 1)
                     dbm.commit()
                     counter += 1
@@ -75,6 +80,7 @@ class Collector:
         if DEBUG: print('max days', startingPastDaysCount, 'last updated delta', lastUpdatedPastDaysCount)
 
         currentdate = date.today() ## TODO: fix so same day running is possible, with some sort of time gating
+        # currentdate = date(2023,3,11)
         if currentdate.weekday() < 5: print('WARNING: running too early on weekdays may result in incomplete data\nOpt to run after ~6pm')
         for c in range(min(startingPastDaysCount, lastUpdatedPastDaysCount)-1, -1, -1):
         # for c in range(1):

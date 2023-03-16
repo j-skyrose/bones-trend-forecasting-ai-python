@@ -90,12 +90,12 @@ class Alphavantage:
         )
 
 
-    def query(self, type, symbol, exchange):
+    def query(self, type, symbol, exchange, compact=False):
         rjson = self.__responseHandler(
             requests.get(self.url, params={
                 'apikey': self.apiKey,
                 'function': type.function,
-                'outputsize': 'full',
+                'outputsize': 'compact' if compact else 'full', ## compact only returns latest 100 data points
                 'symbol': self.__formatSymbol(exchange, symbol)
             })
         )
@@ -106,7 +106,7 @@ class Alphavantage:
                 'high': data[d]['2. high'],
                 'low': data[d]['3. low'],
                 'close': data[d]['4. close'],
-                'volume': data[d]['5. volume']
+                'volume': data[d]['6. volume']
             }
 
         print(len(data.keys()),'data points retrieved')
