@@ -742,15 +742,17 @@ class DataManager():
             if DEBUG: print('sel rem', len(self.selectedInstances), setCount, len(self.selectedInstances) < setCount)
             # select remaining
             if len(self.selectedInstances) < setCount:
+                pusamplesize = int(min(len(puints), setCount * gconfig.sets.positiveSplitRatio - len(psints)) if setCount / 2 - len(psints) > 0 else len(puints))
+                nusamplesize = int(min(len(nuints), setCount - len(self.selectedInstances)) if setCount - len(self.selectedInstances) > 0 else len(nuints))
                 if DEBUG:
                     print('Positive selected instances', len(psints))
                     print('Negative selected instances', len(nsints))
                     print('Available positive instances', len(puints))
                     print('Available negative instances', len(nuints))
+                    print('Positive sample size', pusamplesize)
+                    print('Negative sample size', nusamplesize)
 
-                pusamplesize = int(min(len(puints), setCount * gconfig.sets.positiveSplitRatio - len(psints)) if setCount / 2 - len(psints) > 0 else len(puints))
                 self.selectedInstances.extend(random.sample(puints, pusamplesize))
-                nusamplesize = int(min(len(nuints), setCount - len(self.selectedInstances)) if setCount - len(self.selectedInstances) > 0 else len(nuints))
                 self.selectedInstances.extend(random.sample(nuints, nusamplesize))
             else:
                 if DEBUG: print('Warning: setCount too low for minimum sets per symbol')
@@ -767,9 +769,18 @@ class DataManager():
         trnStop = setSplitTuple[0]
         vldStop = setSplitTuple[1] + trnStop
         if DEBUG: print('stops', trnStop, vldStop)
-        self.trainingSet = c1[:math.floor(trnStop*len(c1))] + c2[:math.floor(trnStop*len(c2))]
-        self.validationSet = c1[math.floor(trnStop*len(c1)):math.floor(vldStop*len(c1))] + c2[math.floor(trnStop*len(c2)):math.floor(vldStop*len(c2))]
-        self.testingSet = c1[math.floor(vldStop*len(c1)):] + c2[math.floor(vldStop*len(c2)):]
+        ## adjust split indexes if split would result in instances being missed (e.g. trnStop = 500 but (math.floor) indexes result in 499)
+        trsc1Index = math.floor(trnStop*len(c1))
+        trsc2Index = math.floor(trnStop*len(c2))
+        if trsc1Index + trsc2Index != trnStop * len(self.selectedInstances):
+            trsc1Index += 1
+        vsc1Index = math.floor(vldStop*len(c1))
+        vsc2Index = math.floor(vldStop*len(c2))
+        if vsc1Index + vsc2Index != vldStop * len(self.selectedInstances):
+            vsc2Index += 1
+        self.trainingSet = c1[:trsc1Index] + c2[:trsc2Index]
+        self.validationSet = c1[trsc1Index:vsc1Index] + c2[trsc2Index:vsc2Index]
+        self.testingSet = c1[vsc1Index:] + c2[vsc2Index:]
 
         random.shuffle(self.trainingSet)
         random.shuffle(self.validationSet)
