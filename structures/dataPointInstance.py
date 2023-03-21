@@ -8,9 +8,10 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 from constants.enums import OutputClass
+from utils.support import GetMemoryUsage
 from structures.stockDataHandler import StockDataHandler
 
-class DataPointInstance:
+class DataPointInstance(GetMemoryUsage):
     ## index is the anchor point, between preceding and following, so total length will always be +1
     def __init__(self, buildInputVectorFunc, stockDataHandler, index, outputClass):
         self.buildInputVectorFunc = buildInputVectorFunc

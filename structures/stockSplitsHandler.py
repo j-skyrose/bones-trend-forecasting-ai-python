@@ -8,9 +8,9 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 from typing import List
-from utils.support import getIndex, shortc
+from utils.support import GetMemoryUsage, getIndex, shortc
 
-class StockSplitsHandler:
+class StockSplitsHandler(GetMemoryUsage):
     exchange = None
     symbol = None
     data: List = []

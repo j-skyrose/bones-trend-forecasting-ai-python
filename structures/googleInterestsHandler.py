@@ -8,9 +8,9 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 from typing import Dict
-from utils.support import recdotobj
+from utils.support import GetMemoryUsage, recdotobj
 
-class GoogleInterestsHandler:
+class GoogleInterestsHandler(GetMemoryUsage):
     # exchange = None
     # symbol = None
     # data: Dict[str,float]

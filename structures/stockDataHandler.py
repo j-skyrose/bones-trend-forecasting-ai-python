@@ -10,6 +10,7 @@ sys.path.append(path)
 from typing import Tuple
 
 from utils.types import TickerKeyType
+from utils.support import GetMemoryUsage
 from utils.other import normalizeStockData, denormalizeStockData
 
 '''
@@ -19,7 +20,7 @@ any set builds will need to reference these to get the actual full vectors
 
 data should be in date ascending order, where each item is one row from DB table
 '''
-class StockDataHandler:
+class StockDataHandler(GetMemoryUsage):
     normalized = False
 
     def __init__(self, symbolData, seriesType, data, 
@@ -95,3 +96,10 @@ class StockDataHandler:
 
     def getPrecedingSet(self, index):
         return self.data[index-self.precedingRange:index]
+
+if __name__ == '__main__':
+    sdh: StockDataHandler = StockDataHandler({}, None, [])
+    print(sdh._getMemorySize())
+    sdh.data=[x for x in range(10000)]
+    sdh.symbolData = {1:1,2:2,3:3,4:4,5:5}
+    print(sdh._getMemorySize())

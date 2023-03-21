@@ -88,6 +88,15 @@ class Singleton(object):
     def init(self, *args, **kwds):
         pass
 
+class GetMemoryUsage(object):
+    ## adds function to recursively and fuzzily determine memory usage of the instantiated class object
+    def _getMemorySize(cls) -> int:
+        sz = 0
+        for a in dir(cls):
+            if not a.startswith('_'):
+                sz += sys.getsizeof(cls.__getattribute__(a))
+        return sz + sys.getsizeof(cls)
+
 def shortc(val, e):
     ## and (type(val) is not list or (type(val) is list and len(val) > 0))
     # try:
