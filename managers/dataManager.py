@@ -11,7 +11,7 @@ import random, math, numpy, tqdm, time, pickle, gc
 from tensorflow import keras
 from timeit import default_timer as timer
 from datetime import date
-from typing import Dict, List, Tuple
+from typing import Dict, List, Set, Tuple
 from tqdm.contrib.concurrent import process_map
 from functools import partial
 from argparse import ArgumentError
@@ -89,7 +89,9 @@ class DataManager():
         minDate=None,
         explicitValidationSymbolList:List=[],
         normalize=False,
+
         maxPageSize=0, skipAllDataInitialization=False,
+        maxGoogleInterestHandlers=50,
         **kwargs
         # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
         # neuralNetwork: NeuralNetworkInstance=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[]
@@ -97,6 +99,8 @@ class DataManager():
         ## check for inappropriate argument combinations
         if useAllSets and not useOptimizedSplitMethodForAllSets:
             raise ArgumentError("Optimized split took lots of calculation and should be cached/saved, this should not be available yet")
+        if useAllSets and useOptimizedSplitMethodForAllSets and maxGoogleInterestHandlers:
+            raise ArgumentError('Cannot use max on Google Interests handlers along with windows, behavior not tested')
         if explicitValidationSymbolList and setSplitTuple and setSplitTuple[1] != 0:
             raise ArgumentError('Cannot use an explicit validation set and a validation split')
         if maxPageSize and useAllSets:
@@ -111,6 +115,11 @@ class DataManager():
         self.threshold = threshold
         self.minDate = minDate
         self.normalizationInfo = recdotdict(normalizationInfo)
+        ## if paging for predictor remove restriction on GI handler initialization as there should be sufficient space to init them
+        if forPredictor and maxPageSize:
+            self.maxGoogleInterestHandlers = 0
+        else:
+            self.maxGoogleInterestHandlers = maxGoogleInterestHandlers
 
         ## (training/validation/testing) set initialization-related parameters
         self.setCount = setCount
@@ -209,7 +218,8 @@ class DataManager():
 
         if not self.initializeStockDataHandlersOnly:
             self.initializeStockSplitsHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh)
-            self.initializeGoogleInterestsHandlers(symbolList, self.explicitValidationSymbolList, queryLimit=self.queryLimit, refresh=refresh)
+            if not self.maxGoogleInterestHandlers:
+                self.initializeGoogleInterestsHandlers(symbolList, self.explicitValidationSymbolList, queryLimit=self.queryLimit, refresh=refresh)
 
             if self.type != DataManagerType.PREDICTION:
                 startt3 = time.time()
@@ -641,7 +651,7 @@ class DataManager():
             for s in tqdm.tqdm(symbolList, desc='Creating stock splits handlers'):
                 self.stockSplitsHandlers[TickerKeyType(s.exchange, s.symbol)] = StockSplitsHandler(s.exchange, s.symbol, dbm.getStockSplits(s.exchange, s.symbol))
 
-    def initializeGoogleInterestsHandlers(self, symbolList, explicitValidationSymbolList=[], queryLimit: int=None, refresh=False):
+    def initializeGoogleInterestsHandlers(self, symbolList, explicitValidationSymbolList=[], queryLimit: int=None, refresh=False, leaveProgressBar=True):
         symbolList += explicitValidationSymbolList
         ## purge unusable symbols
         for s in symbolList:
@@ -650,13 +660,13 @@ class DataManager():
         ## purge old data
         if refresh: self.googleInterestsHandlers.clear()
 
-        if gconfig.multicore:
-            for ticker, relativedata in tqdm.tqdm(process_map(partial(multicore_getGoogleInterestsTickerTuples, queryLimit=queryLimit), symbolList, chunksize=1, desc='Getting Google interests data'), desc='Creating Google interests handlers'):
+        if gconfig.multicore and not self.maxGoogleInterestHandlers:
+            for ticker, relativedata in tqdm.tqdm(process_map(partial(multicore_getGoogleInterestsTickerTuples, queryLimit=queryLimit), symbolList, chunksize=1, desc='Getting Google interests data', leave=leaveProgressBar), desc='Creating Google interests handlers', leave=leaveProgressBar):
                 key = TickerKeyType(ticker.exchange, ticker.symbol)
                 self.googleInterestsHandlers[key] = GoogleInterestsHandler(*key.getTuple(), relativedata)
                     
         else:
-            for s in tqdm.tqdm(symbolList, desc='Creating Google interests handlers'):
+            for s in tqdm.tqdm(symbolList, desc='Creating Google interests handlers', leave=leaveProgressBar):
                 key = TickerKeyType(s.exchange, s.symbol)
                 self.googleInterestsHandlers[key] = GoogleInterestsHandler(*key.getTuple(), dbm.getGoogleInterests(s.exchange, s.symbol, queryLimit=queryLimit))
 
@@ -863,12 +873,13 @@ class DataManager():
         def constrList(set: List, isInput: bool) -> numpy.array:
             return numpy.asarray(constrList_helper(set, isInput))
 
-        def constrList_recurrent(set: List[DataPointInstance], showProgress=True) -> List:
+        def constrList_recurrent(dpiList: List[DataPointInstance]=[], vectorList: List=[], showProgress=True) -> List:
+            iterateList = shortc(vectorList, dpiList)
             staticList = []
             semiseriesList = []
             seriesList = []
-            for i in tqdm.tqdm(set, desc='Building input vector array', leave=(verbose > 0.5)) if showProgress and verbose != 0 else set:
-                staticArr, semiseriesArr, seriesArr = i.getInputVector()
+            for i in tqdm.tqdm(iterateList, desc='Building input vector array', leave=(verbose > 0.5)) if showProgress and verbose != 0 else iterateList:
+                staticArr, semiseriesArr, seriesArr = i.getInputVector() if not vectorList else i
                 staticList.append(staticArr)
                 semiseriesList.append(numpy.reshape(semiseriesArr, (maxQuarters(self.precedingRange), semiseriesSize)))
                 seriesList.append(numpy.reshape(seriesArr, (self.precedingRange, seriesSize)))
@@ -879,18 +890,13 @@ class DataManager():
                 numpy.array(seriesList)
             ]
 
-
-        def constructDataSet(lst):
-            # inp = constrList(lst, True)
-            # ouplist = constrList(lst, False)
-            # oup = keras.utils.to_categorical(ouplist, num_classes=numOutputClasses)
-            # return [inp, oup]
+        def constructDataSet(dpiList=[], vectorList=[]):
             if gconfig.network.recurrent:
-                # inp = numpy.reshape(inp, (len(inp), self.precedingRange, self.inputVectorFactory.getInputSize()[2])) ## rows, time_steps, features
-                inp = constrList_recurrent(lst)
+                inp = constrList_recurrent(dpiList, vectorList)
             else:
-                inp = constrList(lst, True)
-            oup = constrList(lst, False)
+                if vectorList: inp = vectorList
+                else: inp = constrList(dpiList, True)
+            oup = constrList(dpiList, False)
             return [
                 inp, 
                 keras.utils.to_categorical(oup, num_classes=OutputClass.__len__()) if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL else oup
@@ -916,11 +922,59 @@ class DataManager():
             validationSet = self._getSetSlice(validationSet, slice)
             testingSet = self._getSetSlice(testingSet, slice)
 
+        ## only initialize and maintain so many Google Interests handlers at a time to save on memory
+        ## data set construction must run vertically by ticker instead of horizontally by set type
+        if self.maxGoogleInterestHandlers:
+            if validationDataOnly:
+                todoSetDict = {
+                    SetType.VALIDATION: validationSet
+                }
+            else:
+                todoSetDict = {
+                    SetType.TRAINING: trainingSet,
+                    SetType.TESTING: testingSet
+                }
+                if not omitValidation:
+                    todoSetDict[SetType.VALIDATION] = validationSet
+            
+            ## gather tickers
+            todoTickers: Set[TickerKeyType] = set()
+            dpi: DataPointInstance
+            for tds in todoSetDict.values():
+                for dpi in tds:
+                    todoTickers.add(dpi.stockDataHandler.getTickerKey())
+            todoTickers = list(todoTickers)
+            
+            ## get input vectors
+            inputVectorTuplesDict = { s: [] for s in todoSetDict.keys() }
+            t: TickerKeyType
+            for tickerSplitIndex in tqdm.tqdm(range(math.ceil(len(todoTickers)/self.maxGoogleInterestHandlers)), desc='Compiling raw input vectors'):
+                tickers = todoTickers[tickerSplitIndex*self.maxGoogleInterestHandlers:(tickerSplitIndex+1)*self.maxGoogleInterestHandlers]
+                self.initializeGoogleInterestsHandlers(tickers, queryLimit=self.queryLimit, refresh=True, leaveProgressBar=False)
+
+                for stype,ticker,dpi in tqdm.tqdm([(s,t,d) for s in todoSetDict.keys() for t in tickers for d in todoSetDict[s]], desc='Generating vectors', leave=False):
+                    if dpi.stockDataHandler.getTickerKey() == ticker:
+                        inputVectorTuplesDict[stype].append(dpi.getInputVector())
+
+            ## process input vectors to data sets
+            if SetType.TRAINING in todoSetDict.keys():
+                trainingDataLambda = lambda: constructDataSet(trainingSet, inputVectorTuplesDict[SetType.TRAINING])
+            if SetType.VALIDATION in todoSetDict.keys():
+                validationDataLambda = lambda: constructDataSet(validationSet, inputVectorTuplesDict[SetType.VALIDATION])
+            if SetType.TESTING in todoSetDict.keys():
+                testingDataLambda = lambda: constructDataSet(testingSet, inputVectorTuplesDict[SetType.TESTING])
+
+        else:
+            validationDataLambda = lambda: constructDataSet(validationSet)
+            trainingDataLambda = lambda: constructDataSet(trainingSet)
+            testingDataLambda = lambda: constructDataSet(testingSet)
+
+
         if omitValidation:  validationData = None
-        else:               validationData = constructDataSet(validationSet)
+        else:               validationData = validationDataLambda()
         if validationDataOnly: return validationData
-        trainingData = constructDataSet(trainingSet)
-        testingData = constructDataSet(testingSet)
+        trainingData = trainingDataLambda()
+        testingData = testingDataLambda()
 
         if gconfig.testing.enabled and verbose > 0.5:
             print('Stock data handler build time', self.getprecstocktime)
