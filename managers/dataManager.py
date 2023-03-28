@@ -426,16 +426,16 @@ class DataManager():
 
         startt = time.time()
         ret = self.inputVectorFactory.build(
-            precset,
-            self.vixDataHandler,
-            precfinset,
-            googleinterests,
-            symbolData.founded,
-            'todo',
-            symbolData.sector,
-            symbolData.exchange,
-            splitsset,
-            symbolData.asset_type == 'ETF'
+            stockDataSet=precset,
+            vixData=self.vixDataHandler,
+            financialDataSet=precfinset,
+            googleInterests=googleinterests,
+            stockSplits=splitsset,
+            foundedDate=symbolData.founded,
+            ipoDate='todo',
+            sector=symbolData.sector,
+            exchange=symbolData.exchange,
+            etfFlag=symbolData.asset_type == 'ETF'
         )
         self.actualbuildtime += time.time() - startt
 
