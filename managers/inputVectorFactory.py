@@ -10,11 +10,11 @@ sys.path.append(path)
 import numpy, re, time
 from calendar import monthrange
 from datetime import date, datetime, timedelta
-from typing import Dict
+from typing import Dict, List
 
 from globalConfig import config as gconfig
-from constants.enums import DataFormType, FeatureExtraType, InputVectorDataType
-from constants.values import standardExchanges, minGoogleDate
+from constants.enums import DataFormType, FeatureExtraType, IndicatorType, InputVectorDataType, SuperTrendDirection
+from constants.values import standardExchanges, minGoogleDate, indicatorsKey
 from utils.support import Singleton, flatten, recdotdict, _isoformatd, shortc, _edgarformatd, shortcdict
 from utils.other import maxQuarters
 from structures.stockDataHandler import StockDataHandler
@@ -38,22 +38,38 @@ class InputVectorFactory(Singleton):
         self.dbm: DatabaseManager = DatabaseManager()
 
         ## flatten feature dict into tuples for use when building input vectors
-        ## (key, extraType, compositeKey); compositeKey for sub-features
+        ## (key, extraType, compositeKey); compositeKey for sub-features e.g. indicators_relativeStrengthIndex, stock_high, vix_open
+        ## also filters out any features that are not enabled
         self.featureTuples = self._flattenFeatureDict(self.config.feature)
 
     def _flattenFeatureDict(self, fdict, parentKey='', returnKeysOnly=False):
+        if returnKeysOnly and shortcdict(self, 'featureKeyCache', False) and shortcdict(self, 'featureKeyCacheParent', False) == parentKey: 
+            return self.featureKeyCache
+        
         tpls = []
         for k,v in fdict.items():
-            compositeKey = str(k) if not parentKey else '_'.join([parentKey, str(k)])
+            strk = str(k) if k not in IndicatorType else k.longForm
+            compositeKey = strk if not parentKey else '_'.join([parentKey, strk])
             if 'enabled' in v.keys():
                 if v['enabled']:
                     tpls.append((k, v['extraType'], compositeKey))
             else:
                 tpls.extend(self._flattenFeatureDict(v, compositeKey))
-        return tpls if not returnKeysOnly else [tpl[2] for tpl in tpls]
 
-    def getFeatureCompositeKeys(self, fdict, parentKey=''):
-        return self._flattenFeatureDict(fdict, parentKey, returnKeysOnly=True)
+        if returnKeysOnly:
+            self.featureKeyCacheParent = parentKey
+            self.featureKeyCache = [tpl[2] for tpl in tpls]
+            return self.featureKeyCache
+        else:
+            return tpls 
+
+    ## e.g. indicators_relativeStrengthIndex, indicators_exponentialMovingAverage50, indicators_bollingerBands
+    def getIndicatorCompositeKeys(self) -> List[str]:
+        return self._flattenFeatureDict(self.config.feature[indicatorsKey], indicatorsKey, returnKeysOnly=True)
+    
+    def getIndicators(self) -> List[IndicatorType]:
+        return [IndicatorType.getByProp(i, 'compositeKey') for i in self.getIndicatorCompositeKeys()]
+
 
     ## alt: https://www.fast.ai/2018/04/29/categorical-embeddings/
     def _getCategoricalVector(self, i, max=None, lookupList=None, topBuffer=0, bottomBuffer=0):
@@ -72,6 +88,7 @@ class InputVectorFactory(Singleton):
     def build(self,
               ## time series type data
               stockDataSet=None, vixData=None, financialDataSet=None, googleInterests: Dict[str,float]=None, stockSplits=None,
+              indicators: Dict[IndicatorType, float]=None,
               ## symbol/static type data
               foundedDate=None, ipoDate=None, sector=None, exchange=None, etfFlag=None,
               ## other
@@ -198,6 +215,28 @@ class InputVectorFactory(Singleton):
                 # seriesmatrix.append([1 if d.date in stockSplitDict.keys() else 0 for d in stockDataSet])
                 # seriesmatrix.append([stockSplitDict[d.date] if d.date in stockSplitDict.keys() else 0 for d in stockDataSet])
                 if collectStats: sm.ktypestocksplitstime += time.time() - startt
+
+            elif compositeKey.startswith(indicatorsKey):
+                vectorListType = InputVectorDataType.SERIES
+                if collectStats: startt = time.time()
+                if k == IndicatorType.ST:
+                    if self.config.dataForm.superTrend == DataFormType.VECTOR:
+                        vectorAsList = []
+                        for val, dir in indicators[k]:
+                            vectorAsList.extend([
+                                val,
+                                1 if dir == SuperTrendDirection.UP else 0
+                            ])
+                    else: ## INTEGER
+                        vectorAsList = [val * (-1 if dir == SuperTrendDirection.DOWN else 1) for val,dir in indicators[k]]
+                else:
+                    if extraType == FeatureExtraType.SINGLE:
+                        vectorAsList = indicators[k]
+                    else: ## multiple
+                        vectorAsList = []
+                        for tpl in indicators[k]:
+                            vectorAsList.extend([*tpl])
+                if collectStats: sm.indicatorskeytime += time.time() - startt
 
 
             ##############################################################################################################################
@@ -443,8 +482,14 @@ class InputVectorFactory(Singleton):
         mockginterests = recdotdict({
             mockipodt: 6 for x in range(precedingRange)
         })
+        mockindicators = recdotdict({
+            k: [9 for x in range(precedingRange)] for k in self.getIndicators()
+        })
+        mockindicators[IndicatorType.DIS] = [(3,3) for x in range(precedingRange)]
+        mockindicators[IndicatorType.BB] = [(4,4,4) for x in range(precedingRange)]
+        mockindicators[IndicatorType.ST] = [(2,SuperTrendDirection.UP) for x in range(precedingRange)]
 
-        return {'stockDataSet': mockstockDataSet, 'vixData': mockvix, 'financialDataSet': mockfinancialDataSet, 'googleInterests': mockginterests, 'foundedDate': mocklistdt, 'ipoDate': mockipodt}
+        return { 'stockDataSet': mockstockDataSet, 'vixData': mockvix, 'financialDataSet': mockfinancialDataSet, 'googleInterests': mockginterests, 'foundedDate': mocklistdt, 'ipoDate': mockipodt, 'indicators': mockindicators }
 
 
     def getStats(self, precedingRange=1):

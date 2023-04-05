@@ -17,10 +17,11 @@ from functools import partial
 from argparse import ArgumentError
 
 from globalConfig import config as gconfig
-from constants.enums import DataFormType, InterestType, OperatorDict, OutputClass, SeriesType, SetType, DataManagerType
+from constants.enums import DataFormType, OperatorDict, OutputClass, SeriesType, SetType, DataManagerType, IndicatorType
 from utils.support import Singleton, flatten, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, processDBQuartersToDicts
-from utils.other import getInstancesByClass, maxQuarters
-from constants.values import unusableSymbols
+from utils.other import getInstancesByClass, getMaxIndicatorPeriod, maxQuarters, getIndicatorPeriod
+from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
+from constants.values import unusableSymbols, indicatorsKey
 from managers.stockDataManager import StockDataManager
 from managers.databaseManager import DatabaseManager
 from managers.vixManager import VIXManager
@@ -83,7 +84,7 @@ class DataManager():
     def __init__(self,
         precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, threshold=0,
         setCount=None, setSplitTuple=None, minimumSetsPerSymbol=0, useAllSets=False,
-        inputVectorFactory=InputVectorFactory(), normalizationInfo={}, symbolList:List=[],
+        inputVectorFactory=InputVectorFactory(), normalizationInfo={}, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, symbolList:List=[],
         analysis=False, statsOnly=False, initializeStockDataHandlersOnly=False, useOptimizedSplitMethodForAllSets=True,
         anchorDate=None, forPredictor=False, postPredictionWeighting=False,
         minDate=None,
@@ -115,6 +116,7 @@ class DataManager():
         self.threshold = threshold
         self.minDate = minDate
         self.normalizationInfo = recdotdict(normalizationInfo)
+        self.indicatorConfig = indicatorConfig
         ## if paging for predictor remove restriction on GI handler initialization as there should be sufficient space to init them
         if forPredictor and maxPageSize:
             self.maxGoogleInterestHandlers = 0
@@ -140,6 +142,7 @@ class DataManager():
         for s in symbolList:
             if (s.exchange, s.symbol) in unusableSymbols + inappropriateSymbols:
                 symbolList.remove(s)
+
 
         self.explicitValidationSymbolList = explicitValidationSymbolList
         ##
@@ -218,6 +221,7 @@ class DataManager():
 
         if not self.initializeStockDataHandlersOnly:
             self.initializeStockSplitsHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh)
+            self.initializeTechnicalIndicators() ## needs to be done before any instance selection as the viable index pool may get reduced
             if not self.maxGoogleInterestHandlers:
                 self.initializeGoogleInterestsHandlers(symbolList, self.explicitValidationSymbolList, queryLimit=self.queryLimit, refresh=refresh)
 
@@ -409,6 +413,10 @@ class DataManager():
         precset = stockDataSet.getPrecedingSet(stockDataIndex)
         self.getprecstocktime += time.time() - startt
 
+        startt = time.time()
+        precedingIndicators: Dict = stockDataSet.getPrecedingIndicators(stockDataIndex)
+        self.getprecindctime += time.time() - startt
+
         anchordate = date.fromisoformat(stockDataSet.data[stockDataIndex].date)
 
         try: splitsset = self.stockSplitsHandlers[stockDataSet.getTickerTuple()].getForRange(precset[0].date, precset[-1].date)
@@ -431,6 +439,7 @@ class DataManager():
             financialDataSet=precfinset,
             googleInterests=googleinterests,
             stockSplits=splitsset,
+            indicators=precedingIndicators,
             foundedDate=symbolData.founded,
             ipoDate='todo',
             sector=symbolData.sector,
@@ -452,26 +461,50 @@ class DataManager():
         ## purge old data
         if refresh: self.__getattribute__(dmProperty).clear()
 
+        maxIndicatorPeriod = getMaxIndicatorPeriod(self.config.feature[indicatorsKey].keys(), self.indicatorConfig)
+
+        ## check if there is enough stock data to fulfill (hyperparameter) requirements
+        precedingFollowingShortfallCheck = lambda d: len(d) >= self.precedingRange + self.followingRange + 1
+        indicatorPeriodShortfallCheck = lambda d: len(d) < maxIndicatorPeriod
+        dataLengthCheck = lambda d: queryLimit or precedingFollowingShortfallCheck(d) or indicatorPeriodShortfallCheck(d)
+
+        queryLimitSkips = 0
+        precedingFollowingShortfallSkips = 0
+        indicatorPeriodShortfallSkips = 0
+        def updateSkipCounts(data):
+            if not queryLimit: queryLimitSkips += 1
+            elif not precedingFollowingShortfallCheck(data): precedingFollowingShortfallSkips += 1
+            elif not indicatorPeriodShortfallCheck(data): indicatorPeriodShortfallSkips += 1
+
         sdhArg = lambda ticker, data: [
             ticker,
             self.seriesType,
             data,
             *self.normalizationInfo.values(),
             self.precedingRange,
-            self.followingRange
+            self.followingRange,
+            maxIndicatorPeriod
         ]
         if gconfig.multicore:
             for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate, queryLimit=queryLimit), symbolList, chunksize=1, desc='Getting stock data'), desc='Creating stock handlers'):
-                if queryLimit or len(data) >= self.precedingRange + self.followingRange + 1:
+                if dataLengthCheck(data):
                     self.__getattribute__(dmProperty)[TickerKeyType(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArg(ticker, data))
-                    
+                else:
+                    updateSkipCounts(data)
         else:
             for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):
                 data = dbm.getStockData(s.exchange, s.symbol, self.seriesType, minDate=self.minDate, queryLimit=queryLimit)
-                if queryLimit or len(data) >= self.precedingRange + self.followingRange + 1:
+                if dataLengthCheck(data):
                     self.__getattribute__(dmProperty)[TickerKeyType(s.exchange, s.symbol)] = StockDataHandler(*sdhArg(s, data))
+                else:
+                    updateSkipCounts(data)
 
         if self.shouldNormalize: self.normalize()
+
+        if queryLimitSkips or precedingFollowingShortfallSkips or indicatorPeriodShortfallSkips:
+            print('queryLimitSkips', queryLimitSkips)
+            print('precedingFollowingShortfallSkips', precedingFollowingShortfallSkips)
+            print('indicatorPeriodShortfallSkips', indicatorPeriodShortfallSkips)
 
     def initializeExplicitValidationStockDataInstances(self, **kwargs):
         self.initializeStockDataInstances(stockDataHandlers=self.explicitValidationStockDataHandlers.values(), dmProperty='explicitValidationStockDataInstances', **kwargs)
@@ -651,6 +684,59 @@ class DataManager():
             for s in tqdm.tqdm(symbolList, desc='Creating stock splits handlers'):
                 self.stockSplitsHandlers[TickerKeyType(s.exchange, s.symbol)] = StockSplitsHandler(s.exchange, s.symbol, dbm.getStockSplits(s.exchange, s.symbol))
 
+    def initializeTechnicalIndicators(self, verbose=1):
+        sdh: StockDataHandler
+        indc: IndicatorType
+
+        startt = time.time()
+        indicators = self.inputVectorFactory.getIndicators()
+        ## for determinubg how to handle ADX data: needs total generation, can use cached DIs values, etc
+        notInitializingDIData = IndicatorType.DIS not in indicators
+
+        genTimes = {k: [] for k in indicators}
+        cachesUsed = 0
+        sdhSkips = 0
+        sdhs = list(self.stockDataHandlers.values()) + list(self.explicitValidationStockDataHandlers.values())
+        for sdh in tqdm.tqdm(sdhs, desc='Initializing technical indicators') if verbose else sdhs:
+            if len(sdh.getAvailableSelections()) == 0: 
+                sdhSkips += 1
+                continue
+
+            genKeys = []
+            ## gather cached data and determine what needs calculation
+            for indc in indicators:
+                ## pre-calculated values should be available
+                if indc in self.config.cache.indicators:
+                    getIndc = indc
+                    if indc == IndicatorType.ADX and notInitializingDIData:
+                        ## need to try and use cached DI data even if that indicator will not be used
+                        getIndc = IndicatorType.DIS.key
+                    indcdata = dbm.getTechnicalIndicatorData(sdh.symbolData.exchange, sdh.symbolData.symbol, getIndc, period=getIndicatorPeriod(indc, self.indicatorConfig))
+                    if len(indcdata):
+                        if indc == IndicatorType.ADX and notInitializingDIData:
+                            ## need to generate ADX data in place off the cached DI data
+                            indcdata = generateADXs_AverageDirectionalIndex(periods=self.indicatorConfig.defaultIndicatorFormulaConfig.periods[IndicatorType.ADX], posDIs=[d[0] for d in indcdata], negDIs=[d[1] for d in indcdata])
+
+                        sdh.setIndicatorData(indc, indcdata)
+                        cachesUsed += 1
+                    
+                    else: ## no data, will need to calculate
+                        genKeys.append(indc)
+                else:
+                    genKeys.append(indc)
+
+            genTime = sdh.generateTechnicalIndicators(genKeys, self.indicatorConfig)
+            for k in genKeys:
+                genTimes[k].append(genTime[k])
+
+        print('Technical indicator generation complete. Took', time.time() - startt, 'seconds')
+        print('Skipped {} stocks'.format(sdhSkips))
+        print('Used {} caches'.format(cachesUsed))
+        print('Calculated {} sets'.format(sum(len(v) for v in genTimes.values())))
+        print('Average calculation times:')
+        for k in genTimes.keys():
+            print(k.name, '{:.2f}'.format(numpy.average(genTimes[k])))
+
     def initializeGoogleInterestsHandlers(self, symbolList, explicitValidationSymbolList=[], queryLimit: int=None, refresh=False, leaveProgressBar=True):
         symbolList += explicitValidationSymbolList
         ## purge unusable symbols
@@ -673,9 +759,11 @@ class DataManager():
 
     def initializeWindow(self, windowIndex):
         self.normalized = False
-        self.initializeStockDataHandlers(self.windows[windowIndex], refresh=True)
-        self.initializeStockSplitsHandlers(self.windows[windowIndex], refresh=True)
-        self.initializeGoogleInterestsHandlers(self.windows[windowIndex], refresh=True)
+        windowData = self.windows[windowIndex]
+        self.initializeStockDataHandlers(windowData, refresh=True)
+        self.initializeStockSplitsHandlers(windowData, refresh=True)
+        self.initializeTechnicalIndicators()
+        self.initializeGoogleInterestsHandlers(windowData, refresh=True)
         self.initializeStockDataInstances(refresh=True)
         self.setupSets(selectAll=True)
         self.initializedWindow = windowIndex
@@ -871,6 +959,7 @@ class DataManager():
             else: slice = None
 
         self.getprecstocktime = 0
+        self.getprecindctime = 0
         self.getprecfintime = 0
         self.actualbuildtime = 0
 
@@ -989,6 +1078,7 @@ class DataManager():
 
         if gconfig.testing.enabled and verbose > 0.5:
             print('Stock data handler build time', self.getprecstocktime)
+            print('Stock indicator build time', self.getprecindctime)
             print('Financial reports build time', self.getprecfintime)
             print('Total vector build time', self.actualbuildtime)
 

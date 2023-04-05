@@ -7,7 +7,8 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-from constants.enums import DataFormType, FeatureExtraType, SeriesType
+from constants.values import indicatorsKey
+from constants.enums import DataFormType, FeatureExtraType, IndicatorType, SeriesType
 from utils.support import recdotdict
 
 # TESTING = True
@@ -94,6 +95,9 @@ config = recdotdict({
 
         'outputVector': DataFormType.BINARY,
         # 'outputVector': DataFormType.CATEGORICAL
+
+        'superTrend': DataFormType.VECTOR,
+        # 'superTrend': DataFormType.INTEGER,
     },
     'sets': {
         'positiveSplitRatio': 1/6, # default 0.5,
@@ -141,7 +145,58 @@ config = recdotdict({
                 ['Assets', 'Liabilities', 'StockholdersEquity']
             ],
         }},
-        'googleInterests': genFeatureObj(True, FeatureExtraType.INTEREST)
+        'googleInterests': genFeatureObj(True, FeatureExtraType.INTEREST),
+        indicatorsKey: {
+            IndicatorType.RSI: genFeatureObj(True, IndicatorType.RSI.featureExtraType),
+            IndicatorType.CCI: genFeatureObj(True, IndicatorType.CCI.featureExtraType),
+            IndicatorType.ATR: genFeatureObj(True, IndicatorType.ATR.featureExtraType),
+            IndicatorType.DIS: genFeatureObj(True, IndicatorType.DIS.featureExtraType),
+            IndicatorType.ADX: genFeatureObj(True, IndicatorType.ADX.featureExtraType),
+            IndicatorType.EMA200: genFeatureObj(True, IndicatorType.EMA200.featureExtraType),
+            IndicatorType.EMA100: genFeatureObj(True, IndicatorType.EMA100.featureExtraType),
+            IndicatorType.EMA50: genFeatureObj(True, IndicatorType.EMA50.featureExtraType),
+            IndicatorType.EMA26: genFeatureObj(True, IndicatorType.EMA26.featureExtraType),
+            IndicatorType.EMA20: genFeatureObj(True, IndicatorType.EMA20.featureExtraType),
+            IndicatorType.EMA12: genFeatureObj(True, IndicatorType.EMA12.featureExtraType),
+            IndicatorType.EMA10: genFeatureObj(True, IndicatorType.EMA10.featureExtraType),
+            IndicatorType.EMA5: genFeatureObj(True, IndicatorType.EMA5.featureExtraType),
+            IndicatorType.MACD: genFeatureObj(True, IndicatorType.MACD.featureExtraType),
+            IndicatorType.BB: genFeatureObj(True, IndicatorType.BB.featureExtraType),
+            IndicatorType.ST: genFeatureObj(True, IndicatorType.ST.featureExtraType),
+        },
+
+    },
+
+    'cache': {
+        'indicators': [
+            IndicatorType.DIS,
+            IndicatorType.ADX, ## ADX can rely on DIS data, so there are overrides to prevent its cached data from being generated. If DIS is not listed here as a cached indicator but ADX is, then ADX will still attempt to use cached DIS data
+            IndicatorType.BB,
+            IndicatorType.ST,
+            ## CCI, MACD need modification to allow for resumable generation updates in dbm/updateCalculatedTechnicalIndicatorData
+        ]
+    },
+
+    'defaultIndicatorFormulaConfig': {
+        'periods': {
+            IndicatorType.RSI: 14,
+            IndicatorType.CCI: 20,
+            IndicatorType.ATR: 14,
+            IndicatorType.ADX: 14,
+            IndicatorType.BB: 20,
+            IndicatorType.ST: 7
+        },
+        'modifiers': {
+            IndicatorType.EMA: {
+                'smoothing': 2
+            },
+            IndicatorType.BB: {
+                'multiplier': 2
+            },
+            IndicatorType.ST: {
+                'multiplier': 3
+            }
+        }
     },
 
     'testing': {

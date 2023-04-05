@@ -9,7 +9,8 @@ sys.path.append(path)
 
 import operator
 from enum import Enum
-from utils.support import shortc
+from constants.values import indicatorsKey
+from utils.support import parseCSVFloatsIntoTuple, shortc
 
 class SeriesType(Enum):
     def __init__(self, a, b):
@@ -60,6 +61,7 @@ class SetType(Enum):
 
 class FeatureExtraType(Enum):
     SINGLE = 'SINGLE'
+    MULTIPLE = 'MULTIPLE'
     OF = 'OF'
     KEY = 'KEY'
     VIXKEY = 'VIXKEY'
@@ -166,6 +168,68 @@ class DataManagerType(Enum):
     PREDICTION = 'PREDICTION'
     STATS = 'STATS'
     DEFAULT = 'DEFAULT'
+
+class IndicatorType(Enum):
+    def __init__(self, a, b, c, d=None):
+        self.key = a
+        self.longForm = b
+        self.compositeKey = '_'.join([indicatorsKey, self.longForm])
+        self.featureExtraType = c
+        self.emaPeriod = d
+
+        if self.key == 'ST':
+            self.sqlParser = lambda x: (float(x.split(',')[0]), SuperTrendDirection[x.split(',')[1]])
+        else:
+            self.sqlParser = parseCSVFloatsIntoTuple if self.featureExtraType != FeatureExtraType.SINGLE else lambda x: float(x)
+
+    @classmethod
+    def getByProp(cls, val, prop='longForm'):
+        for v in cls:
+            if val == v.__getattribute__(prop): return v
+
+    @classmethod
+    def getEMAs(cls):
+        return [e for e in cls if e.emaPeriod]
+    
+    def isEMA(self):
+        return 'EMA' in self.key    
+
+    RSI = 'RSI', 'relativeStrengthIndex', FeatureExtraType.SINGLE
+    CCI = 'CCI', 'commodityChannelIndex', FeatureExtraType.SINGLE
+    ATR = 'ATR', 'averageTrueRange', FeatureExtraType.SINGLE
+    DIS = 'DIS', 'directionalIndicators', FeatureExtraType.MULTIPLE
+    ADX = 'ADX', 'averageDirectionalIndex', FeatureExtraType.SINGLE
+    EMA200 = 'EMA200', 'exponentialMovingAverage200', FeatureExtraType.SINGLE, 200
+    EMA100 = 'EMA100', 'exponentialMovingAverage100', FeatureExtraType.SINGLE, 100
+    EMA50 = 'EMA50', 'exponentialMovingAverage50', FeatureExtraType.SINGLE, 50
+    EMA26 = 'EMA26', 'exponentialMovingAverage26', FeatureExtraType.SINGLE, 26
+    EMA20 = 'EMA20', 'exponentialMovingAverage20', FeatureExtraType.SINGLE, 20
+    EMA12 = 'EMA12', 'exponentialMovingAverage12', FeatureExtraType.SINGLE, 12
+    EMA10 = 'EMA10', 'exponentialMovingAverage10', FeatureExtraType.SINGLE, 10
+    EMA5 = 'EMA5', 'exponentialMovingAverage5', FeatureExtraType.SINGLE, 5
+    EMA = 'EMA', 'exponentialMovingAverage', FeatureExtraType.SINGLE
+    MACD = 'MACD', 'movingAverageConvergenceDivergence', FeatureExtraType.SINGLE
+    BB = 'BB', 'bollingerBands', FeatureExtraType.MULTIPLE
+    ST = 'ST', 'superTrend', FeatureExtraType.MULTIPLE
+
+class CalculationMethod(Enum):
+    SMA = 'SMA'
+    EMA = 'EMA'
+    WILDERSMOOTHING = 'WILDERSMOOTHING'
+
+class DataRequiredType(Enum):
+    ALL = 'ALL'
+    HIGH = 'HIGH'
+    LOW = 'LOW'
+    CLOSE = 'CLOSE'
+    OPEN = 'OPEN'
+    VOLUME = 'VOLUME'
+    CUSTOM = 'CUSTOM'
+
+class SuperTrendDirection(Enum):
+    UP = 'UP'
+    DOWN = 'DOWN'
+    NONE = 'NONE'
 
 if __name__ == '__main__':
     print(AccuracyType.OVERALL.name, AccuracyType.OVERALL.value, AccuracyType.OVERALL.statsName)

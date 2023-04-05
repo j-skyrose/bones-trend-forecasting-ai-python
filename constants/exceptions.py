@@ -18,3 +18,6 @@ class NoData(Exception):
 
 class AnchorDateAheadOfLastDataDate(Exception):
     pass
+
+class InsufficientDataAvailable(Exception):
+    pass

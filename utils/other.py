@@ -13,12 +13,12 @@ from typing import List
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 
+from globalConfig import config as gconfig
 from structures.inputVectorStats import InputVectorStats
 from utils.support import recdotdict, shortc, _isoformatd
 from constants.values import stockOffset, canadaExchanges, usExchanges
-from constants.enums import MarketType, OutputClass, PrecedingRangeType
+from constants.enums import MarketType, OutputClass, PrecedingRangeType, IndicatorType
 
-from globalConfig import config
 
 
 def convertListToCSV(lst, excludeColumns=[]):
@@ -121,6 +121,22 @@ def getMarketType(exchange):
     if exchange in canadaExchanges: return MarketType.CANADA
     elif exchange in usExchanges: return MarketType.US    
     else: raise ValueError(f'Exchange {exchange} not found in exchange lists')
+
+def getIndicatorPeriod(i: IndicatorType, indicatorConfig=gconfig.defaultIndicatorFormulaConfig):
+    if i.isEMA():
+        period = i.emaPeriod
+    elif i == IndicatorType.MACD:
+        period = None
+    else:
+        period = indicatorConfig.periods[i] if i != IndicatorType.DIS else indicatorConfig.periods[IndicatorType.ADX]
+        
+    return period
+
+## for use in determining whether there is enough (stock) data to cover all the back days required to calculate the widest indicator
+def getMaxIndicatorPeriod(indicators: List[IndicatorType], indicatorConfig):
+    return max(
+        *[i.emaPeriod for i in indicators if i.isEMA()], 
+        *[indicatorConfig.periods[i]*(2 if i == IndicatorType.ADX else 1) for i in indicatorConfig.periods.keys() if i in indicators])
 
 
 if __name__ == '__main__':

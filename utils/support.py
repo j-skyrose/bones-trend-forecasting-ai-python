@@ -180,6 +180,10 @@ def asDatetime(dt: Union[date, datetime, str]):
 def asList(val):
     return val if type(val) is list else [val]
 
+## turns '003,4.50,2' into (3, 4.5, 2)
+def parseCSVFloatsIntoTuple(x: str):
+    return tuple([float(n) for n in x.split(',')])
+
 ## attempt to parse a date out of a description string, otherwise return the description for later analysis, or 'e' if its empty
 ## expects a date in the format: december 12, 2000
 def extractDateFromDesc(desc):

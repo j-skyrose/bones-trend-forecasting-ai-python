@@ -20,9 +20,11 @@ from structures.api.googleTrends.request import GoogleAPI
 
 from globalConfig import config as gconfig
 from managers.marketDayManager import MarketDayManager
-from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FinancialReportType, InterestType, OperatorDict, PrecedingRangeType, SQLHelpers, SeriesType, AccuracyType, SetType, Direction
+from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FeatureExtraType, FinancialReportType, IndicatorType, InterestType, OperatorDict, PrecedingRangeType, SQLHelpers, SeriesType, AccuracyType, SetType, Direction
+from constants.exceptions import InsufficientDataAvailable
+from utils.technicalIndicatorFormulae import unresumableGenerationIndicators, generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends
 from utils.support import asDate, asISOFormat, asList, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, unixToDatetime
-from utils.other import buildCommaSeparatedTickerPairString
+from utils.other import buildCommaSeparatedTickerPairString, getIndicatorPeriod
 from constants.values import unusableSymbols, apiList, standardExchanges
 
 ## for ad hoc SQL execution ################################################################################################
@@ -662,6 +664,21 @@ class DatabaseManager(Singleton):
         if queryLimit: stmt += ' LIMIT ' + str(queryLimit)
 
         return self.dbc.execute(stmt, tuple(args)).fetchall()
+
+    def getTechnicalIndicatorData(self, exchange, symbol, indicator: IndicatorType, dateType: SeriesType=SeriesType.DAILY, date=None, period=None, valuesOnly=True):
+        stmt = 'SELECT {} FROM historical_calculated_technical_indicator_data WHERE exchange=? and symbol=? and indicator=? AND date_type=? '.format('*' if not valuesOnly else 'value')
+        args = [exchange, symbol, indicator.key, dateType.name]
+        if date:
+            stmt += ' AND date=? '
+            args.append(date)
+        if period:
+            stmt += ' AND period=? '
+            args.append(period)
+
+        res = self.dbc.execute(stmt, tuple(args)).fetchall()
+        if valuesOnly:
+            return [indicator.sqlParser(d.value) for d in res]
+        return res
 
     ## end gets ####################################################################################################################################################################
     ####################################################################################################################################################################
@@ -1369,6 +1386,137 @@ class DatabaseManager(Singleton):
     ## end migrations ####################################################################################################################################################################
     ####################################################################################################################################################################
     ## limited use utility ####################################################################################################################################################################
+
+    ## generates or updates cached technical indicator data; should be run after every stock data dump
+    def updateCalculatedTechnicalIndicatorData(self, exchange=[], stype: SeriesType=SeriesType.DAILY, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, doNotCacheADX=True):
+        def getLatestIndicator(i: IndicatorType, period):
+            for li in latestIndicators:
+                if li.indicator == i.key and li.period == period:
+                    return li
+                
+        exchange = asList(exchange)
+        tickers = self.dbc.execute('''
+            SELECT MAX(date) AS date, exchange, symbol FROM historical_data WHERE type=? {} group by exchange, symbol
+        '''.format(('AND exchange IN (\'{}\')'.format('\',\''.join(exchange))) if len(exchange)>0 else ''), (stype.name,)).fetchall()
+        print('Got {} tickers'.format(len(tickers)))
+        
+        purged = 0
+        ## purge invalid/inappropriate tickers
+        for s in tickers:
+            if (s.exchange, s.symbol) in unusableSymbols:
+                tickers.remove(s)
+                purged += 1
+        print('Purged {} tickers'.format(purged))
+
+        tickersupdated = 0
+        rowsadded = 0
+        cacheIndicators: List = gconfig.cache.indicators
+        if doNotCacheADX: cacheIndicators.remove(IndicatorType.ADX)
+        for t in tqdm(tickers, desc='Tickers'):
+            latestIndicators = self.dbc.execute('''
+                SELECT MAX(date) AS date, exchange, symbol, indicator, period, value FROM historical_calculated_technical_indicator_data WHERE date_type=? AND exchange=? AND symbol=? group by exchange, symbol, indicator, period
+            ''', (stype.name, t.exchange, t.symbol)).fetchall()
+
+            ## data should already be in ascending (date) order
+            stkdata = self.getStockData(t.exchange, t.symbol, SeriesType.DAILY)
+
+            ## skip if everything is already updated
+            missingIndicators = []
+            notuptodateIndicators = []
+            if len(latestIndicators) > 0:
+                ## check if any indicators are missing in DB
+                for ik in gconfig.feature.indicators.keys():
+                    missing = True
+                    for r in latestIndicators:
+                        if r.indicator == ik.key:
+                            missing = False
+                            break
+                    if missing: missingIndicators.append(ik)
+                if len(missingIndicators) == 0:
+                    ## check if all indicators are calculated up to latest stock data
+                    for r in latestIndicators:
+                        if r.date < stkdata[-1].date:
+                            notuptodateIndicators.append(r)
+                    if len(notuptodateIndicators) == 0: continue
+
+            i: IndicatorType
+            for i in tqdm(cacheIndicators, desc='Indicators', leave=False):
+                iperiod = getIndicatorPeriod(i, indicatorConfig)
+
+                ## generate fresh/all data (some indicators use smoothing so their initial values contribute to their latest, meaning they cannot be 'picked up where they left off')
+                if i in missingIndicators or (i in notuptodateIndicators and i in unresumableGenerationIndicators):
+                    try:
+                        if i.isEMA():
+                            indcdata = generateEMAs_ExponentialMovingAverage(stkdata, iperiod)
+                        elif i == IndicatorType.RSI:
+                            indcdata = generateRSIs_RelativeStrengthIndex(stkdata, iperiod)
+                        elif i == IndicatorType.CCI:
+                            indcdata = generateCCIs_CommodityChannelIndex(stkdata, iperiod)
+                        elif i == IndicatorType.ATR:
+                            indcdata = generateATRs_AverageTrueRange(stkdata, iperiod)
+                        elif i == IndicatorType.DIS:
+                            indcdata = list(zip(
+                                generateDIs_DirectionalIndicator(stkdata, iperiod),
+                                generateDIs_DirectionalIndicator(stkdata, iperiod, positive=False)
+                            ))
+                        elif i == IndicatorType.ADX:
+                            indcdata = generateADXs_AverageDirectionalIndex(stkdata, iperiod)
+                        elif i == IndicatorType.MACD:
+                            indcdata = generateMACDs_MovingAverageConvergenceDivergence(stkdata)
+                        elif i == IndicatorType.BB:
+                            indcdata = generateBollingerBands(stkdata, iperiod)
+                        elif i == IndicatorType.ST:
+                            indcdata = generateSuperTrends(stkdata, iperiod)
+                    except InsufficientDataAvailable:
+                        continue
+
+                ## only generate missing values
+                elif i in notuptodateIndicators:
+                    latesti = getLatestIndicator(i, iperiod)   
+
+                    minDateIndex = 0
+                    for j in range(len(stkdata), -1, -1):
+                        if stkdata[j].date == latesti.date:
+                            minDateIndex = j
+                            break
+
+                    if i.isEMA():
+                        indcdata = generateEMAs_ExponentialMovingAverage(stkdata[minDateIndex-1:], iperiod, usingLastEMA=latesti.value)
+                    elif i == IndicatorType.CCI:
+                        ## TODO: not currently cached
+                        indcdata = generateCCIs_CommodityChannelIndex(stkdata, iperiod)
+                    elif i == IndicatorType.MACD:
+                        ## TODO: not currently cached
+                        indcdata = generateMACDs_MovingAverageConvergenceDivergence(stkdata)
+                    elif i == IndicatorType.BB:
+                        indcdata = generateBollingerBands(stkdata[minDateIndex-iperiod+1:], iperiod)
+
+                else: ## already up to date
+                    continue
+
+                ## convert generated values to DB tuples in proper chronological order
+                tpls = []
+                for indx in range(len(indcdata)):
+                    val = indcdata[-(indx+1)]
+                    if i.featureExtraType == FeatureExtraType.MULTIPLE:
+                        if i == IndicatorType.ST:
+                            val = ','.join([str(val[0]), val[1].name])
+                        else:
+                            val = ','.join([str(v) for v in val])
+
+                    tpls.append((t.exchange, t.symbol, stype.name, stkdata[-(indx+1)].date, i.key, iperiod, val))
+
+                tpls.reverse()
+
+                self.dbc.executemany('''
+                    INSERT OR REPLACE INTO historical_calculated_technical_indicator_data VALUES (?,?,?,?,?,?,?)
+                ''', tpls)
+                rowsadded += len(tpls)
+
+            tickersupdated += 1
+        
+        print('Updated {} tickers'.format(tickersupdated))
+        print('Added or replaced {} rows'.format(rowsadded))
 
     ## generally only used after VIX update dumps
     ## fill any data gaps with artificial data using last real trading day
@@ -2274,28 +2422,31 @@ def printSectorColumnInfos(d: DatabaseManager):
     print(rowstr.format(len(dss[0]), '', len(dss[1]), '', len(dss[2]), ''))
 
 if __name__ == '__main__':
+    parser = optparse.OptionParser()
+    parser.add_option('-f', '--function',
+        action='store', dest='function', default=None
+        )
+    
+    options, args = parser.parse_args()
+
     d: DatabaseManager = DatabaseManager()
-    # res = d.getDailyHistoricalGaps()
-    # res = d.getDailyHistoricalGaps('BATS','AVDR')
-    # for r in res:
-    #     try:
-    #         print(r, len(res[r]), res[r])
-    #     except:
-    #         print(res)
-    #         break
 
-        res = d.dbc.execute('select * from symbols where exchange=? and (api_polygon=1 or api_fmp=1 or api_alphavantage=1)', ('NYSE MKT',)).fetchall()
-        for r in res:
-            # if not d._determineAssetType(r.exchange, r.symbol, r.name, basic=True):
-            #     print(r.exchange, r.symbol, r.name)
-            d.dbc.execute('update symbols set asset_type=? where exchange=? and symbol=?', (d._determineAssetType(r.exchange, r.symbol, r.name, basic=True), r.exchange, r.symbol))
+    if options.function:
+        kwargs = {}
+        for arg in args:
+            key, val = arg.split('=')
+            kwargs[key] = val.lower() == 'true' if val.lower() in ['true', 'false'] else val
+        getattr(d, options.function)(**kwargs)
+    else:
 
-    # d.fillHistoricalGaps(exchange='BATS', symbol='ACES', type=SeriesType.DAILY)
-        # d.fillHistoricalGaps(type=SeriesType.DAILY, dryrun=True)
-
-    # addLastUpdatesRowsForAllSymbols(d.dbc)
-    # d.addAPI('polygon')
-    # print(d.getSymbols(api='alphavantage').fetchone()['api_alphavantage'])
+        # res = d.dbc.execute('select * from symbols where exchange=? and (api_polygon=1 or api_fmp=1 or api_alphavantage=1 or api_neo=1)', ('NYSE ARCA',)).fetchall()
+        # res = d.dbc.execute('select * from symbols where (api_polygon=1 or api_fmp=1 or api_alphavantage=1 or api_neo=1) and exchange in (select distinct exchange from historical_data)').fetchall()
+        # for r in res:
+        #     # if not d._determineAssetType(r.exchange, r.symbol, r.name, basic=True):
+        #     #     print(r.exchange, r.symbol, r.name)
+        #     d.dbc.execute('update symbols set asset_type=? where exchange=? and symbol=?', (d._determineAssetType(r.exchange, r.symbol, r.name, basic=True), r.exchange, r.symbol))
+        #     # print(r.exchange, r.symbol, r.name)
+        #     # print(d._determineAssetType(r.exchange, r.symbol, r.name, basic=True))
 
 
         ## check if any 100 daily dates are within the same week, which will cause problems when framing using weekly and monthly data
@@ -2332,14 +2483,14 @@ if __name__ == '__main__':
 
 
         ## deleting google interest data under conditions, e.g. interest = 100 for dates past threshold 2022-09-30
-        src_tickers = []
-        messedupgidatatickers = d.dbc.execute('select DISTINCT exchange,symbol from google_interests_raw where date>=\'2022-10-01\' and type=\'DAILY\'').fetchall()
-        for t in messedupgidatatickers:
-            src_tickers.append(d.dbc.execute('SELECT * FROM symbols WHERE exchange=? AND symbol=?', (t.exchange, t.symbol)).fetchone())
-        for t in src_tickers:
-            # dest_cursor.execute(f'INSERT INTO symbols VALUES ({getValueQS(src_tickers[0])})', list(t.values()))
-            d.dbc.execute('DELETE FROM google_interests_raw WHERE exchange=? AND symbol=? AND type=\'DAILY\' and date>=\'2022-10-01\'', (t.exchange, t.symbol))
-            print(t.exchange, t.symbol)
+        # src_tickers = []
+        # messedupgidatatickers = d.dbc.execute('select DISTINCT exchange,symbol from google_interests_raw where date>=\'2022-10-01\' and type=\'DAILY\'').fetchall()
+        # for t in messedupgidatatickers:
+        #     src_tickers.append(d.dbc.execute('SELECT * FROM symbols WHERE exchange=? AND symbol=?', (t.exchange, t.symbol)).fetchone())
+        # for t in src_tickers:
+        #     # dest_cursor.execute(f'INSERT INTO symbols VALUES ({getValueQS(src_tickers[0])})', list(t.values()))
+        #     d.dbc.execute('DELETE FROM google_interests_raw WHERE exchange=? AND symbol=? AND type=\'DAILY\' and date>=\'2022-10-01\'', (t.exchange, t.symbol))
+        #     print(t.exchange, t.symbol)
         #########################################################################################################
 
 
@@ -2448,4 +2599,7 @@ if __name__ == '__main__':
     # print(d.getFinancialData('BATS','CBOE'))
 
 
-    pass
+
+        d.updateCalculatedTechnicalIndicatorData()
+
+        pass
