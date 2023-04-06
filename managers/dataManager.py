@@ -944,7 +944,9 @@ class DataManager():
         if verbose >= 1: print(exchange, symbol, ':', len(sourceSet), '->', len(ret))
         return ret
 
-    def getKerasSets(self, classification=0, validationDataOnly=False, exchange=None, symbol=None, slice=None, omitValidation=False, verbose=1):
+    def getKerasSets(self, 
+                     classification=0, ## 1 = positive, 2 = negative
+                     validationDataOnly=False, exchange=None, symbol=None, slice=None, omitValidation=False, verbose=1):
         if self.useAllSets and not self.useOptimizedSplitMethodForAllSets and shortc(slice, 0) > self.getNumberOfWindowIterations() - 1: raise IndexError()
         # if self.setsSlidingWindowPercentage and slice is None: raise ValueError('Keras set setup will overload memory, useAllSets set but not slice indicated')
 
