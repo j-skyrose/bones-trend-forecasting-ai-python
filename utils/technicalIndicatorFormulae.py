@@ -513,7 +513,7 @@ def generateEMAs_ExponentialMovingAverage(data, periods=1, smoothing=gconfig.def
 '''
     Moving Average Convergence/Divergence (MACD)
     type: (trend-following) momentum indicator
-    range: [0, inf)
+    range: (-inf, inf)
     formula:
         MACD = EMA12 - EMA26
     https://www.investopedia.com/terms/m/macd.asp
