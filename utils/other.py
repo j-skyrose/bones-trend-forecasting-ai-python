@@ -135,6 +135,7 @@ def getIndicatorPeriod(i: IndicatorType, indicatorConfig=gconfig.defaultIndicato
 ## for use in determining whether there is enough (stock) data to cover all the back days required to calculate the widest indicator
 def getMaxIndicatorPeriod(indicators: List[IndicatorType], indicatorConfig):
     return max(
+        *[-sys.maxsize for x in range(2)], ## ensure there are enough args in-case there are less than 2 indicators
         *[i.emaPeriod for i in indicators if i.isEMA()], 
         *[indicatorConfig.periods[i]*(2 if i == IndicatorType.ADX else 1) for i in indicatorConfig.periods.keys() if i in indicators])
 
