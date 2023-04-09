@@ -7,25 +7,26 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-from typing import List
-
-from utils.support import Singleton, recdotdict
-from constants.values import unusableSymbols, vixOffset
+from utils.support import Singleton
+from utils.other import normalizeStockData
+from constants.values import vixOffset
 from managers.databaseManager import DatabaseManager
 
 class VIXManager(Singleton):
-    def __init__(self):
+    normalized = False
+    shouldNormalize = False
+
+    def __init__(self, normalize=False, dataOffset=vixOffset):
+        self.shouldNormalize = normalize
         dbm: DatabaseManager = DatabaseManager()
         
         data = dbm.getVIXData()
-
-        ## normalize
         self.max = dbm.getVIXMax()
-        for d in data:
-            d.open = (d.open / self.max) - vixOffset
-            d.high = (d.high / self.max) - vixOffset
-            d.low = (d.low / self.max) - vixOffset
-            d.close = (d.close / self.max) - vixOffset
+        self.dataOffset = dataOffset
+
+        if self.shouldNormalize:
+            data = normalizeStockData(data, self.max, offset=self.dataOffset)
+            self.normalized = True
 
         self.data = {r.date: r for r in data}
 

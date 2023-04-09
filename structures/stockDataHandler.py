@@ -11,6 +11,7 @@ import time
 from typing import List, Tuple
 
 from globalConfig import config as gconfig
+from constants.values import stockOffset
 from constants.enums import IndicatorType, SeriesType
 from utils.types import TickerKeyType
 from utils.support import GetMemoryUsage, recdotdict, recdotobj, shortc
@@ -26,28 +27,19 @@ data should be in date ascending order, where each item is one row from DB table
 '''
 class StockDataHandler(GetMemoryUsage):
 
-    def __init__(self, symbolData, seriesType, data, highMax=None, volumeMax=None, precedingRange=None, followingRange=None,
+    def __init__(self, symbolData, seriesType, data, highMax=None, volumeMax=None, precedingRange=None, followingRange=None, normalize=False, offset=stockOffset,
         maxIndicatorPeriod=0
     ):
-        self.normalized = False
         self.symbolData = symbolData
         self.seriesType = seriesType
-        self.data = data
+        
         self.indicators = {}
         self.maxIndicatorPeriod = maxIndicatorPeriod ## preceding days required for first calculation
 
-        # self.outputVector = outputVector
-        self.selections = []
-        self.selected = 0
-        self.precedingRange = precedingRange
-        self.followingRange = followingRange
-
-        self.highMax = highMax
-        self.volumeMax=volumeMax
-        if self.highMax and self.volumeMax:
-            self.normalize()
-        if precedingRange and followingRange:
-            self.determineSelections(precedingRange, followingRange)
+        self.normalized = False
+        self.shouldNormalize = normalize
+        self.dataOffset = offset
+        self.setData(data, highMax, volumeMax, precedingRange, followingRange)
 
     def getTickerTuple(self) -> Tuple[str,str]:
         return (self.symbolData.exchange, self.symbolData.symbol)
@@ -65,43 +57,35 @@ class StockDataHandler(GetMemoryUsage):
 
     def normalize(self):
         if not self.normalized:
-            self.data = normalizeStockData(self.data, self.highMax, self.volumeMax)
-            self.normalized = True
+            if self.highMax and self.volumeMax:
+                self.data = normalizeStockData(self.data, self.highMax, self.volumeMax, self.dataOffset)
+                self.normalized = True
+            else:
+                raise RuntimeError('Data maxes not available for normalization')
     
     def denormalize(self):
         if self.normalized:
-            self.data = denormalizeStockData(self.data, self.highMax, self.volumeMax)
-            self.normalized = False
+            if self.highMax and self.volumeMax:
+                self.data = denormalizeStockData(self.data, self.highMax, self.volumeMax, self.dataOffset)
+                self.normalized = False
+            else:
+                raise RuntimeError('Data maxes not available for denormalization')
 
     def setData(self, data, highMax=None, volumeMax=None, precedingRange=None, followingRange=None):
         self.data = data
         self.highMax = highMax
-        self.volumeMax=volumeMax
-        if self.highMax and self.volumeMax:
+        self.volumeMax = volumeMax
+        self.precedingRange = precedingRange
+        self.followingRange = followingRange
+
+        if self.shouldNormalize:
             self.normalize()
-        else:
-            self.normalizedData = None
-        if precedingRange and followingRange:
-            self.determineSelections(precedingRange, followingRange)
+        if self.precedingRange and self.followingRange:
+            self.determineSelections(self.precedingRange, self.followingRange)
         else:
             self.selections = []
-        self.selected = set()
-
-    # def select(self, index):
-    #     self.selected.add(index)
-
-    def selectOne(self):
-        self.selected += 1
-
-    def getSelected(self):
-        return self.selected
-
-    def clearSelections(self):
-        # self.selected.clear()
-        self.selected = 0
 
     def getAvailableSelections(self):
-        # return [x for x in self.selections if x not in list(self.selected)]
         return self.selections
 
     def getPrecedingSet(self, index):

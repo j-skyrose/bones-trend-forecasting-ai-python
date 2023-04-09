@@ -59,7 +59,6 @@ class DataManager():
     # stockDataManager: StockDataManager = None
     stockDataHandlers: Dict[TickerKeyType, StockDataHandler] = {}
     explicitValidationStockDataHandlers: Dict[TickerKeyType, StockDataHandler] = {}
-    vixDataHandler = VIXManager().data
     financialDataHandlers: Dict[TickerKeyType, FinancialDataHandler] = {}
     stockSplitsHandlers: Dict[TickerKeyType, StockSplitsHandler] = {}
     googleInterestsHandlers: Dict[TickerKeyType, GoogleInterestsHandler] = {}
@@ -89,7 +88,6 @@ class DataManager():
         anchorDate=None, forPredictor=False, postPredictionWeighting=False,
         minDate=None,
         explicitValidationSymbolList:List=[],
-        normalize=False,
 
         maxPageSize=0, skipAllDataInitialization=False,
         maxGoogleInterestHandlers=50,
@@ -158,7 +156,7 @@ class DataManager():
         self.useAllSets = useAllSets
         self.useOptimizedSplitMethodForAllSets = useOptimizedSplitMethodForAllSets
         self.initializedWindow = None
-        self.shouldNormalize = normalize
+        self.shouldNormalize = self.config.data.normalize
         ##
 
         ## default setSplitTuple determination
@@ -199,7 +197,9 @@ class DataManager():
                     initSymbolList = self.getSymbolListPage(1)
                 
                 self._initializeAllData(initSymbolList, self.currentPage if self.usePaging else None)
-        
+
+        self.vixDataHandler = VIXManager(self.shouldNormalize).data
+
         print('DataManager init complete. Took', time.time() - startt, 'seconds')
 
     def initializeAllDataForPage(self, page):
@@ -476,26 +476,33 @@ class DataManager():
             elif not precedingFollowingShortfallCheck(data): precedingFollowingShortfallSkips += 1
             elif not indicatorPeriodShortfallCheck(data): indicatorPeriodShortfallSkips += 1
 
-        sdhArg = lambda ticker, data: [
+
+        sdhArgLambda = lambda ticker, data: [
             ticker,
             self.seriesType,
-            data,
-            *self.normalizationInfo.values(),
-            self.precedingRange,
-            self.followingRange,
-            maxIndicatorPeriod
+            data
         ]
+        sdhKWArgs = {
+            'precedingRange': self.precedingRange,
+            'followingRange': self.followingRange,
+            'maxIndicatorPeriod': maxIndicatorPeriod
+        }
+        if self.shouldNormalize:
+            ## use key loop?
+            sdhKWArgs['highMax'] = self.normalizationInfo.highMax
+            sdhKWArgs['volumeMax'] = self.normalizationInfo.volumeMax
+
         if gconfig.multicore:
             for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate, queryLimit=queryLimit), symbolList, chunksize=1, desc='Getting stock data'), desc='Creating stock handlers'):
                 if dataLengthCheck(data):
-                    self.__getattribute__(dmProperty)[TickerKeyType(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArg(ticker, data))
+                    self.__getattribute__(dmProperty)[TickerKeyType(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArgLambda(ticker, data), **sdhKWArgs)
                 else:
                     updateSkipCounts(data)
         else:
             for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):
                 data = dbm.getStockData(s.exchange, s.symbol, self.seriesType, minDate=self.minDate, queryLimit=queryLimit)
                 if dataLengthCheck(data):
-                    self.__getattribute__(dmProperty)[TickerKeyType(s.exchange, s.symbol)] = StockDataHandler(*sdhArg(s, data))
+                    self.__getattribute__(dmProperty)[TickerKeyType(s.exchange, s.symbol)] = StockDataHandler(*sdhArgLambda(s, data), **sdhKWArgs)
                 else:
                     updateSkipCounts(data)
 

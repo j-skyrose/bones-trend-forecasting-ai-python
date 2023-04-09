@@ -42,22 +42,22 @@ def convertListToCSV(lst, excludeColumns=[]):
     content = '\n'.join(content)
     return header + '\n' + content
 
-def normalizeStockData(data, highMax, volumeMax):
+def normalizeStockData(data, highMax, volumeMax=None, offset=0):
     for r in data:
-        r.open = (r.open / highMax) - stockOffset
-        r.high = (r.high / highMax) - stockOffset
-        r.low = (r.low / highMax) - stockOffset
-        r.close = (r.close / highMax) - stockOffset
-        r.volume = (r.volume / volumeMax) - stockOffset
+        r.open = (r.open / highMax) - offset
+        r.high = (r.high / highMax) - offset
+        r.low = (r.low / highMax) - offset
+        r.close = (r.close / highMax) - offset
+        if volumeMax: r.volume = (r.volume / volumeMax) - offset
     return data
 
-def denormalizeStockData(data, highMax, volumeMax):
+def denormalizeStockData(data, highMax, volumeMax=None, offset=0):
     for r in data:
-        r.open = (r.open +stockOffset)* highMax
-        r.high = (r.high +stockOffset)* highMax
-        r.low = (r.low +stockOffset)* highMax
-        r.close = (r.close +stockOffset)* highMax
-        r.volume = (r.volume +stockOffset)* volumeMax
+        r.open = (r.open + offset) * highMax
+        r.high = (r.high + offset) * highMax
+        r.low = (r.low + offset) * highMax
+        r.close = (r.close + offset) * highMax
+        if volumeMax: r.volume = (r.volume + offset) * volumeMax
     return data
 
 def normalizeFinancials(data, generalMax):

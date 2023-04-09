@@ -99,6 +99,9 @@ config = recdotdict({
         'superTrend': DataFormType.VECTOR,
         # 'superTrend': DataFormType.INTEGER,
     },
+    'data': {
+        'normalize': False,
+    },
     'sets': {
         'positiveSplitRatio': 1/6, # default 0.5,
         'minimumClassSplitRatio': 0.13 if not TESTING else 0.01
