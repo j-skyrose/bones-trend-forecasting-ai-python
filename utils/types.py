@@ -20,6 +20,9 @@ class TickerKeyType:
 
     def getTuple(self) -> Tuple[str,str]:
         return (self.exchange, self.symbol)
+    
+    def getDict(self) -> Dict[str,str]:
+        return {'exchange': self.exchange, 'symbol': self.symbol}
 
     def __eq__(self, __o: object) -> bool:
         try:

@@ -192,7 +192,7 @@ class DataManager():
 
 
         if useAllSets and useOptimizedSplitMethodForAllSets:
-            self.windows = dbm.getTickerSplit(1641959005, 25000)
+            self.windows = dbm.getTickerSplit('split1681021636', 50000)
             for windex in range(len(self.windows)):
                 for i in range(len(self.windows[windex])):
                     self.windows[windex][i] = dbm.getSymbols(exchange=self.windows[windex][i].exchange, symbol=self.windows[windex][i].symbol)[0]
@@ -339,14 +339,24 @@ class DataManager():
         return cls.forTraining(seriesType, statsOnly=True, **kwargs)
     
     @classmethod
-    def determineAllSetsTickerSplit(cls, nn: NeuralNetworkInstance, setCount, **kwargs):
-        normalizationInfo = nn.stats.getNormalizationInfo()
-        _, _, symbolList = dbm.getNormalizationData(nn.stats.seriesType, normalizationInfo=normalizationInfo, **kwargs) #exchanges=exchanges, excludeExchanges=excludeExchanges, sectors=sectors, excludeSectors=excludeSectors)
+    def determineAllSetsTickerSplit(cls, setCount, seriesType: SeriesType=SeriesType.DAILY, network: NeuralNetworkInstance=None, **kwargs):
+                                    # precedingRange=0, followingRange=0, threshold=0,
 
-
+        if network:
+            normalizationInfo = network.stats.getNormalizationInfo()
+            _, _, symbolList = dbm.getNormalizationData(network.stats.seriesType, normalizationInfo=normalizationInfo, **kwargs)
+            kwargs['precedingRange'] = network.stats.precedingRange
+            kwargs['followingRange'] = network.stats.followingRange
+            kwargs['seriesType'] = network.stats.seriesType
+            kwargs['changeThreshold'] = network.stats.changeThreshold
+            kwargs['inputVectorFactory'] = network.inputVectorFactory
+        else:
+            normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType, **kwargs)
+            normalizationInfo = {}
+            for c in range(len(normalizationColumns)):
+                normalizationInfo[normalizationColumns[c]] = normalizationMaxes[c]
 
         self = cls(
-            precedingRange=nn.stats.precedingRange, followingRange=nn.stats.followingRange, seriesType=nn.stats.seriesType, threshold=nn.stats.changeThreshold, inputVectorFactory=nn.inputVectorFactory,
             normalizationInfo=normalizationInfo, symbolList=symbolList,
             initializeStockDataHandlersOnly=True,
             **kwargs
@@ -401,7 +411,7 @@ class DataManager():
                             if opindex in skiptlistindexes: continue
                             if getWindowCountTotal(windows[windex]) + outputClassCountsDict[tlist[opindex]][OutputClass.POSITIVE] + outputClassCountsDict[tlist[opindex]][OutputClass.NEGATIVE] < windowSize * additionalToleranceFactor:
                                 windows[windex].append(outputClassCountsDict[tlist[opindex]])
-                                tickerWindows[windex].append({ 'exchange': tlist[opindex][0], 'symbol': tlist[opindex][1] })
+                                tickerWindows[windex].append(tlist[opindex].getDict()) ## must go in as dict so unpickling and sql factory can work
                                 skiptlistindexes.append(opindex)
                                 tqdmbar.update()
                                 if len(skiptlistindexes) == len(tlist):
@@ -1140,12 +1150,16 @@ class DataManager():
 
 if __name__ == '__main__':
 
+    setcount = 50000
     tsplit = DataManager.determineAllSetsTickerSplit(
-        NeuralNetworkManager().get(1641959005),
-        25000,
-        assetTypes=['CS','CLA','CLB','CLC']
+        setcount,
+        # NeuralNetworkManager().get(1641959005),
+        # assetTypes=['CS','CLA','CLB','CLC']
+        # exchange=['BATS','NASDAQ','NEO','NYSE','NYSE ARCA','NYSE MKT','TSX']
+        exchanges=dbm.getDistinctExchangesForHistoricalData(),
+        precedingRange=60, followingRange=10, threshold=0.05
     )
-    dbm.saveTickerSplit(1641959005, 25000, tsplit)
+    dbm.saveTickerSplit('split{}'.format(str(int(time.time()))), setcount, tsplit)
     exit()
     
     s = DataManager.forTraining(
