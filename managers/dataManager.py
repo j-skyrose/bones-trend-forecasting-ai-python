@@ -492,8 +492,8 @@ class DataManager():
 
         return ret
 
-    def initializeExplicitValidationStockDataHandlers(self, symbolList: List):
-        self.initializeStockDataHandlers(symbolList, 'explicitValidationStockDataHandlers')
+    def initializeExplicitValidationStockDataHandlers(self, symbolList: List, **kwargs):
+        self.initializeStockDataHandlers(symbolList, 'explicitValidationStockDataHandlers', **kwargs)
 
     def initializeStockDataHandlers(self, symbolList: List, dmProperty='stockDataHandlers', queryLimit: int=None, refresh=False):
         ## purge unusable symbols
@@ -793,7 +793,15 @@ class DataManager():
             if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
 
         ## purge old data
-        if refresh: self.googleInterestsHandlers.clear()
+        if refresh:
+            if not self.explicitValidationSymbolList:
+                self.googleInterestsHandlers.clear()
+            else:
+                ## preserve handlers tied to explicit validation list
+                for k in self.googleInterestsHandlers.keys():
+                    if k in self.explicitValidationSymbolList: continue
+                    else: del self.googleInterestsHandlers[k]
+
 
         if gconfig.multicore and not self.maxGoogleInterestHandlers:
             for ticker, relativedata in tqdm.tqdm(process_map(partial(multicore_getGoogleInterestsTickerTuples, queryLimit=queryLimit), symbolList, chunksize=1, desc='Getting Google interests data', leave=leaveProgressBar), desc='Creating Google interests handlers', leave=leaveProgressBar):
