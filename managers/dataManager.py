@@ -34,6 +34,7 @@ from structures.dataPointInstance import DataPointInstance
 from structures.stockSplitsHandler import StockSplitsHandler
 from structures.googleInterestsHandler import GoogleInterestsHandler
 from structures.api.googleTrends.request import GoogleAPI
+from structures.skipsObj import SkipsObj
 from utils.types import TickerDateKeyType, TickerKeyType
 
 DEBUG = True
@@ -84,7 +85,9 @@ class DataManager():
         precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, threshold=0,
         setCount=None, setSplitTuple=None, minimumSetsPerSymbol=0, useAllSets=False,
         inputVectorFactory=InputVectorFactory(), normalizationInfo={}, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, symbolList:List=[],
-        analysis=False, statsOnly=False, initializeStockDataHandlersOnly=False, useOptimizedSplitMethodForAllSets=True,
+        analysis=False, skips: SkipsObj=SkipsObj(), saveSkips=False,
+
+        statsOnly=False, initializeStockDataHandlersOnly=False, useOptimizedSplitMethodForAllSets=True,
         anchorDate=None, forPredictor=False, postPredictionWeighting=False,
         minDate=None,
         explicitValidationSymbolList:List=[],
@@ -105,6 +108,13 @@ class DataManager():
         if maxPageSize and useAllSets:
             raise ArgumentError('Simultaneous use of pages and windows should be avoided, behavior not tested')
         
+        ## timers
+        self.getprecstocktime = 0
+        self.getprecindctime = 0
+        self.getprecfintime = 0
+        self.actualbuildtime = 0
+        ##
+
         startt = time.time()
         self.config = inputVectorFactory.config
         self.inputVectorFactory = inputVectorFactory
@@ -115,6 +125,7 @@ class DataManager():
         self.minDate = minDate
         self.normalizationInfo = recdotdict(normalizationInfo)
         self.indicatorConfig = indicatorConfig
+        self.skips = skips if saveSkips else SkipsObj()
         ## if paging for predictor remove restriction on GI handler initialization as there should be sufficient space to init them
         if forPredictor and maxPageSize:
             self.maxGoogleInterestHandlers = 0
@@ -171,11 +182,12 @@ class DataManager():
             self.setSplitTuple = setSplitTuple
 
 
-        if explicitValidationSymbolList:
+        if explicitValidationSymbolList and not skips.stocks:
             print('Initializing explicit validation stuff')
             self.initializeExplicitValidationStockDataHandlers(explicitValidationSymbolList)
-            self.initializeExplicitValidationStockDataInstances()
-            self.setupExplicitValidationSet()
+            if not skips.instances:
+                self.initializeExplicitValidationStockDataInstances()
+                if not skips.sets: self.setupExplicitValidationSet()
             print('Initializing regular stock data stuff')
 
 
@@ -196,7 +208,7 @@ class DataManager():
                 if self.usePaging:
                     initSymbolList = self.getSymbolListPage(1)
                 
-                self._initializeAllData(initSymbolList, self.currentPage if self.usePaging else None)
+                self._initializeAllData(initSymbolList, self.currentPage if self.usePaging else None, skips=skips)
 
         self.vixDataHandler = VIXManager(self.shouldNormalize).data
 
@@ -207,35 +219,38 @@ class DataManager():
         self._initializeAllData(self.getSymbolListPage(page), refresh=True)
         gc.collect() ## help clean up old/cleared data
 
-    def _initializeAllData(self, symbolList, refresh=False):
+    def _initializeAllData(self, symbolList, refresh=False, skips: SkipsObj=None):
+        if not skips: skips = self.skips
         ## pull and setup financial reports ref
-        if gconfig.feature.financials.enabled:
+        if gconfig.feature.financials.enabled and not skips.financials:
             startt2 = time.time()
             self.initializeFinancialDataHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh)
             print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
 
         startt2 = time.time()
-        self.initializeStockDataHandlers(symbolList, queryLimit=self.queryLimit, refresh=refresh)
+        if not skips.stocks: 
+            self.initializeStockDataHandlers(symbolList, queryLimit=self.queryLimit, refresh=refresh)
 
-        print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
+            print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
 
-        if not self.initializeStockDataHandlersOnly:
-            self.initializeStockSplitsHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh)
-            self.initializeTechnicalIndicators() ## needs to be done before any instance selection as the viable index pool may get reduced
-            if not self.maxGoogleInterestHandlers:
-                self.initializeGoogleInterestsHandlers(symbolList, self.explicitValidationSymbolList, queryLimit=self.queryLimit, refresh=refresh)
+            if not self.initializeStockDataHandlersOnly:
+                if not skips.splits: self.initializeStockSplitsHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh)
+                if not skips.technicalIndicators: self.initializeTechnicalIndicators() ## needs to be done before any instance selection as the viable index pool may get reduced
+                if not self.maxGoogleInterestHandlers and not skips.googleInterests:
+                    self.initializeGoogleInterestsHandlers(symbolList, self.explicitValidationSymbolList, queryLimit=self.queryLimit, refresh=refresh)
 
-            if self.type != DataManagerType.PREDICTION:
-                startt3 = time.time()
-                self.initializeStockDataInstances(refresh=refresh)
-                print('Stock data instance initialization time:', time.time() - startt3, 'seconds')
+                if self.type != DataManagerType.PREDICTION and not skips.instances:
+                    startt3 = time.time()
+                    self.initializeStockDataInstances(refresh=refresh)
+                    print('Stock data instance initialization time:', time.time() - startt3, 'seconds')
 
-                if self.setCount is not None:
-                    self.setupSets(self.setCount, self.setSplitTuple, self.minimumSetsPerSymbol)
-                elif self.type == DataManagerType.ANALYSIS:
-                    self.setupSets(len(self.stockDataInstances.values()), (0,1), selectAll=True)
-                elif self.type == DataManagerType.STATS:
-                    self.setupSets(1, (1,0), 0)
+                    if not skips.sets:
+                        if self.setCount is not None:
+                            self.setupSets(self.setCount, self.setSplitTuple, self.minimumSetsPerSymbol)
+                        elif self.type == DataManagerType.ANALYSIS:
+                            self.setupSets(len(self.stockDataInstances.values()), (0,1), selectAll=True)
+                        elif self.type == DataManagerType.STATS:
+                            self.setupSets(1, (1,0), 0)
 
     ## TODO: optimized class methods, forTraining needs to have option of providing a networkid for use in getting the ticker window split
     @classmethod
@@ -255,14 +270,31 @@ class DataManager():
         )
 
     @classmethod
-    def forAnalysis(cls, nn: NeuralNetworkInstance, **kwargs):
-        normalizationInfo = nn.stats.getNormalizationInfo()
-        _, _, symbolList = dbm.getNormalizationData(nn.stats.seriesType, normalizationInfo=normalizationInfo, **kwargs) #exchanges=exchanges, excludeExchanges=excludeExchanges, sectors=sectors, excludeSectors=excludeSectors)
+    def forAnalysis(cls,
+                    network: NeuralNetworkInstance=None,
+                    seriesType: SeriesType=SeriesType.DAILY,
+                    skips: SkipsObj=SkipsObj(),
+                    **kwargs):
+        
+        if 'explicitValidationSymbolList' in kwargs.keys(): raise ArgumentError('Cannot define explicit validation set for analysis, behavior not tested')
+
+        if network:
+            normalizationInfo = network.stats.getNormalizationInfo()
+            _, _, symbolList = dbm.getNormalizationData(network.stats.seriesType, normalizationInfo=normalizationInfo, **kwargs)
+            kwargs['precedingRange'] = network.stats.precedingRange
+            kwargs['followingRange'] = network.stats.followingRange
+            kwargs['seriesType'] = network.stats.seriesType
+            kwargs['changeThreshold'] = network.stats.changeThreshold
+            kwargs['inputVectorFactory'] = network.inputVectorFactory
+        else:
+            normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType, **kwargs)
+            normalizationInfo = {}
+            for c in range(len(normalizationColumns)):
+                normalizationInfo[normalizationColumns[c]] = normalizationMaxes[c]
 
         return cls(
-            precedingRange=nn.stats.precedingRange, followingRange=nn.stats.followingRange, seriesType=nn.stats.seriesType, threshold=nn.stats.changeThreshold, inputVectorFactory=nn.inputVectorFactory,
             normalizationInfo=normalizationInfo, symbolList=symbolList,
-            analysis=True,
+            analysis=True, skips=skips,
             **kwargs
         )
 
@@ -966,11 +998,6 @@ class DataManager():
         if not self.useAllSets:
             if shortc(slice,0) > 0: raise IndexError('Not setup to use all sets')
             else: slice = None
-
-        self.getprecstocktime = 0
-        self.getprecindctime = 0
-        self.getprecfintime = 0
-        self.actualbuildtime = 0
 
         staticSize, semiseriesSize, seriesSize = self.inputVectorFactory.getInputSize()
         def constrList_helper(set: List[DataPointInstance], isInput, showProgress=True):
