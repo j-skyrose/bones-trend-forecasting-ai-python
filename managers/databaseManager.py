@@ -1404,7 +1404,7 @@ class DatabaseManager(Singleton):
             SELECT MAX(date) AS date, exchange, symbol FROM historical_data WHERE type=? {} group by exchange, symbol
         '''.format(('AND exchange IN (\'{}\')'.format('\',\''.join(exchange))) if len(exchange)>0 else ''), (stype.name,)).fetchall()
         print('Got {} tickers'.format(len(tickers)))
-        
+
         purged = 0
         ## purge invalid/inappropriate tickers
         for s in tickers:
@@ -1430,19 +1430,18 @@ class DatabaseManager(Singleton):
             notuptodateIndicators = []
             if len(latestIndicators) > 0:
                 ## check if any indicators are missing in DB
-                for ik in gconfig.feature.indicators.keys():
+                for ik in IndicatorType:
                     missing = True
                     for r in latestIndicators:
                         if r.indicator == ik.key:
                             missing = False
                             break
                     if missing: missingIndicators.append(ik)
-                if len(missingIndicators) == 0:
-                    ## check if all indicators are calculated up to latest stock data
-                    for r in latestIndicators:
-                        if r.date < stkdata[-1].date:
-                            notuptodateIndicators.append(r)
-                    if len(notuptodateIndicators) == 0: continue
+                ## check if all indicators are calculated up to latest stock data
+                for r in latestIndicators:
+                    if r.date < stkdata[-1].date:
+                        notuptodateIndicators.append(IndicatorType[r.indicator])
+                if len(missingIndicators) == 0 and len(notuptodateIndicators) == 0: continue
 
             i: IndicatorType
             for i in tqdm(cacheIndicators, desc='Indicators', leave=False):
@@ -1480,7 +1479,7 @@ class DatabaseManager(Singleton):
                     latesti = getLatestIndicator(i, iperiod)   
 
                     minDateIndex = 0
-                    for j in range(len(stkdata), -1, -1):
+                    for j in range(len(stkdata)-1, -1, -1):
                         if stkdata[j].date == latesti.date:
                             minDateIndex = j
                             break
