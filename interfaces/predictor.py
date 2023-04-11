@@ -23,6 +23,7 @@ from managers.dataManager import DataManager
 from managers.networkAnalysisManager import NetworkAnalysisManager
 from managers.inputVectorFactory import InputVectorFactory
 from structures.neuralNetworkInstance import NeuralNetworkInstance
+from structures.stockDataHandler import StockDataHandler
 from constants.enums import AccuracyType, InputVectorDataType, OperatorDict, SeriesType
 from constants.exceptions import AnchorDateAheadOfLastDataDate, NoData, SufficientlyUpdatedDataNotAvailable
 from utils.support import Singleton, asDate, shortc, shortcdict
@@ -91,15 +92,16 @@ class Predictor(Singleton):
 
         return Predictor.predictAll(networkid, anchorDate, exchanges=[exchange], symbols=[symbol], **kwargs)
 
+    ## returns stockData, precedingIndicators
     def __getPrecedingRangeData(self, network, exchange, symbol, anchorDate):
-        data = self.dm.stockDataHandlers[(exchange, symbol)].data
+        sdh: StockDataHandler = self.dm.stockDataHandlers[(exchange, symbol)]
         d = MarketDayManager.getPreviousMarketDay(asDate(anchorDate))
         ind = None
-        for index, item in enumerate(data):
+        for index, item in enumerate(sdh.data):
             if item.date == d.isoformat():
                 ind = index + 1
                 break
-        return data[ind - network.stats.precedingRange:ind]
+        return sdh.getPrecedingSet(ind), sdh.getPrecedingIndicators(ind)
 
     def __buildPredictInputTuple(self, network, exchange, symbol, anchorDate=date.today().isoformat()):
         if gconfig.testing.predictor:
@@ -115,18 +117,20 @@ class Predictor(Singleton):
             financialData = self.dm.financialDataHandlers[(exchange, symbol)].getPrecedingReports(anchorDate, network.stats.precedingRange)
         if gconfig.testing.predictor:
             self.testing_getPrecedingReportsTime += time.time() - startt
+        
+        stockDataSet, precedingIndicators = self.__getPrecedingRangeData(network, exchange, symbol, anchorDate)
 
         inputVector = network.inputVectorFactory.build(
-            self.__getPrecedingRangeData(network, exchange, symbol, anchorDate),
-            self.vixm.data, 
-            financialData, 
-            self.dm.googleInterestsHandlers[(exchange, symbol)].getPrecedingRange(anchorDate, network.stats.precedingRange), 
-            symbolinfo.founded, 
-            None, 
-            symbolinfo.sector, 
-            exchange,
-            [],
-            symbolinfo.asset_type == 'ETF'
+            stockDataSet=stockDataSet,
+            vixData=self.vixm.data,
+            financialDataSet=financialData,
+            googleInterests=self.dm.googleInterestsHandlers[(exchange, symbol)].getPrecedingRange(anchorDate, network.stats.precedingRange),
+            stockSplits=[],
+            indicators=precedingIndicators,
+            foundedDate=symbolinfo.founded,
+            sector=symbolinfo.sector, 
+            exchange=exchange,
+            etfFlag=symbolinfo.asset_type == 'ETF'
         )
         if gconfig.testing.predictor:
             self.testing_inputVectorBuildTime += time.time() - startt
@@ -360,7 +364,7 @@ if __name__ == '__main__':
     # Predictor.predictAll('1633809914', '2021-12-11', exchanges=['NYSE', 'NASDAQ']) ## 0.05 - 10d
     # Predictor.predictAll('1631423638', '2021-11-20', exchanges=['NYSE', 'NASDAQ'], numberOfWeightingsLimit=200) ## 0.1 - 30d
     # p.predictAll('1631423638', exchanges=['NYSE', 'NASDAQ']) ## 0.1 - 30d
-    Predictor.predictAll('1678667196', '2023-03-11', exchanges=['NYSE', 'NASDAQ'], numberofWeightingsLimit=500, assetTypes=['CS', 'CLA', 'CLB', 'CLC'], maxPageSize=500) ## 0.05 - 10d - recurrent
+    Predictor.predictAll('1681021857', '2023-04-07', exchanges=['NYSE', 'NASDAQ'], numberofWeightingsLimit=500, assetTypes=['CS', 'CLA', 'CLB', 'CLC'], maxPageSize=500) ## 0.05 - 10d - recurrent
     # Predictor.predict('NYSE', 'GME', '2021-12-28', '1678667196')
     # Predictor.predict('NYSE', 'GME', networkid='1641959005', anchorDates=['2021-12-28', '2021-12-31']) ## 0.05 - 10d - recurrent
 
