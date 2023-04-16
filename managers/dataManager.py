@@ -18,7 +18,7 @@ from argparse import ArgumentError
 
 from globalConfig import config as gconfig
 from constants.enums import DataFormType, OperatorDict, OutputClass, SeriesType, SetType, DataManagerType, IndicatorType
-from utils.support import Singleton, flatten, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, processDBQuartersToDicts
+from utils.support import flatten, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.other import getInstancesByClass, getMaxIndicatorPeriod, maxQuarters, getIndicatorPeriod
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
 from constants.values import unusableSymbols, indicatorsKey
@@ -94,7 +94,7 @@ class DataManager():
 
         maxPageSize=0, skipAllDataInitialization=False,
         maxGoogleInterestHandlers=50,
-        **kwargs
+        verbose=None, **kwargs
         # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
         # neuralNetwork: NeuralNetworkInstance=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[]
     ):
@@ -116,6 +116,7 @@ class DataManager():
         ##
 
         startt = time.time()
+        self.verbose = shortc(verbose, 1)
         self.config = inputVectorFactory.config
         self.inputVectorFactory = inputVectorFactory
         self.precedingRange = precedingRange
@@ -183,12 +184,12 @@ class DataManager():
 
 
         if explicitValidationSymbolList and not skips.stocks:
-            print('Initializing explicit validation stuff')
+            if self.verbose>=1: print('Initializing explicit validation stuff')
             self.initializeExplicitValidationStockDataHandlers(explicitValidationSymbolList)
             if not skips.instances:
                 self.initializeExplicitValidationStockDataInstances()
                 if not skips.sets: self.setupExplicitValidationSet()
-            print('Initializing regular stock data stuff')
+            if self.verbose>=1: print('Initializing regular stock data stuff')
 
 
         if useAllSets and useOptimizedSplitMethodForAllSets:
@@ -214,43 +215,53 @@ class DataManager():
 
         print('DataManager init complete. Took', time.time() - startt, 'seconds')
 
-    def initializeAllDataForPage(self, page):
+    def initializeAllDataForPage(self, page, verbose=None):
         if not self.usePaging: raise ArgumentError('Manager not setup with paging')
-        self._initializeAllData(self.getSymbolListPage(page), refresh=True)
+        self._initializeAllData(self.getSymbolListPage(page), refresh=True, verbose=verbose)
         gc.collect() ## help clean up old/cleared data
 
-    def _initializeAllData(self, symbolList, refresh=False, skips: SkipsObj=None):
+    def _initializeAllData(self, symbolList, refresh=False, skips: SkipsObj=None, verbose=None):
+        verbose = shortc(verbose, self.verbose)
+
         if not skips: skips = self.skips
         ## pull and setup financial reports ref
         if gconfig.feature.financials.enabled and not skips.financials:
             startt2 = time.time()
-            self.initializeFinancialDataHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh)
-            print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
+            self.initializeFinancialDataHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh, verbose=verbose)
+            if verbose>=1: print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
 
         startt2 = time.time()
         if not skips.stocks: 
-            self.initializeStockDataHandlers(symbolList, queryLimit=self.queryLimit, refresh=refresh)
+            self.initializeStockDataHandlers(symbolList, queryLimit=self.queryLimit, refresh=refresh, verbose=verbose)
 
-            print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
+            if verbose>=1: print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
 
             if not self.initializeStockDataHandlersOnly:
-                if not skips.splits: self.initializeStockSplitsHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh)
-                if not skips.technicalIndicators: self.initializeTechnicalIndicators() ## needs to be done before any instance selection as the viable index pool may get reduced
+                if not skips.splits: self.initializeStockSplitsHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh, verbose=verbose)
+                if not skips.technicalIndicators: self.initializeTechnicalIndicators(verbose) ## needs to be done before any instance selection as the viable index pool may get reduced
                 if not self.maxGoogleInterestHandlers and not skips.googleInterests:
-                    self.initializeGoogleInterestsHandlers(symbolList, self.explicitValidationSymbolList, queryLimit=self.queryLimit, refresh=refresh)
+                    self.initializeGoogleInterestsHandlers(symbolList, self.explicitValidationSymbolList, queryLimit=self.queryLimit, refresh=refresh, verbose=verbose)
 
                 if self.type != DataManagerType.PREDICTION and not skips.instances:
                     startt3 = time.time()
-                    self.initializeStockDataInstances(refresh=refresh)
-                    print('Stock data instance initialization time:', time.time() - startt3, 'seconds')
+                    self.initializeStockDataInstances(refresh=refresh, verbose=verbose)
+                    if verbose>=1: print('Stock data instance initialization time:', time.time() - startt3, 'seconds')
 
                     if not skips.sets:
+                        kwargs = { 'verbose': verbose }
                         if self.setCount is not None:
-                            self.setupSets(self.setCount, self.setSplitTuple, self.minimumSetsPerSymbol)
+                            kwargs['setCount'] = self.setCount
+                            kwargs['setSplitTuple'] = self.setSplitTuple
+                            kwargs['minimumSetsPerSymbol'] = self.minimumSetsPerSymbol
                         elif self.type == DataManagerType.ANALYSIS:
-                            self.setupSets(len(self.stockDataInstances.values()), (0,1), selectAll=True)
+                            kwargs['setCount'] = len(self.stockDataInstances.values())
+                            kwargs['setSplitTuple'] = (0,1)
+                            kwargs['selectAll'] = True
                         elif self.type == DataManagerType.STATS:
-                            self.setupSets(1, (1,0), 0)
+                            kwargs['setCount'] = 1
+                            kwargs['setSplitTuple'] = (1,0)
+                            kwargs['minimumSetsPerSymbol'] = 0
+                        self.setupSets(**kwargs)
 
     ## TODO: optimized class methods, forTraining needs to have option of providing a networkid for use in getting the ticker window split
     @classmethod
@@ -495,7 +506,9 @@ class DataManager():
     def initializeExplicitValidationStockDataHandlers(self, symbolList: List, **kwargs):
         self.initializeStockDataHandlers(symbolList, 'explicitValidationStockDataHandlers', **kwargs)
 
-    def initializeStockDataHandlers(self, symbolList: List, dmProperty='stockDataHandlers', queryLimit: int=None, refresh=False):
+    def initializeStockDataHandlers(self, symbolList: List, dmProperty='stockDataHandlers', queryLimit: int=None, refresh=False, verbose=None):
+        verbose = shortc(verbose, self.verbose)
+
         ## purge unusable symbols
         for s in symbolList:
             if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
@@ -535,13 +548,13 @@ class DataManager():
             sdhKWArgs['volumeMax'] = self.normalizationInfo.volumeMax
 
         if gconfig.multicore:
-            for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate, queryLimit=queryLimit), symbolList, chunksize=1, desc='Getting stock data'), desc='Creating stock handlers'):
+            for ticker, data in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate, queryLimit=queryLimit), symbolList, chunksize=1, desc='Getting stock data'), verbose, desc='Creating stock handlers'):
                 if dataLengthCheck(data):
                     self.__getattribute__(dmProperty)[TickerKeyType(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArgLambda(ticker, data), **sdhKWArgs)
                 else:
                     updateSkipCounts(data)
         else:
-            for s in tqdm.tqdm(symbolList, desc='Creating stock handlers'):
+            for s in tqdmLoopHandleWrapper(symbolList, verbose, desc='Creating stock handlers'):
                 data = dbm.getStockData(s.exchange, s.symbol, self.seriesType, minDate=self.minDate, queryLimit=queryLimit)
                 if dataLengthCheck(data):
                     self.__getattribute__(dmProperty)[TickerKeyType(s.exchange, s.symbol)] = StockDataHandler(*sdhArgLambda(s, data), **sdhKWArgs)
@@ -550,7 +563,7 @@ class DataManager():
 
         if self.shouldNormalize: self.normalize()
 
-        if queryLimitSkips or precedingFollowingShortfallSkips or indicatorPeriodShortfallSkips:
+        if (queryLimitSkips or precedingFollowingShortfallSkips or indicatorPeriodShortfallSkips) and verbose>=1:
             print('queryLimitSkips', queryLimitSkips)
             print('precedingFollowingShortfallSkips', precedingFollowingShortfallSkips)
             print('indicatorPeriodShortfallSkips', indicatorPeriodShortfallSkips)
@@ -558,7 +571,9 @@ class DataManager():
     def initializeExplicitValidationStockDataInstances(self, **kwargs):
         self.initializeStockDataInstances(stockDataHandlers=self.explicitValidationStockDataHandlers.values(), dmProperty='explicitValidationStockDataInstances', **kwargs)
 
-    def initializeStockDataInstances(self, stockDataHandlers: List[StockDataHandler]=None, collectOutputClassesOnly=False, dmProperty='stockDataInstances', refresh=False, verbose=1):
+    def initializeStockDataInstances(self, stockDataHandlers: List[StockDataHandler]=None, collectOutputClassesOnly=False, dmProperty='stockDataInstances', refresh=False, verbose=None):
+        verbose = shortc(verbose, self.verbose)
+
         if not stockDataHandlers:
             stockDataHandlers = self.stockDataHandlers.values()
 
@@ -568,7 +583,7 @@ class DataManager():
         outputClassCounts = { o: 0 for o in OutputClass }
 
         h: StockDataHandler
-        for h in tqdm.tqdm(stockDataHandlers, desc='Initializing stock instances') if verbose > 0 else stockDataHandlers:
+        for h in tqdmLoopHandleWrapper(stockDataHandlers, verbose, desc='Initializing stock instances'):
             for sindex in h.getAvailableSelections():
                 try:
                     change = (h.data[sindex + self.followingRange].low / h.data[sindex - 1].high) - 1
@@ -586,7 +601,9 @@ class DataManager():
 
         if collectOutputClassesOnly: return outputClassCounts
         
-    def initializeFinancialDataHandlers(self, symbolList, explicitValidationSymbolList=[], refresh=False):
+    def initializeFinancialDataHandlers(self, symbolList, explicitValidationSymbolList=[], refresh=False, verbose=None):
+        verbose = shortc(verbose, self.verbose)
+
         ## purge old data
         if refresh: self.financialDataHandlers.clear()
 
@@ -596,7 +613,7 @@ class DataManager():
         ANALYZE3 = False
 
         if gconfig.multicore:
-            for ticker, data in tqdm.tqdm(process_map(multicore_getFinancialDataTickerTuples, symbolList, chunksize=1, desc='Getting financial data'), desc='Creating financial handlers'):
+            for ticker, data in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(multicore_getFinancialDataTickerTuples, symbolList, verbose, chunksize=1, desc='Getting financial data'), verbose, desc='Creating financial handlers'):
                 self.financialDataHandlers[TickerKeyType(ticker.exchange, ticker.symbol)] = FinancialDataHandler(ticker, data)  
 
         else:
@@ -608,7 +625,7 @@ class DataManager():
 
             restotal = []
             if not ANALYZE2:
-                for s in tqdm.tqdm(symbolList, desc='Creating financial handlers'):  
+                for s in tqdmLoopHandleWrapper(symbolList, verbose, desc='Creating financial handlers'):  
                     if (s.exchange, s.symbol) in unusableSymbols: continue
                     if not ANALYZE1 and not ANALYZE2 and not ANALYZE3:
                         self.financialDataHandlers[TickerKeyType(s.exchange, s.symbol)] = FinancialDataHandler(s, dbm.getFinancialData(s.exchange, s.symbol))
@@ -708,7 +725,7 @@ class DataManager():
                     insertingtime += time.time() - startt
 
 
-            if ANALYZE1 or ANALYZE2 or ANALYZE3:
+            if verbose>=1 and (ANALYZE1 or ANALYZE2 or ANALYZE3):
                 print('initializeFinancialDataHandlers stats')
                 print('gettingtime',gettingtime,'seconds')
                 print('massagingtime',massagingtime,'seconds')
@@ -716,7 +733,9 @@ class DataManager():
                 print('insertingtime',insertingtime,'seconds')
                 print('total',gettingtime+massagingtime+creatingtime+insertingtime,'seconds')
 
-    def initializeStockSplitsHandlers(self, symbolList, explicitValidationSymbolList=[], refresh=False):
+    def initializeStockSplitsHandlers(self, symbolList, explicitValidationSymbolList=[], refresh=False, verbose=None):
+        verbose = shortc(verbose, self.verbose)
+
         symbolList += explicitValidationSymbolList
         ## purge unusable symbols
         for s in symbolList:
@@ -726,14 +745,16 @@ class DataManager():
         if refresh: self.stockSplitsHandlers.clear()
 
         if gconfig.multicore:
-            for ticker, data in tqdm.tqdm(process_map(partial(multicore_getStockSplitsTickerTuples), symbolList, chunksize=1, desc='Getting stock splits data'), desc='Creating stock splits handlers'):
+            for ticker, data in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getStockSplitsTickerTuples), symbolList, verbose, chunksize=1, desc='Getting stock splits data'), verbose, desc='Creating stock splits handlers'):
                 self.stockSplitsHandlers[TickerKeyType(ticker.exchange, ticker.symbol)] = StockSplitsHandler(ticker.exchange, ticker.symbol, data)
                     
         else:
-            for s in tqdm.tqdm(symbolList, desc='Creating stock splits handlers'):
+            for s in tqdmLoopHandleWrapper(symbolList, verbose, desc='Creating stock splits handlers'):
                 self.stockSplitsHandlers[TickerKeyType(s.exchange, s.symbol)] = StockSplitsHandler(s.exchange, s.symbol, dbm.getStockSplits(s.exchange, s.symbol))
 
-    def initializeTechnicalIndicators(self, verbose=1):
+    def initializeTechnicalIndicators(self, verbose=None):
+        verbose = shortc(verbose, self.verbose)
+
         sdh: StockDataHandler
         indc: IndicatorType
 
@@ -746,7 +767,7 @@ class DataManager():
         cachesUsed = 0
         sdhSkips = 0
         sdhs = list(self.stockDataHandlers.values()) + list(self.explicitValidationStockDataHandlers.values())
-        for sdh in tqdm.tqdm(sdhs, desc='Initializing technical indicators') if verbose else sdhs:
+        for sdh in tqdmLoopHandleWrapper(sdhs, verbose, desc='Initializing technical indicators'):
             if len(sdh.getAvailableSelections()) == 0: 
                 sdhSkips += 1
                 continue
@@ -778,15 +799,18 @@ class DataManager():
             for k in genKeys:
                 genTimes[k].append(genTime[k])
 
-        print('Technical indicator generation complete. Took', time.time() - startt, 'seconds')
-        print('Skipped {} stocks'.format(sdhSkips))
-        print('Used {} caches'.format(cachesUsed))
-        print('Calculated {} sets'.format(sum(len(v) for v in genTimes.values())))
-        print('Average calculation times:')
-        for k in genTimes.keys():
-            print(k.name, '{:.2f}'.format(numpy.average(genTimes[k])))
+        if verbose>=1:
+            print('Technical indicator generation complete. Took', time.time() - startt, 'seconds')
+            print('Skipped {} stocks'.format(sdhSkips))
+            print('Used {} caches'.format(cachesUsed))
+            print('Calculated {} sets'.format(sum(len(v) for v in genTimes.values())))
+            print('Average calculation times:')
+            for k in genTimes.keys():
+                print(k.name, '{:.2f}'.format(numpy.average(genTimes[k])))
 
-    def initializeGoogleInterestsHandlers(self, symbolList, explicitValidationSymbolList=[], queryLimit: int=None, refresh=False, leaveProgressBar=True):
+    def initializeGoogleInterestsHandlers(self, symbolList, explicitValidationSymbolList=[], queryLimit: int=None, refresh=False, verbose=None):
+        verbose = shortc(verbose, self.verbose)
+
         symbolList += explicitValidationSymbolList
         ## purge unusable symbols
         for s in symbolList:
@@ -804,12 +828,12 @@ class DataManager():
 
 
         if gconfig.multicore and not self.maxGoogleInterestHandlers:
-            for ticker, relativedata in tqdm.tqdm(process_map(partial(multicore_getGoogleInterestsTickerTuples, queryLimit=queryLimit), symbolList, chunksize=1, desc='Getting Google interests data', leave=leaveProgressBar), desc='Creating Google interests handlers', leave=leaveProgressBar):
+            for ticker, relativedata in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getGoogleInterestsTickerTuples, queryLimit=queryLimit), symbolList, verbose, chunksize=1, desc='Getting Google interests data'), verbose, desc='Creating Google interests handlers'):
                 key = TickerKeyType(ticker.exchange, ticker.symbol)
                 self.googleInterestsHandlers[key] = GoogleInterestsHandler(*key.getTuple(), relativedata)
                     
         else:
-            for s in tqdm.tqdm(symbolList, desc='Creating Google interests handlers', leave=leaveProgressBar):
+            for s in tqdmLoopHandleWrapper(symbolList, verbose, desc='Creating Google interests handlers'):
                 key = TickerKeyType(s.exchange, s.symbol)
                 self.googleInterestsHandlers[key] = GoogleInterestsHandler(*key.getTuple(), dbm.getGoogleInterests(s.exchange, s.symbol, queryLimit=queryLimit))
 

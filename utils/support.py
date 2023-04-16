@@ -8,7 +8,8 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 
-import numpy, re, math, calendar, json, pickle
+import numpy, re, math, calendar, json, pickle, tqdm
+from tqdm.contrib.concurrent import process_map
 from datetime import date, datetime, timedelta
 from multiprocessing import Pool, cpu_count
 from typing import Callable, Dict, Union
@@ -328,6 +329,11 @@ def _getFromListWithCustomMatchFunction(iterable, matchFunction, returnType: Ret
             if returnType == ReturnType.INDEX: return i
             elif returnType == ReturnType.VALUE: return val
 
+def tqdmLoopHandleWrapper(iterable, verbose=0, **kwargs):
+    return tqdm.tqdm(iterable, leave=verbose>=1, **kwargs) if verbose > 0 else iterable
+
+def tqdmProcessMapHandlerWrapper(fn, iterable, verbose=0, **kwargs):
+    return process_map(fn, iterable, leave=verbose>=1, **kwargs) if verbose > 0 else list(map(fn, iterable))
 
 if __name__ == '__main__':
     # print(processRawValueToInsertValue(44))
