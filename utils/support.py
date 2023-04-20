@@ -181,6 +181,14 @@ def asDatetime(dt: Union[date, datetime, str]):
 def asList(val):
     return val if type(val) is list else [val]
 
+def isSameYear(dt1: Union[date, datetime, str], dt2: Union[date, datetime, str]):
+    return asDate(dt1).year == asDate(dt2).year
+
+## implicitly isSameYear too
+def isSameMonth(dt1: Union[date, datetime, str], dt2: Union[date, datetime, str]):
+    if not isSameYear(dt1, dt2): return False
+    return asDate(dt1).month == asDate(dt2).month
+
 ## turns '003,4.50,2' into (3, 4.5, 2)
 def parseCSVFloatsIntoTuple(x: str):
     return tuple([float(n) for n in x.split(',')])
@@ -329,9 +337,11 @@ def _getFromListWithCustomMatchFunction(iterable, matchFunction, returnType: Ret
             if returnType == ReturnType.INDEX: return i
             elif returnType == ReturnType.VALUE: return val
 
+## TQDM progress bar, with verbose optionality
 def tqdmLoopHandleWrapper(iterable, verbose=0, **kwargs):
     return tqdm.tqdm(iterable, leave=verbose>=1, **kwargs) if verbose > 0 else iterable
 
+## multicore TQDM progress bar, with verbose optionality
 def tqdmProcessMapHandlerWrapper(fn, iterable, verbose=0, **kwargs):
     return process_map(fn, iterable, leave=verbose>=1, **kwargs) if verbose > 0 else list(map(fn, iterable))
 

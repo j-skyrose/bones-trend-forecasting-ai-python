@@ -23,7 +23,7 @@ from managers.marketDayManager import MarketDayManager
 from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FeatureExtraType, FinancialReportType, IndicatorType, InterestType, OperatorDict, PrecedingRangeType, SQLHelpers, SeriesType, AccuracyType, SetType, Direction
 from constants.exceptions import InsufficientDataAvailable
 from utils.technicalIndicatorFormulae import unresumableGenerationIndicators, generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends
-from utils.support import asDate, asISOFormat, asList, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, unixToDatetime
+from utils.support import asDate, asISOFormat, asList, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, tqdmLoopHandleWrapper, unixToDatetime
 from utils.other import buildCommaSeparatedTickerPairString, getIndicatorPeriod
 from constants.values import unusableSymbols, apiList, standardExchanges
 
@@ -107,6 +107,9 @@ class DatabaseManager(Singleton):
 
     ####################################################################################################################################################################
     ## gets ####################################################################################################################################################################
+
+    def getMaxRowID(self, table='google_interests_raw'):
+        return self.dbc.execute(f'SELECT MAX(rowid) FROM {table}').fetchone()['MAX(rowid)']
 
     def getLoadedQuarters(self):
         # stmt = 'SELECT DISTINCT fy, fp FROM dump_edgar_sub'
@@ -665,6 +668,29 @@ class DatabaseManager(Singleton):
 
         return self.dbc.execute(stmt, tuple(args)).fetchall()
 
+    def getMaxGoogleInterestStream(self, exchange=None, symbol=None, gtopicid=None, itype:InterestType=InterestType.DAILY):
+        stmt = 'SELECT MAX(stream) AS maxstream FROM google_interests_raw gi '
+        args = []
+        if gtopicid:
+            stmt = ' JOIN symbols s ON gi.exchange=s.exchange AND gi.symbol=s.symbol WHERE gi.google_topic_id=? '
+            args.append(gtopicid)
+        elif exchange and symbol:
+            stmt += ' WHERE gi.exchange=? and gi.symbol=? '
+            args.extend([exchange, symbol])
+
+            stmt += 'AND gi.type = ? '
+            args.append(itype.name)
+
+        if itype is not None:
+            stmt += ' AND gi.type=? '
+            args.append(itype.name)
+
+        res = self.dbc.execute(stmt, tuple(args)).fetchall()
+        if len(res) > 0:
+            return res[0].maxstream
+        else:
+            return -1
+
     def getTechnicalIndicatorData(self, exchange, symbol, indicator: IndicatorType, dateType: SeriesType=SeriesType.DAILY, date=None, period=None, valuesOnly=True):
         stmt = 'SELECT {} FROM historical_calculated_technical_indicator_data WHERE exchange=? and symbol=? and indicator=? AND date_type=? '.format('*' if not valuesOnly else 'value')
         args = [exchange, symbol, indicator.key, dateType.name]
@@ -1166,6 +1192,14 @@ class DatabaseManager(Singleton):
         if upsert:
             stmt = 'UPDATE google_interests_raw SET relative_interest=? WHERE exchange=? AND symbol=? AND date=? AND type=? AND stream=?'
             self.dbc.execute(stmt, [value] + lst)
+
+    def insertCalculatedGoogleInterest(self, exchange, symbol, dt, val, upsert=True):
+        stmt = 'INSERT OR IGNORE INTO google_interests VALUES (?,?,?,?)'
+        args = [exchange, symbol, dt]
+        self.dbc.execute(stmt, tuple(args + [val]))
+        if upsert:
+            stmt = 'UPDATE google_interests SET relative_interest=? WHERE exchange=? AND symbol=? AND date=?'
+            self.dbc.execute(stmt, tuple([val] + args))
 
     ## end sets ####################################################################################################################################################################
     ####################################################################################################################################################################
@@ -2236,7 +2270,7 @@ class DatabaseManager(Singleton):
 
 
     ## builds a DB copy with just enough info for Google Interests collector to run and input data to
-    def buildGIDBCopy(self, verbose=0):
+    def buildGIDBCopy(self, verbose=1):
         dest_db_path = os.path.join(path, f'data\\gidbcopy-{str(int(time.time()))}.db')
         src_cursor = self.dbc
         dest_db = sqlite3.connect(dest_db_path, timeout=15)
@@ -2250,7 +2284,7 @@ class DatabaseManager(Singleton):
             try:
                 dest_cursor.execute(table['sql'])
             except sqlite3.OperationalError as e:
-                if verbose > 0: print(f'Operational Error: {e}')
+                if verbose>=1: print(f'Operational Error: {e}')
                 pass
 
 
@@ -2260,6 +2294,7 @@ class DatabaseManager(Singleton):
 
         ## write only symbols with Google Topic IDs
         src_tickers = self.getSymbols(googleTopicId=SQLHelpers.NOTNULL)
+        # src_tickers=src_tickers[:500]
         # src_tickers = []
         # messedupgidatatickers = src_cursor.execute('select * from google_interests where relative_interest=100 and date>=\'2022-10-01\'').fetchall()
         # for t in messedupgidatatickers:
@@ -2268,10 +2303,10 @@ class DatabaseManager(Singleton):
             dest_cursor.execute(f'INSERT INTO symbols VALUES ({getValueQS(src_tickers[0])})', list(t.values()))
 
         # write only max and min dated data for each symbol for google_interests and historical_data tables
-        for t in tqdm(src_tickers, desc='Transfering stock and GI data') if verbose > 0 else src_tickers:
+        for t in tqdmLoopHandleWrapper(src_tickers, verbose, desc='Transfering stock and GI data'):
             histdata = self.getStockData(t.exchange, t.symbol, SeriesType.DAILY)
             if len(histdata) == 0:
-                print(f'No stock data, deleting {t.exchange}:{t.symbol}')
+                if verbose>=1: print(f'No stock data, deleting {t.exchange}:{t.symbol}')
                 dest_cursor.execute('DELETE FROM symbols WHERE exchange=? and symbol=?', (t.exchange, t.symbol))
                 continue
             stmt = f'INSERT INTO historical_data VALUES ({getValueQS(histdata[0])})'
@@ -2325,7 +2360,7 @@ class DatabaseManager(Singleton):
 ## 3677029
 
     ## import Google Interests data from a DB copy from elsewhere (e.g. EC2 instance)
-    def importFromGIDBCopy(self, src_db_path, verbose=0):
+    def importFromGIDBCopy(self, src_db_path, verbose=1):
         dest_cursor = self.dbc
         src_db = sqlite3.connect(src_db_path, timeout=15)
         src_db.row_factory = recdotdict_factory
@@ -2339,13 +2374,13 @@ class DatabaseManager(Singleton):
         symbolerrors = src_cursor.execute('SELECT * FROM symbols WHERE google_topic_id IS NULL').fetchall()
         for s in symbolerrors:
             dest_cursor.execute('UPDATE symbols SET google_topic_id=NULL WHERE exchange=? AND symbol=?', (s.exchange, s.symbol))
-        print(f'Deleted {len(symbolerrors)} topic IDs')
+        if verbose>=1: print(f'Deleted {len(symbolerrors)} topic IDs')
 
         ## transfer GI data
         gidata = src_cursor.execute('SELECT * FROM google_interests_raw ORDER BY exchange, symbol, date, type').fetchall()
         for g in tqdm(gidata, desc='Inserting data') if verbose > 0 else gidata:
             dest_cursor.execute(f'INSERT OR IGNORE INTO google_interests_raw VALUES ({getValueQS(gidata[0])})', list(g.values()))
-        print(f'Inserted {len(gidata)} data points')
+        if verbose>=1: print(f'Inserted {len(gidata)} data points')
 
         self.commit()
 

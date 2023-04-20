@@ -21,3 +21,6 @@ class AnchorDateAheadOfLastDataDate(Exception):
 
 class InsufficientDataAvailable(Exception):
     pass
+
+class ArgumentError(Exception):
+    pass

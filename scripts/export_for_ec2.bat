@@ -1,4 +1,5 @@
 @echo off
+@REM %~dp0 = (this) batch file directory
 set MYPATH=%~dp0
 set PROJECTDIR=%MYPATH%\..
 set EXPORTDIR=%MYPATH%\sp-export
@@ -15,7 +16,8 @@ mkdir %EXPORTDIR%\data
 @REM mkdir %EXPORTDIR%\utils
 
 echo "Exporting DB"
-python %PROJECTDIR%\managers\databaseManager.py -f buildGIDBCopy > dbpath.txt
+@REM can be run while other process has DB open
+python %PROJECTDIR%/managers/databaseManager.py -f buildGIDBCopy verbose=0.5 > dbpath.txt
 set /p DBPATH=<dbpath.txt
 del dbpath.txt
 echo %DBPATH%
@@ -24,14 +26,15 @@ move %DBPATH% %EXPORTDIR%\data\sp2Database.db
 echo "Copying rest of python files"
 copy %PROJECTDIR%\config.ini %EXPORTDIR%
 copy %PROJECTDIR%\globalConfig.py %EXPORTDIR%
-robocopy %PROJECTDIR%\constants %EXPORTDIR%\constants /e
-robocopy %PROJECTDIR%\interfaces %EXPORTDIR%\interfaces /e
-robocopy %PROJECTDIR%\managers %EXPORTDIR%\managers /e
-robocopy %PROJECTDIR%\structures %EXPORTDIR%\structures /e
-robocopy %PROJECTDIR%\utils %EXPORTDIR%\utils /e
+robocopy %PROJECTDIR%\constants %EXPORTDIR%\constants /e /xf *.pyc
+robocopy %PROJECTDIR%\interfaces %EXPORTDIR%\interfaces /e /xf *.pyc
+robocopy %PROJECTDIR%\managers %EXPORTDIR%\managers /e /xd *dynamicallyLoadedFactories /xf *.pyc
+robocopy %PROJECTDIR%\structures %EXPORTDIR%\structures /e /xf *.pyc
+robocopy %PROJECTDIR%\utils %EXPORTDIR%\utils /e /xf *.pyc
 
+@REM tensorflow dependency not installed on EC2 agents, so removal of any references will allow the necessary things to run
 echo "Removing tensorflow dependent code"
-powershell -Command "(gc %PROJECTDIR%\globalConfig.py) -replace 'TESTING = True', 'pass' | Out-File -encoding ASCII %PROJECTDIR%\globalConfig.py"
+powershell -Command "(gc %EXPORTDIR%\globalConfig.py) -replace 'TESTING = True', 'pass' | Out-File -encoding ASCII %EXPORTDIR%\globalConfig.py"
 del %EXPORTDIR%\interfaces\hyperParameterAnalyzer.py
 del %EXPORTDIR%\interfaces\predictor.py
 del %EXPORTDIR%\interfaces\trainer.py

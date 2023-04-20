@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-from typing import Dict, List, Tuple
+from typing import List
 
 from structures.weekBlock import WeekBlock
 

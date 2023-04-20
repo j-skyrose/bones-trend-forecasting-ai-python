@@ -7,6 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
+from datetime import date
 from typing import Dict, List, Tuple
 
 ## 7 day block of Google interest data
@@ -32,7 +33,14 @@ class WeekBlock:
         return sum([v for v in self.data.values()])
     def isPartial(self):
         return len(self.data) != 7
-    def getStartDate(self):
-        return list(self.data.keys())[0]
-    def getEndDate(self):
-        return list(self.data.keys())[-1]
+    def getStartDate(self, dateType=False):
+        ret = list(self.data.keys())[0]
+        return date.fromisoformat(ret) if dateType else ret
+    def getEndDate(self, dateType=False):
+        ret = list(self.data.keys())[-1]
+        return date.fromisoformat(ret) if dateType else ret
+    def zeroCount(self):
+        zcount = 0
+        for v in self.data.values():
+            if v == 0: zcount += 1
+        return zcount

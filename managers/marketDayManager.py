@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta
 
 from globalConfig import config as gconfig
 from constants.enums import MarketType
+from constants.exceptions import ArgumentError
 from utils.support import Singleton, getIndex
 from utils.other import getMarketType
 
@@ -78,19 +79,21 @@ class MarketDayManager(Singleton):
         return marketdays.index(toDate) - marketdays.index(fromDate)
 
     @classmethod
-    def getMarketDays(cls, year=None, startingYear: int=None, startingFrom: datetime=None) -> List[date]:
-        if gconfig.testing.enabled:
-            # print('year:', year, 'startingYear:', startingYear, 'startingFrom:', startingFrom)
-            pass
+    def getMarketDays(cls, year=None, month: int=None, startingYear: int=None, startingFrom: datetime=None) -> List[date]:
         self = cls()
         if year:
-            days = self._getMarketDaysForYear(year)
+            if month is not None:
+                days = self._getMarketDaysForMonth(year, month)
+            else:
+                days = self._getMarketDaysForYear(year)
         elif startingYear:
             days = self._getMarketDaysStartingFromYear(startingYear)
         elif startingFrom:
             # return [d for d in self._getMarketDaysStartingFromYear(startingFrom.year) if d >= startingFrom]
             days = self._getMarketDaysStartingFromYear(startingFrom.year)
-
+        else:
+            raise ArgumentError
+            
         return [d.date() for d in days if (True if not startingFrom else d >= startingFrom)]
 
     @classmethod
@@ -118,7 +121,7 @@ class MarketDayManager(Singleton):
             
         raise IndexError('Unable to determine vanced date')
 
-    def _getMarketDaysForYear(self, year):
+    def _getMarketDaysForYear(self, year) -> List[date]:
         if year not in self.marketDays:
             days = [datetime(year, 1, 1, 23, 59, 59) + timedelta(days=d) for d in range(366 if calendar.isleap(year) else 365)]
             for d in days[:]:
@@ -127,7 +130,14 @@ class MarketDayManager(Singleton):
             self.marketDays[str(year)] = days
         return self.marketDays[str(year)]
 
-    def _getMarketDaysStartingFromYear(self, year):
+    def _getMarketDaysForMonth(self, year, month):
+        days = self._getMarketDaysForYear(year)
+        for d in days[:]:
+            if d.month != month:
+                days.remove(d)
+        return days
+
+    def _getMarketDaysStartingFromYear(self, year) -> List[date]:
         year = int(year)
         days = []
         for y in range(datetime.now().year - year + 1):
