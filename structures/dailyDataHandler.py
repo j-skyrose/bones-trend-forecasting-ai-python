@@ -10,12 +10,12 @@ sys.path.append(path)
 import time
 from copy import deepcopy
 from datetime import date
-from typing import Dict, List
+from typing import List, Set
 
-from globalConfig import config as gconfig
 from managers.statsManager import StatsManager
 from structures.weekBlock import WeekBlock
 from structures.weekBlockList import WeekBlockList
+from utils.support import asMonthKey
 
 sm: StatsManager = StatsManager()
 collectStats = True
@@ -76,10 +76,22 @@ class DailyDataHandler:
                 if lastblock.isPartial(): self.blockManagers[s].blocks.remove(lastblock)
         if collectStats: sm.ddhtrimpartials += time.time() - startt
 
-    def getStream(self, index):
+    def getStream(self, index) -> WeekBlockList:
         return self.blockManagers[index]
     def numberOfStreams(self):
         return len(self.blockManagers)
+    
+    ## return set of all unique months for which there is some data
+    def getMonths(self) -> Set[date]:
+        if hasattr(self, 'monthCoverage'): return self.monthCoverage
+
+        self.monthCoverage = set()
+        for s in range(self.numberOfStreams()):
+            curstream = self.getStream(s)
+            for blk in curstream.blocks:
+                self.monthCoverage.add(asMonthKey(blk.getStartDate()))
+                self.monthCoverage.add(asMonthKey(blk.getEndDate()))
+        return self.monthCoverage
 
     ## merge all streams, keeping original block over new blocks on conflict
     def getConsolidatedDict(self):

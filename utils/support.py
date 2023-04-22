@@ -181,6 +181,11 @@ def asDatetime(dt: Union[date, datetime, str]):
 def asList(val):
     return val if type(val) is list else [val]
 
+## basically a date that is the first day of the month it represents (including year)
+def asMonthKey(dt: Union[date, datetime, str]):
+    dt = date.fromisoformat(asISOFormat(dt))
+    return date(dt.year, dt.month, 1)
+
 def isSameYear(dt1: Union[date, datetime, str], dt2: Union[date, datetime, str]):
     return asDate(dt1).year == asDate(dt2).year
 

@@ -674,7 +674,7 @@ class Collector:
 
     ## collect google interests and insert to DB
     ## measures up-to-date-ness by comparing latest GI and stock data dates, if not then it will collect data up til maxdate rather than til the latest stock data date
-    def startGoogleInterestCollection(self, itype:InterestType=InterestType.DAILY, direction:Direction=Direction.ASCENDING, currentDate=None, collectStatsOnly=False):
+    def startGoogleInterestCollection(self, itype:InterestType=InterestType.DAILY, direction:Direction=Direction.ASCENDING, currentDate=None, collectStatsOnly=False, dryrun=False):
         gapi = Google()
 
         maxdate = date.fromisoformat(asISOFormat(shortc(currentDate, date.today())))
@@ -687,6 +687,7 @@ class Collector:
                 maxdate -= timedelta(days=14)
             maxdate -= timedelta(days=maxdate.day)
 
+        overlap_period = timedelta(days=20)
         daily_period = timedelta(weeks=34) ## anything much more will start returning weekly blocks
         weekly_period = timedelta(weeks=266) ## anything much more will start returning monthly blocks
         period = weekly_period if itype == InterestType.WEEKLY else daily_period
@@ -720,6 +721,7 @@ class Collector:
                 print(f'{totalDataPointsCollected} data points collected')
         ##
 
+        ## due to prioritization, collection loop repeats until all symbols are up-to-date
         symbollist = dbm.getSymbols(googleTopicId=SQLHelpers.NOTNULL)
 
         while len(symbollist):
@@ -757,7 +759,7 @@ class Collector:
                                 date.fromisoformat(sdata[0].date) - timedelta(weeks=5) ## need to offset further to actually get month data for first stock data month
                             )
                         )
-                else:
+                else: ## DAILY or WEEKLY
                     if ginterests:
                         cur_direction = direction
                         if cur_direction == Direction.DESCENDING:
@@ -765,6 +767,7 @@ class Collector:
                             if sdata[0].date < ginterests[0].date:
                                 startdate = date.fromisoformat(ginterests[0].date) - timedelta(days=1)
                         else: ## ascending
+                            if dryrun: print(sdata[-1].date, ginterests[-1].date)
                             if sdata[-1].date > ginterests[-1].date:
                                 ## check if latest stream can be updated instead of starting a new stream
                                 maxStream = dbm.getMaxGoogleInterestStream(s.exchange, s.symbol, itype=itype)
@@ -775,12 +778,12 @@ class Collector:
                                     upsertData = True
                                     stream = maxStream
                                 else: ## need to start new stream
-                                    ## 2 extra weeks should ensure there is at least one week block that overlaps between last stream and this new one
-                                    startdate = date.fromisoformat(ginterests[-1].date) + timedelta(days=1) - timedelta(weeks=2)
+                                    ## should ensure there is at least one week block that overlaps between last stream and this new one
+                                    startdate = date.fromisoformat(ginterests[-1].date) + timedelta(days=1) - overlap_period
                                     stream = maxStream + 1
                     else:
                         cur_direction = Direction.DESCENDING
-                        ## adjust so most recent daily period aligns with end of latest month for stream 0 (could? cause problems calculating relative_interest otherwise once more streams are involved and proper overlaps are required)
+                        ## adjust so for stream 0 most recent daily period aligns with end of latest month (could? cause problems calculating relative_interest otherwise once more streams are involved and proper overlaps are required)
                         startdate = maxdate - timedelta(days=maxdate.day)
                         print('no ginterests')
 
@@ -839,24 +842,45 @@ class Collector:
                 apierrorbreak = False
                 prioritybreak = False
                 somedatagathered=False
+                cur_period = period
+                lastPeriodInStream = False
+                advanceStreamAndOverlap = False
                 while not fullyUpdated() and not apierrorbreak:
                     directionmodifier = -1 if cur_direction == Direction.DESCENDING else 1
                     # ASCENDING: startdate -> endate;   i.e. begin with oldest time range and shift forwards
                     # DESCENDING: enddate <- startdate; i.e. begin with most recent time range and shift backwards
-                    enddate = startdate + (period * directionmodifier)
+                    enddate = startdate + (cur_period * directionmodifier)
+                    nextenddate = enddate + timedelta(days=1) + cur_period
+
+                    ## adjust enddate and/or final periods in this symbol's collection
                     if enddate > maxdate: enddate = maxdate
+                    elif advanceStreamAndOverlap:
+                        ## this is the last period, so increment the stream and ensure there is sufficient overlap with previous stream
+                        startdate -= overlap_period
+                        stream += 1
+                    elif lastPeriodInStream:
+                        ## next period should be in incremented stream, as this period is month-end-aligned
+                        advanceStreamAndOverlap = True
+                    elif itype == InterestType.DAILY and cur_direction == Direction.ASCENDING and nextenddate > maxdate: 
+                        ## this will be the last full period, so need to make sure last full month is end of this stream and remainder is in the next
+                        ## shift back to end of latest month and adjust period accordingly, no need for anything fancy as next and overlapping stream will far exceed maxdate
+                        cur_period = (nextenddate - timedelta(days=nextenddate.day) - enddate).days
+                        lastPeriodInStream = True
 
                     ## Google does not have/allow data before 2004-01-01
                     if startdate < minGoogleDate: break
                     if enddate < minGoogleDate and startdate >= minGoogleDate:
                         enddate = minGoogleDate
-                    elif cur_direction == Direction.DESCENDING and enddate.weekday() < 6:
+                    elif cur_direction == Direction.DESCENDING and enddate.weekday() < 6: ## ??shift day to align with google interest week period (??i.e. mon-sun)
                         enddate += timedelta(days=abs(6-enddate.weekday()))
 
                     ## get GI data for current start/end date period via exponential backoff loop, to gracefully handle API timeouts
                     gResp = []
                     backoff = 60
                     while not gResp:
+                        if dryrun:
+                            print('requesting for', startdate, '->', enddate)
+                            break
                         try:
                             gResp = gapi.getHistoricalInterests(s.google_topic_id, startdate, enddate)
                             if len(gResp) == 0:
@@ -896,8 +920,10 @@ class Collector:
                     somedatagathered = True
                     startdate = enddate + (timedelta(days=1) * directionmodifier)
 
+                ## insert all collected GI data
+                if dryrun: print('inserting to stream', stream)
+                else:   insertGData(gData)
                 
-                insertGData(gData)
                 if not prioritybreak:
                     symbollist.remove(s)
                 print()
