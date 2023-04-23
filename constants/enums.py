@@ -191,6 +191,12 @@ class IndicatorType(Enum):
     def getEMAs(cls):
         return [e for e in cls if e.emaPeriod]
     
+    @classmethod
+    def getActuals(cls):
+        ## remove 'indicators' that are more for typing than actual values
+        nonActuals = [IndicatorType.EMA] 
+        return [e for e in cls if e not in nonActuals]
+    
     def isEMA(self):
         return 'EMA' in self.key    
 

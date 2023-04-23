@@ -20,7 +20,7 @@ from structures.api.googleTrends.request import GoogleAPI
 
 from globalConfig import config as gconfig
 from managers.marketDayManager import MarketDayManager
-from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FeatureExtraType, FinancialReportType, IndicatorType, InterestType, OperatorDict, PrecedingRangeType, SQLHelpers, SeriesType, AccuracyType, SetType, Direction
+from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FeatureExtraType, FinancialReportType, IndicatorType, InterestType, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SeriesType, AccuracyType, SetType, Direction
 from constants.exceptions import InsufficientDataAvailable
 from utils.technicalIndicatorFormulae import unresumableGenerationIndicators, generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends
 from utils.support import asDate, asISOFormat, asList, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, tqdmLoopHandleWrapper, unixToDatetime
@@ -710,6 +710,34 @@ class DatabaseManager(Singleton):
         stmt = 'SELECT DISTINCT exchange FROM historical_data'
         res = self.dbc.execute(stmt).fetchall()
         return [e for e in res]
+    
+    def getVectorSimilarity(self, exchange, symbol, dtype: SeriesType=None, dt=None, vclass: OutputClass=None, precedingRange=None, followingRange=None, threshold=None):
+        stmt = 'SELECT * FROM historical_vector_similarity_data WHERE exchange=? and symbol=? '
+        args = [exchange, symbol]
+
+        if dtype:
+            stmt += 'AND date_type=? '
+            args.append(dtype.name)
+        if dt:
+            stmt += 'AND date=? '
+            args.append(asISOFormat(dt))
+        if vclass:
+            stmt += 'AND vector_class=? '
+            args.append(vclass.name)
+        if precedingRange:
+            stmt += 'AND preceding_range=? '
+            args.append(precedingRange)
+        if followingRange:
+            stmt += 'AND following_range=? '
+            args.append(followingRange)
+        if threshold:
+            stmt += 'AND change_threshold=? '
+            args.append(threshold)
+        
+        stmt += ' ORDER BY date ASC'
+
+        return self.dbc.execute(stmt, tuple(args)).fetchall()
+
 
     ## end gets ####################################################################################################################################################################
     ####################################################################################################################################################################
@@ -861,6 +889,13 @@ class DatabaseManager(Singleton):
         val = self._convertVIXDataPoint(row) if row else point
         self.dbc.execute(stmt, (*val,))
 
+    def insertVectorSimilarity(self, exchange, symbol, dtype: SeriesType, dt, vclass: OutputClass, precedingRange, followingRange, threshold, val, upsert=True):
+        stmt = f'INSERT {"OR IGNORE" if upsert else ""} INTO historical_vector_similarity_data VALUES (?,?,?,?,?,?,?,?,?)'
+        args = [exchange, symbol, dtype.name, asISOFormat(dt), vclass.name, precedingRange, followingRange, threshold]
+        self.dbc.execute(stmt, tuple(args + [val]))
+        if upsert:
+            stmt = 'UPDATE historical_vector_similarity_data SET value=? WHERE exchange=? AND symbol=? AND date_type=? AND date=? AND vector_class=? AND preceding_range=? AND following_range=? AND change_threshold=?'
+            self.dbc.execute(stmt, tuple([val] + args))
 
     ## for updating symbol details like sector, industry, founded
     ## updateDetails is expected to be a dict with keys corresponding to the column names
