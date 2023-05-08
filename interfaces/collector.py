@@ -729,7 +729,7 @@ class Collector:
             if not collectStatsOnly: print(f'Checking {len(symbollist)} symbols{f" with <={priority_zeropercentagethreshold*100}% zeroes" if useprioritythreshold else ""}')
             else: print(f'Collecting stats for {len(symbollist)} tickers')
 
-            for s in symbollist:
+            for s in symbollist[:]:
                 tickergidString = f'{s.exchange:10s} {s.symbol:5s} {s.google_topic_id:15s}'
 
                 sdata = dbm.getStockData(s.exchange, s.symbol, SeriesType.DAILY)

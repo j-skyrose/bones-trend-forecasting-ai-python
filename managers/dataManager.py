@@ -145,13 +145,9 @@ class DataManager():
         ##
 
         ## purge invalid/inappropriate tickers
-        for s in explicitValidationSymbolList:
-            if (s.exchange, s.symbol) in unusableSymbols:
-                explicitValidationSymbolList.remove(s)
+        explicitValidationSymbolList[:] = [s for s in explicitValidationSymbolList if (s.exchange, s.symbol) not in unusableSymbols]
         inappropriateSymbols = [(s.exchange, s.symbol) for s in explicitValidationSymbolList]
-        for s in symbolList:
-            if (s.exchange, s.symbol) in unusableSymbols + inappropriateSymbols:
-                symbolList.remove(s)
+        symbolList[:] = [s for s in symbolList if (s.exchange, s.symbol) not in unusableSymbols + inappropriateSymbols]
 
 
         self.explicitValidationSymbolList = explicitValidationSymbolList
@@ -510,8 +506,7 @@ class DataManager():
         verbose = shortc(verbose, self.verbose)
 
         ## purge unusable symbols
-        for s in symbolList:
-            if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
+        symbolList[:] = [s for s in symbolList if (s.exchange, s.symbol) not in unusableSymbols]
 
         ## purge old data
         if refresh: self.__getattribute__(dmProperty).clear()
@@ -738,8 +733,7 @@ class DataManager():
 
         symbolList += explicitValidationSymbolList
         ## purge unusable symbols
-        for s in symbolList:
-            if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
+        symbolList[:] = [s for s in symbolList if (s.exchange, s.symbol) not in unusableSymbols]
 
         ## purge old data
         if refresh: self.stockSplitsHandlers.clear()
@@ -813,8 +807,7 @@ class DataManager():
 
         symbolList += explicitValidationSymbolList
         ## purge unusable symbols
-        for s in symbolList:
-            if (s.exchange, s.symbol) in unusableSymbols: symbolList.remove(s)
+        symbolList[:] = [s for s in symbolList if (s.exchange, s.symbol) not in unusableSymbols]
 
         ## purge old data
         if refresh:

@@ -124,17 +124,15 @@ class MarketDayManager(Singleton):
     def _getMarketDaysForYear(self, year) -> List[date]:
         if year not in self.marketDays:
             days = [datetime(year, 1, 1, 23, 59, 59) + timedelta(days=d) for d in range(366 if calendar.isleap(year) else 365)]
-            for d in days[:]:
-                if d.weekday() > 4 or d in self.getMarketHolidays(year):
-                    days.remove(d)
+            ## remove weekends and holidays
+            days[:] = [d for d in days if d.weekday() < 5 and d not in self.getMarketHolidays(year)]
             self.marketDays[str(year)] = days
         return self.marketDays[str(year)]
 
     def _getMarketDaysForMonth(self, year, month):
         days = self._getMarketDaysForYear(year)
-        for d in days[:]:
-            if d.month != month:
-                days.remove(d)
+        ## keep only given month
+        days[:] = [d for d in days if d.month == month]
         return days
 
     def _getMarketDaysStartingFromYear(self, year) -> List[date]:

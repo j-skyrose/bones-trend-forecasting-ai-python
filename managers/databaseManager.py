@@ -1474,12 +1474,10 @@ class DatabaseManager(Singleton):
         '''.format(('AND exchange IN (\'{}\')'.format('\',\''.join(exchange))) if len(exchange)>0 else ''), (stype.name,)).fetchall()
         print('Got {} tickers'.format(len(tickers)))
 
-        purged = 0
+        purged = len(tickers)
         ## purge invalid/inappropriate tickers
-        for s in tickers:
-            if (s.exchange, s.symbol) in unusableSymbols:
-                tickers.remove(s)
-                purged += 1
+        tickers[:] = [t for t in tickers if (t.exchange, t.symbol) not in unusableSymbols]
+        purged -= len(tickers)
         print('Purged {} tickers'.format(purged))
 
         tickersupdated = 0
