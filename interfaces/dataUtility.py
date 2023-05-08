@@ -1,4 +1,3 @@
-
 import os, sys
 path = os.path.dirname(os.path.abspath(__file__))
 while ".vscode" not in os.listdir(path):
@@ -8,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import optparse, tqdm
+import tqdm, p_tqdm
 
 from globalConfig import config as gconfig
 from constants.enums import IndicatorType, OutputClass
@@ -18,7 +17,7 @@ from managers.dataManager import DataManager
 from managers.inputVectorFactory import InputVectorFactory
 from structures.dataPointInstance import DataPointInstance
 from structures.skipsObj import SkipsObj
-from utils.other import getInstancesByClass
+from utils.other import getInstancesByClass, parseCommandLineOptions
 from utils.vectorSimilarity import euclideanSimilarity
 
 dbm: DatabaseManager = DatabaseManager()
@@ -123,17 +122,8 @@ def determineSimilarities():
 
 
 if __name__ == '__main__':
-    parser = optparse.OptionParser()
-    parser.add_option('-f', '--function',
-        action='store', dest='function', default=None
-        )
-    options, args = parser.parse_args()
-
-    if options.function:
-        kwargs = {}
-        for arg in args:
-            key, val = arg.split('=')
-            kwargs[key] = val.lower() == 'true' if val.lower() in ['true', 'false'] else val
-        locals()[options.function](**kwargs)
+    opts, kwargs = parseCommandLineOptions()
+    if opts.function:
+        locals()[opts.function](**kwargs)
     else:
         determineSimilarities()

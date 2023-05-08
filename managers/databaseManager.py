@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import math, re, dill, operator, shutil, json, optparse, time, pickle
+import math, re, dill, operator, shutil, json, time, pickle
 from typing import Dict, List, Union
 import sqlite3, atexit, numpy as np, xlrd
 from datetime import date, timedelta, datetime
@@ -24,7 +24,7 @@ from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FeatureEx
 from constants.exceptions import InsufficientDataAvailable
 from utils.technicalIndicatorFormulae import unresumableGenerationIndicators, generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends
 from utils.support import asDate, asISOFormat, asList, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, tqdmLoopHandleWrapper, unixToDatetime
-from utils.other import buildCommaSeparatedTickerPairString, getIndicatorPeriod
+from utils.other import buildCommaSeparatedTickerPairString, getIndicatorPeriod, parseCommandLineOptions
 from constants.values import unusableSymbols, apiList, standardExchanges
 
 ## for ad hoc SQL execution ################################################################################################
@@ -2495,24 +2495,15 @@ def printSectorColumnInfos(d: DatabaseManager):
 
     print(rowstr.format(len(dss[0]), '', len(dss[1]), '', len(dss[2]), ''))
 
-if __name__ == '__main__':
-    parser = optparse.OptionParser()
-    parser.add_option('-f', '--function',
-        action='store', dest='function', default=None
-        )
-    
-    options, args = parser.parse_args()
 
+if __name__ == '__main__':
     d: DatabaseManager = DatabaseManager()
 
-    if options.function:
-        kwargs = {}
-        for arg in args:
-            key, val = arg.split('=')
-            kwargs[key] = val.lower() == 'true' if val.lower() in ['true', 'false'] else val
-        getattr(d, options.function)(**kwargs)
+    opts, kwargs = parseCommandLineOptions()
+    if opts.function:
+        getattr(d, opts.function)(**kwargs)
     else:
-
+        pass
         # res = d.dbc.execute('select * from symbols where exchange=? and (api_polygon=1 or api_fmp=1 or api_alphavantage=1 or api_neo=1)', ('NYSE ARCA',)).fetchall()
         # res = d.dbc.execute('select * from symbols where (api_polygon=1 or api_fmp=1 or api_alphavantage=1 or api_neo=1) and exchange in (select distinct exchange from historical_data)').fetchall()
         # for r in res:

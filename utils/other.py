@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import numpy, re
+import numpy, re, optparse
 from math import ceil
 from typing import List
 from calendar import monthrange
@@ -17,7 +17,7 @@ from globalConfig import config as gconfig
 from structures.inputVectorStats import InputVectorStats
 from utils.support import recdotdict, shortc, _isoformatd
 from constants.values import stockOffset, canadaExchanges, usExchanges
-from constants.enums import MarketType, OutputClass, PrecedingRangeType, IndicatorType
+from constants.enums import MarketType, OutputClass, PrecedingRangeType, IndicatorType, SeriesType
 
 
 
@@ -138,6 +138,43 @@ def getMaxIndicatorPeriod(indicators: List[IndicatorType], indicatorConfig):
         *[-sys.maxsize for x in range(2)], ## ensure there are enough args in-case there are less than 2 indicators
         *[i.emaPeriod for i in indicators if i.isEMA()], 
         *[indicatorConfig.periods[i]*(2 if i == IndicatorType.ADX else 1) for i in indicatorConfig.periods.keys() if i in indicators])
+
+
+## for use in __main__ of non-interface classes
+#   parses and adjusts command line args into proper python formats (e.g. boolean, enum, number)
+def parseCommandLineOptions():
+    parser = optparse.OptionParser()
+    parser.add_option('-a', '--api',
+        action='store', dest='api', default=None
+    )
+    parser.add_option('-t', '--type',
+        action='store', dest='type', default=None
+    )
+    parser.add_option('-f', '--function',
+        action='store', dest='function', default=None
+    )
+
+    options, args = parser.parse_args()
+
+    def massageVariable(k: str, v: str):
+        if v.lower() in ['true', 'false']:
+            v = v.lower() == 'true'
+        elif k.lower() == 'stype':
+            v = SeriesType[v.upper()]
+        elif re.match(r'[0-9]+.[0-9]+', v):
+            v = float(v)
+        elif re.match(r'[0-9]+$', v):
+            v = int(v)
+        return v
+
+    kwargs = {}
+    for arg in args:
+        key, val = arg.split('=')
+        kwargs[key] = massageVariable(key, val)
+
+    return options, kwargs
+
+
 
 
 if __name__ == '__main__':

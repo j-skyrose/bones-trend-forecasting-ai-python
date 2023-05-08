@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import tqdm, queue, atexit, traceback, math, requests, csv, codecs, optparse, json
+import tqdm, queue, atexit, traceback, math, requests, csv, codecs, json
 import time as timer
 from random import random
 from datetime import date, datetime, timedelta
@@ -22,6 +22,7 @@ from managers.marketDayManager import MarketDayManager
 from structures.api.google import Google
 
 from constants.exceptions import APILimitReached, APIError, APITimeout
+from utils.other import parseCommandLineOptions
 from utils.support import asISOFormat, recdotdict, shortc, shortcdict
 from constants.enums import APIState, FinancialReportType, FinancialStatementType, InterestType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
 from constants.values import tseNoCommissionSymbols, minGoogleDate
@@ -935,40 +936,20 @@ class Collector:
         finish()
 
 if __name__ == '__main__':
-    parser = optparse.OptionParser()
-    parser.add_option('-a', '--api',
-        action='store', dest='api', default=None
-    )
-    parser.add_option('-t', '--type',
-        action='store', dest='type', default=None
-    )
-    
-    options, args = parser.parse_args()
-
     print('starting')
     c = Collector()
-
-    def massageVariable(k: str, v: str):
-        if v.lower() in ['true', 'false']:
-            return v.lower() == 'true'
-        elif k.lower() == 'stype':
-            return SeriesType[v.upper()]
-        return v
-    if options.api:
-        kwargs = {}
-        for arg in args:
-            key, val = arg.split('=')
-            kwargs[key] = massageVariable(key, val)
-
-        if options.api == 'vix':
+    
+    opts, kwargs = parseCommandLineOptions()
+    if opts.api:
+        if opts.api == 'vix':
             c.collectVIX()
-        elif options.type == 'splits':
-            c.startSplitsCollection(options.api, **kwargs)
+        elif opts.type == 'splits':
+            c.startSplitsCollection(opts.api, **kwargs)
         else:
-            c.startAPICollection(options.api, **kwargs)
+            c.startAPICollection(opts.api, **kwargs)
+    elif opts.function:
+        getattr(c, opts.function)(**kwargs)
     else:
-
-
         # c.start(SeriesType.DAILY)
         # c.start()
         # c._collectFromAPI('polygon', [recdotdict({'symbol':'KRP'})], None)
