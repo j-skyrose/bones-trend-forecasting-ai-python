@@ -32,7 +32,7 @@ Determines the Euclidean similarity between input vectors for all negative insta
 Input vector must only contain positive numbers, negatives may slightly change how accurate the similarity calculation is
 Can be interuptted and resumed, and should be able to handle new stock data addition to existing calculated values
 '''
-def determineSimilarities(exchange=[], parallel=True, correctionRun=False, dryrun=False):
+def similarityCalculationAndInsertion(exchange=[], parallel=True, correctionRun=False, dryrun=False):
     parallel = parallel and not correctionRun and not dryrun
 
     ## remove unnecessary/redundant features
