@@ -1,4 +1,5 @@
 import math
+from numba import njit
 
 ## https://github.com/taki0112/Vector_Similarity
 
@@ -16,6 +17,10 @@ def innerProduct(vec1, vec2) :
 ## max similarity: 0, min: inf
 def euclideanSimilarity(vec1, vec2) :
     return math.sqrt(sum(math.pow((v1-v2),2) for v1,v2 in zip(vec1, vec2)))
+
+@njit
+def euclideanSimilarity_jit(vec1, vec2):
+    return math.sqrt(sum([math.pow((v1-v2),2) for v1,v2 in zip(vec1, vec2)]))
 
 def tsTheta(vec1, vec2) :
     return math.acos(cosineSimilarity(vec1,vec2)) + math.radians(10)
