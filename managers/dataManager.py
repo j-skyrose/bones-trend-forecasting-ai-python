@@ -209,7 +209,7 @@ class DataManager():
 
         self.vixDataHandler = VIXManager(self.shouldNormalize).data
 
-        print('DataManager init complete. Took', time.time() - startt, 'seconds')
+        if self.verbose>=1: print('DataManager init complete. Took', time.time() - startt, 'seconds')
 
     def initializeAllDataForPage(self, page, verbose=None):
         if not self.usePaging: raise ArgumentError('Manager not setup with paging')
