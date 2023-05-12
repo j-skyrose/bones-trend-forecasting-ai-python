@@ -48,7 +48,7 @@ class InputVectorFactory(Singleton):
         
         tpls = []
         for k,v in fdict.items():
-            strk = str(k) if k not in IndicatorType else k.longForm
+            strk = str(k) if k not in [ik for ik in IndicatorType] else k.longForm
             compositeKey = strk if not parentKey else '_'.join([parentKey, strk])
             if 'enabled' in v.keys():
                 if v['enabled']:
