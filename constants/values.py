@@ -40,13 +40,20 @@ vixOffset = 0
 
 
 ## No Commission Scotia stocks
-tseEquity = ['XSP','VFV','ESG','HXS','XQQ','QQC.F','XIU','HXT','XIC','SITC','SITI','SITU','VEF','XEU','EAAI','EAGB','EARK','EAUT','HBGD','CDZ','DXC','CUD','DXU','CYH','DXR','QQCC','SRIC','SRIU','MWMN','DXET','SRII','CEW','VRE','XIT','XMA','XST','XUT','XHC','CGR','COW','CWW','DXF','DXN','CPD','DXP','CJP','CWO','DXEM','XEC','XCH','XID','XCS']
+tseEquity = ['XSP','VFV','ESG','HXS','XQQ','QQC.F','XIU','HXT','XIC','VEF','XEU','HBGD','CDZ','DXC','CUD','DXU','CYH','DXR','QQCC','DXET','CEW','VRE','XIT','XMA','XST','XUT','XHC','CGR','COW','CWW','DXF','DXN','CPD','DXP','DXEM','XEC','XCH','XID','XCS']
+neoEquity = ['SITC','SITI','SITU','EAAI','EAGB','EARK','EAUT','SRIC','SRIU','MWMN','SRII','CJP','CWO']
 batsEquity = ['OMFL','OMFS','IEFA','FINX','HERO','PRNT','PSI','WCLD','HLAL','MILN','NACP','PAWZ','IXC','IXP','IAT','VCR','VDC','VDE','VIS','MRGR','FLQM','HSCZ','SIZE','VLUE']
 tseBalanced = ['XGRO','FIE','XBAL','VCNS','XCNS','XINC']
 batsBalanced = ['AOA','AOM']
-tseFixedIncome = ['CHB','CSD','DXO','CBO','DXV','VCB','XCB','SRIB','CLF','HBB','SITB','XQB']
+tseFixedIncome = ['CHB','CSD','DXO','CBO','DXV','VCB','XCB','CLF','HBB','XQB']
+neoFixedIncome = ['SRIB','SITB']
 batsFixedIncome = ['TLT']
 tseCommodity = ['CGL','CGL.C','HUC','HUN','HUZ','SVR']
 tseNoCommissionSymbols = tseEquity + tseBalanced + tseFixedIncome + tseCommodity
+tseNoCommissionTickers = [('TSX', s) for s in tseNoCommissionSymbols]
+neoNoCommissionSymbols = neoEquity + neoFixedIncome
+neoNoCommissionTickers = [('NEO', s) for s in neoNoCommissionSymbols]
 batsNoCommissionSymbols = batsEquity + batsBalanced + batsFixedIncome
-noCommissionSymbols = tseNoCommissionSymbols + batsNoCommissionSymbols
+batsNoCommissionTickers = [('BATS', s) for s in batsNoCommissionSymbols]
+noCommissionSymbols = tseNoCommissionSymbols + neoNoCommissionSymbols + batsNoCommissionSymbols
+noCommissionTickers = tseNoCommissionTickers + neoNoCommissionTickers + batsNoCommissionTickers
