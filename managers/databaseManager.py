@@ -127,28 +127,6 @@ class DatabaseManager(Singleton):
             ret[r['exchange']] = r['exchange']
         return recdotdict(ret)
 
-    ## add a new API option with data retrieval capabilities
-    ## adds new column to symbols table for new API and can set for supported symbols
-    def addAPI(self, api, exchange=None, symbolList=None, pairedList=None):
-        stmt = 'ALTER TABLE symbols ADD COLUMN api_' + api + ' INTEGER NOT NULL DEFAULT 0'
-        self.dbc.execute(stmt)
-
-        if (exchange and symbolList) or pairedList:
-            stmt = 'UPDATE symbols SET api_' + api + '=1 WHERE exchange=? AND symbol=?'
-            tuples=[]
-            if pairedList:
-                if type(pairedList[0]) == object:
-                    for r in pairedList:
-                        tuples.append((r.exchange, r.symbol))
-                else:
-                    for r in pairedList:
-                        tuples.append((r[0], r[1]))
-            else:
-                for s in symbolList:
-                    tuples.append((exchange, s))
-
-            self.dbc.executemany(stmt, tuples)
-
     ## get data from symbol_list table
     def getSymbols(self, exchange=None, symbol=None, assetType=None, api=None, googleTopicId:Union[str, SQLHelpers]=None, withDetailsMissing=False):
         stmt = 'SELECT * FROM symbols'
@@ -766,6 +744,27 @@ class DatabaseManager(Singleton):
                     pass
         if verbose > 0: print(tot, 'rows added')
 
+    ## add a new API option with data retrieval capabilities
+    ## adds new column to symbols table for new API and can set for supported symbols
+    def addAPI(self, api, exchange=None, symbolList=None, pairedList=None):
+        stmt = 'ALTER TABLE symbols ADD COLUMN api_' + api + ' INTEGER NOT NULL DEFAULT 0'
+        self.dbc.execute(stmt)
+
+        if (exchange and symbolList) or pairedList:
+            stmt = 'UPDATE symbols SET api_' + api + '=1 WHERE exchange=? AND symbol=?'
+            tuples=[]
+            if pairedList:
+                if type(pairedList[0]) == object:
+                    for r in pairedList:
+                        tuples.append((r.exchange, r.symbol))
+                else:
+                    for r in pairedList:
+                        tuples.append((r[0], r[1]))
+            else:
+                for s in symbolList:
+                    tuples.append((exchange, s))
+
+            self.dbc.executemany(stmt, tuples)
 
     ## insert data in historical_data table and update the last_updates table with the API used and current date
     def insertData(self, exchange, symbol, typeName, api, data):
