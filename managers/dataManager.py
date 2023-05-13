@@ -17,8 +17,8 @@ from functools import partial
 from argparse import ArgumentError
 
 from globalConfig import config as gconfig
-from constants.enums import DataFormType, OperatorDict, OutputClass, SeriesType, SetType, DataManagerType, IndicatorType
-from utils.support import flatten, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
+from constants.enums import DataFormType, Direction, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetType, DataManagerType, IndicatorType
+from utils.support import generateFibonacciSequence, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.other import getInstancesByClass, getMaxIndicatorPeriod, maxQuarters, getIndicatorPeriod
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
 from constants.values import unusableSymbols, indicatorsKey
@@ -98,7 +98,9 @@ class DataManager():
         # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
         # neuralNetwork: NeuralNetworkInstance=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[]
     ):
-        ## check for inappropriate argument combinations
+        self.config = inputVectorFactory.config
+
+        ## check for inappropriate argument combinations, and other misconfigurations
         if useAllSets and not useOptimizedSplitMethodForAllSets:
             raise ArgumentError("Optimized split took lots of calculation and should be cached/saved, this should not be available yet")
         if useAllSets and useOptimizedSplitMethodForAllSets and maxGoogleInterestHandlers:
@@ -107,6 +109,8 @@ class DataManager():
             raise ArgumentError('Cannot use an explicit validation set and a validation split')
         if maxPageSize and useAllSets:
             raise ArgumentError('Simultaneous use of pages and windows should be avoided, behavior not tested')
+        if self.config.sets.instanceReduction.enabled and self.config.sets.instanceReduction.top + self.config.sets.instanceReduction.bottom > 1:
+            raise ValueError('Top + bottom cannot be greater than 1 (i.e. more then all)')
         
         ## timers
         self.getprecstocktime = 0
@@ -117,7 +121,6 @@ class DataManager():
 
         startt = time.time()
         self.verbose = shortc(verbose, 1)
-        self.config = inputVectorFactory.config
         self.inputVectorFactory = inputVectorFactory
         self.precedingRange = precedingRange
         self.followingRange = followingRange
@@ -579,6 +582,7 @@ class DataManager():
 
         h: StockDataHandler
         for h in tqdmLoopHandleWrapper(stockDataHandlers, verbose, desc='Initializing stock instances'):
+            availableIndexes = { o: [] for o in OutputClass }
             for sindex in h.getAvailableSelections():
                 try:
                     change = (h.data[sindex + self.followingRange].low / h.data[sindex - 1].high) - 1
@@ -589,12 +593,46 @@ class DataManager():
                 if collectOutputClassesOnly:
                     outputClassCounts[oupclass] += 1
                 else:
+                    availableIndexes[oupclass].append(sindex)
+
+            if collectOutputClassesOnly: return outputClassCounts
+
+            if self.config.sets.instanceReduction.enabled:
+                def printInstanceCounts(before=True): print(f"{'Before' if before else 'After'} reduction| Total", *[o.name for o in OutputClass], sum([len(availableIndexes[o]) for o in OutputClass]), *[len(availableIndexes[o]) for o in OutputClass])
+                if verbose>=1: printInstanceCounts()
+                oupclass = self.config.sets.instanceReduction.classType
+
+                similarities = dbm.getVectorSimilarity(*h.getTickerTuple(), dtype=self.seriesType, vclass=oupclass, precedingRange=self.precedingRange, followingRange=self.followingRange, threshold=self.threshold, orderBy='value')
+
+                if len(similarities) == 0: 
+                    if verbose>=1: print('Similarities not present for', h.getTickerTuple())
+                else:
+                    ## slice off top/bottom sections, leaving middle for reduction
+                    topCutoff = len(similarities) - math.ceil(len(similarities)*self.config.sets.instanceReduction.top)
+                    bottomCutoff = math.floor(len(similarities)*self.config.sets.instanceReduction.bottom)
+                    middle = similarities[bottomCutoff:topCutoff-1]
+
+                    ## reduce middle
+                    removedDates = []
+                    if self.config.sets.instanceReduction.method == ReductionMethod.FIBONACCI:
+                        if self.config.sets.instanceReduction.additionalParameter == Direction.DESCENDING:
+                            middle.reverse()
+                        
+                        fibsequence = generateFibonacciSequence(len(middle))
+                        removedDates = [vs.date for indx,vs in enumerate(middle) if indx not in fibsequence]
+
+                    ## remove indexes from available selections
+                    availableIndexes[oupclass][:] = [i for i in availableIndexes[oupclass] if h.data[i].date not in removedDates]
+                    
+                    if verbose>=1: printInstanceCounts(before=False)
+
+            for oupclass, indexes in availableIndexes.items():
+                for sindex in indexes:
                     self.__getattribute__(dmProperty)[TickerDateKeyType(*h.getTickerTuple(), h.data[sindex].date)] = DataPointInstance(
                         self.buildInputVector,
                         h, sindex, oupclass
                     )
 
-        if collectOutputClassesOnly: return outputClassCounts
         
     def initializeFinancialDataHandlers(self, symbolList, explicitValidationSymbolList=[], refresh=False, verbose=None):
         verbose = shortc(verbose, self.verbose)

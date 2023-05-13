@@ -689,7 +689,7 @@ class DatabaseManager(Singleton):
         res = self.dbc.execute(stmt).fetchall()
         return [e for e in res]
     
-    def getVectorSimilarity(self, exchange, symbol, dtype: SeriesType=None, dt=None, vclass: OutputClass=None, precedingRange=None, followingRange=None, threshold=None):
+    def getVectorSimilarity(self, exchange, symbol, dtype: SeriesType=None, dt=None, vclass: OutputClass=None, precedingRange=None, followingRange=None, threshold=None, orderBy='date'):
         stmt = 'SELECT * FROM historical_vector_similarity_data WHERE exchange=? and symbol=? '
         args = [exchange, symbol]
 
@@ -712,7 +712,7 @@ class DatabaseManager(Singleton):
             stmt += 'AND change_threshold=? '
             args.append(threshold)
         
-        stmt += ' ORDER BY date ASC'
+        stmt += f' ORDER BY {orderBy} ASC'
 
         return self.dbc.execute(stmt, tuple(args)).fetchall()
 

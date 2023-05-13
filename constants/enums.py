@@ -237,6 +237,11 @@ class SuperTrendDirection(Enum):
     DOWN = 'DOWN'
     NONE = 'NONE'
 
+class ReductionMethod(Enum):
+    NONE = 'NONE'
+    FIBONACCI = 'FIBONACCI'
+    RANDOM = 'RANDOM'
+
 if __name__ == '__main__':
     print(AccuracyType.OVERALL.name, AccuracyType.OVERALL.value, AccuracyType.OVERALL.statsName)
     print(FinancialReportType.YEAR.name, FinancialReportType.YEAR.value)

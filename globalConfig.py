@@ -8,7 +8,7 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 from constants.values import indicatorsKey
-from constants.enums import DataFormType, FeatureExtraType, IndicatorType, SeriesType
+from constants.enums import DataFormType, Direction, FeatureExtraType, IndicatorType, OutputClass, ReductionMethod, SeriesType
 from utils.support import recdotdict
 
 # TESTING = True
@@ -104,7 +104,15 @@ config = recdotdict({
     },
     'sets': {
         'positiveSplitRatio': 1/6, # default 0.5,
-        'minimumClassSplitRatio': 0.13 if not TESTING else 0.01
+        'minimumClassSplitRatio': 0.13 if not TESTING else 0.01,
+        'instanceReduction': {
+            'enabled': True,
+            'top': 0.5,
+            'bottom': 0.03,
+            'method': ReductionMethod.FIBONACCI,
+            'additionalParameter': Direction.DESCENDING,
+            'classType': OutputClass.NEGATIVE
+        }
     },
     'predictor': {
         'ifBinaryUseRaw': True,

@@ -46,6 +46,9 @@ def similarityCalculationAndInsertion(exchange=[], parallel=True, correctionRun=
     cf.feature.dayOfMonth.enabled = False
     cf.feature.monthOfYear.enabled = False
 
+    ## prevent instance reduction
+    cf.sets.instanceReduction.enabled = False
+
     props = {
         'precedingRange': 60,
         'followingRange': 10,

@@ -350,6 +350,17 @@ def tqdmLoopHandleWrapper(iterable, verbose=0, **kwargs):
 def tqdmProcessMapHandlerWrapper(fn, iterable, verbose=0, **kwargs):
     return process_map(fn, iterable, leave=verbose>=1, **kwargs) if verbose > 0 else list(map(fn, iterable))
 
+## generates all fib values up to and including the given arg, e.g []
+def generateFibonacciSequence(limit):
+    ## base case
+    retseq = [0,1]
+    
+    ## loop until limit passed
+    while retseq[-1] < limit:
+        retseq.append(retseq[-1] + retseq[-2])
+
+    return retseq
+
 if __name__ == '__main__':
     # print(processRawValueToInsertValue(44))
     # print(processRawValueToInsertValue('dave'))
