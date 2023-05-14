@@ -109,7 +109,7 @@ class DataManager():
             raise ValueError('Cannot use an explicit validation set and a validation split')
         if maxPageSize and useAllSets:
             raise ValueError('Simultaneous use of pages and windows should be avoided, behavior not tested')
-        if self.config.sets.instanceReduction.enabled and self.config.sets.instanceReduction.top + self.config.sets.instanceReduction.bottom > 1:
+        if 'instanceReduction' in self.config.sets.keys() and self.config.sets.instanceReduction.enabled and self.config.sets.instanceReduction.top + self.config.sets.instanceReduction.bottom > 1:
             raise ValueError('Top + bottom cannot be greater than 1 (i.e. more then all)')
         if not forPredictor and setCount is None and not initializeStockDataHandlersOnly and not skips.sets:
             raise ValueError('setCount required when initializing sets')
