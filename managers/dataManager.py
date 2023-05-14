@@ -579,6 +579,7 @@ class DataManager():
 
         outputClassCounts = { o: 0 for o in OutputClass }
 
+        instanceReductionMissingCount = 0
         h: StockDataHandler
         for h in tqdmLoopHandleWrapper(stockDataHandlers, verbose, desc='Initializing stock instances'):
             availableIndexes = { o: [] for o in OutputClass }
@@ -598,13 +599,14 @@ class DataManager():
 
             if self.config.sets.instanceReduction.enabled:
                 def printInstanceCounts(before=True): print(f"{'Before' if before else 'After'} reduction| Total", *[o.name for o in OutputClass], sum([len(availableIndexes[o]) for o in OutputClass]), *[len(availableIndexes[o]) for o in OutputClass])
-                if verbose>=1: printInstanceCounts()
+                if verbose>=2: printInstanceCounts()
                 oupclass = self.config.sets.instanceReduction.classType
 
                 similarities = dbm.getVectorSimilarity(*h.getTickerTuple(), dtype=self.seriesType, vclass=oupclass, precedingRange=self.precedingRange, followingRange=self.followingRange, threshold=self.threshold, orderBy='value')
 
                 if len(similarities) == 0: 
                     if verbose>=1: print('Similarities not present for', h.getTickerTuple())
+                    instanceReductionMissingCount += 1
                 else:
                     ## slice off top/bottom sections, leaving middle for reduction
                     topCutoff = len(similarities) - math.ceil(len(similarities)*self.config.sets.instanceReduction.top)
@@ -623,7 +625,7 @@ class DataManager():
                     ## remove indexes from available selections
                     availableIndexes[oupclass][:] = [i for i in availableIndexes[oupclass] if h.data[i].date not in removedDates]
                     
-                    if verbose>=1: printInstanceCounts(before=False)
+                    if verbose>=2: printInstanceCounts(before=False)
 
             for oupclass, indexes in availableIndexes.items():
                 for sindex in indexes:
@@ -631,6 +633,7 @@ class DataManager():
                         self.buildInputVector,
                         h, sindex, oupclass
                     )
+        if instanceReductionMissingCount and verbose>=1: print(f'{instanceReductionMissingCount} tickers missing similarities data')
 
         
     def initializeFinancialDataHandlers(self, symbolList, explicitValidationSymbolList=[], refresh=False, verbose=None):
