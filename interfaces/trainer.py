@@ -17,7 +17,6 @@ from typing import Tuple
 from argparse import ArgumentError
 import tensorflow.keras.backend as K
 
-from utils.other import normalizeStockData
 from managers.databaseManager import DatabaseManager
 from managers.dataManager import DataManager
 from managers.neuralNetworkManager import NeuralNetworkManager

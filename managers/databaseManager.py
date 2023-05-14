@@ -128,41 +128,59 @@ class DatabaseManager(Singleton):
         return recdotdict(ret)
 
     ## get data from symbol_list table
-    def getSymbols(self, exchange=None, symbol=None, assetType=None, api=None, googleTopicId:Union[str, SQLHelpers]=None, withDetailsMissing=False):
-        stmt = 'SELECT * FROM symbols'
-        args = []
+    def getSymbols(self, exchange=None, symbol=None, assetType=None, api=None, googleTopicId:Union[str, SQLHelpers]=None, founded:Union[str, SQLHelpers]=None, sector:Union[str, SQLHelpers]=None, withDetailsMissing=False, **kwargs):
+        stmt = 'SELECT * FROM symbols s '
         adds = []
-        if exchange or symbol or assetType or api or withDetailsMissing or googleTopicId:
+        args = []
+        
+        if exchange:
+            adds.append('s.exchange = ?')
+            args.append(exchange)
+        if symbol:
+            symList = asList(symbol)
+            adds.append(' s.symbol IN ({}) '.format(','.join(['?' for s in symList])))
+            args.extend(symList)
+        if assetType:
+            adds.append('s.asset_type = ?')
+            args.append(assetType)
+        if api:
+            if type(api) is list:
+                apiAdds = []
+                for a in api:
+                    apiAdds.append('s.api_'+a+' = 1')
+                adds.append('(' + ' OR '.join(apiAdds) + ')')
+            else:
+                adds.append('s.api_'+api+' = 1')
+        if googleTopicId is not None:
+            if type(googleTopicId) == SQLHelpers:
+                adds.append(f' s.google_topic_id IS {googleTopicId.value}')
+            else:
+                adds.append(' s.google_topic_id = ? ')
+                args.append(googleTopicId)
+        if founded is not None:
+            if type(founded) == SQLHelpers:
+                adds.append(f' s.founded IS {founded.value}')
+            else:
+                adds.append(' s.founded = ? ')
+                args.append(founded)
+        if sector is not None:
+            if type(sector) == SQLHelpers:
+                adds.append(f' s.sector IS {sector.value}')
+            else:
+                adds.append(' s.sector = ? ')
+                args.append(sector)
+        if withDetailsMissing:
+            adds.append('((s.sector IS NULL AND s.industry IS NULL) OR (s.sector = \'\' and s.industry = \'\'))')
+
+
+        if adds:
             stmt += ' WHERE '
-            if exchange:
-                adds.append('exchange = ?')
-                args.append(exchange)
-            if symbol:
-                symList = asList(symbol)
-                adds.append(' symbol IN ({}) '.format(','.join(['?' for s in symList])))
-                args.extend(symList)
-            if assetType:
-                adds.append('asset_type = ?')
-                args.append(assetType)
-            if api:
-                if type(api) is list:
-                    apiAdds = []
-                    for a in api:
-                        apiAdds.append('api_'+a+' = 1')
-                    adds.append('(' + ' OR '.join(apiAdds) + ')')
-                else:
-                    adds.append('api_'+api+' = 1')
-            if googleTopicId is not None:
-                if type(googleTopicId) == SQLHelpers:
-                    adds.append(f' google_topic_id IS {googleTopicId.value}')
-                else:
-                    adds.append(' google_topic_id = ? ')
-                    args.append(googleTopicId)
-            if withDetailsMissing:
-                adds.append('((sector IS NULL AND industry IS NULL) OR (sector = \'\' and industry = \'\'))')
-
-
             stmt += ' AND '.join(adds)
+
+        if gconfig.testing.enabled and gconfig.testing.GET_SYMBOLS_LIMIT > 0: 
+            stmt += ' LIMIT ' + str(gconfig.testing.GET_SYMBOLS_LIMIT)
+        elif gconfig.testing.REDUCED_SYMBOL_SCOPE: 
+            stmt += ' LIMIT ' + str(gconfig.testing.REDUCED_SYMBOL_SCOPE)            
 
         # print('executing',stmt, args)
         return self.dbc.execute(stmt, tuple(args)).fetchall()

@@ -19,7 +19,7 @@ from argparse import ArgumentError
 from globalConfig import config as gconfig
 from constants.enums import DataFormType, Direction, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetType, DataManagerType, IndicatorType
 from utils.support import generateFibonacciSequence, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
-from utils.other import getInstancesByClass, getMaxIndicatorPeriod, maxQuarters, getIndicatorPeriod
+from utils.other import getInstancesByClass, getMaxIndicatorPeriod, maxQuarters, getIndicatorPeriod, setKWArgsFromConfigForGetSymbols
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
 from constants.values import unusableSymbols, indicatorsKey
 from managers.stockDataManager import StockDataManager
@@ -111,6 +111,8 @@ class DataManager():
             raise ArgumentError('Simultaneous use of pages and windows should be avoided, behavior not tested')
         if self.config.sets.instanceReduction.enabled and self.config.sets.instanceReduction.top + self.config.sets.instanceReduction.bottom > 1:
             raise ValueError('Top + bottom cannot be greater than 1 (i.e. more then all)')
+        if not forPredictor and setCount is None and not initializeStockDataHandlersOnly and not skips.sets:
+            raise ValueError('setCount required when initializing sets')
         
         ## timers
         self.getprecstocktime = 0
@@ -265,17 +267,21 @@ class DataManager():
     ## TODO: optimized class methods, forTraining needs to have option of providing a networkid for use in getting the ticker window split
     @classmethod
     def forTraining(cls, seriesType=SeriesType.DAILY, **kwargs):
-        print('forTraining starting')
-        normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType, **kwargs)
-        print('got normalization data')
+        config = kwargs['inputVectorFactory'].config if 'inputVectorFactory' in kwargs else gconfig
+        if config.data.normalize:
+            normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType, **kwargs)
         
-        normalizationInfo = {}
-        for c in range(len(normalizationColumns)):
-            normalizationInfo[normalizationColumns[c]] = normalizationMaxes[c]
-        
+            kwargs['normalizationInfo'] = {}
+            for c in range(len(normalizationColumns)):
+                kwargs['normalizationInfo'][normalizationColumns[c]] = normalizationMaxes[c]
+        else:
+            ## replicate some of the conditions from getNormalizationData as it will not be used to retrieve a symbol list
+            kwargs = setKWArgsFromConfigForGetSymbols(kwargs, config)
+            kwargs['seriesType'] = seriesType
+            symbolList = dbm.getSymbols(**kwargs)
+
         return cls(
-            seriesType=seriesType,
-            normalizationInfo=normalizationInfo, symbolList=symbolList, 
+            symbolList=symbolList, 
             **kwargs
         )
 
@@ -288,22 +294,37 @@ class DataManager():
         
         if 'explicitValidationSymbolList' in kwargs.keys(): raise ArgumentError('Cannot define explicit validation set for analysis, behavior not tested')
 
+        config = network.config if network else (kwargs['inputVectorFactory'].config if 'inputVectorFactory' in kwargs else gconfig)
+        shouldNormalize = config.data.normalize
+        if not shouldNormalize:
+            ## replicate some of the conditions from getNormalizationData as it will not be used to retrieve a symbol list
+            kwargs = setKWArgsFromConfigForGetSymbols(kwargs, config)
+
         if network:
-            normalizationInfo = network.stats.getNormalizationInfo()
-            _, _, symbolList = dbm.getNormalizationData(network.stats.seriesType, normalizationInfo=normalizationInfo, **kwargs)
+            if shouldNormalize:
+                kwargs['normalizationInfo'] = network.stats.getNormalizationInfo()
+                _, _, symbolList = dbm.getNormalizationData(network.stats.seriesType, **kwargs)
             kwargs['precedingRange'] = network.stats.precedingRange
             kwargs['followingRange'] = network.stats.followingRange
             kwargs['seriesType'] = network.stats.seriesType
             kwargs['changeThreshold'] = network.stats.changeThreshold
             kwargs['inputVectorFactory'] = network.inputVectorFactory
         else:
-            normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType, **kwargs)
-            normalizationInfo = {}
-            for c in range(len(normalizationColumns)):
-                normalizationInfo[normalizationColumns[c]] = normalizationMaxes[c]
+            kwargs['seriesType'] = seriesType
+
+            if shouldNormalize:
+                normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType, **kwargs)
+                kwargs['normalizationInfo'] = {}
+                for c in range(len(normalizationColumns)):
+                    kwargs['normalizationInfo'][normalizationColumns[c]] = normalizationMaxes[c]
+        
+        try: symbolList
+        except UnboundLocalError: ## i.e. normalize=False, never initialized
+            symbolList = dbm.getSymbols(**kwargs)
+
 
         return cls(
-            normalizationInfo=normalizationInfo, symbolList=symbolList,
+            symbolList=symbolList,
             analysis=True, skips=skips,
             **kwargs
         )
@@ -316,9 +337,10 @@ class DataManager():
             sets a query limit to reduce data in memory if weighting is not planned after prediction 
     '''  
     @classmethod
-    def forPredictor(cls, nn: NeuralNetworkInstance, **kwargs):
-        normalizationInfo = nn.stats.getNormalizationInfo()
-        qualifyingSymbolList = dbm.getLastUpdatedInfo(nn.stats.seriesType, kwargs['anchorDate'], OperatorDict.LESSTHANOREQUAL, **kwargs)
+    def forPredictor(cls, nn: NeuralNetworkInstance, anchorDate, **kwargs):
+        if nn.config.data.normalize:
+            kwargs['normalizationInfo'] = nn.stats.getNormalizationInfo()
+        qualifyingSymbolList = dbm.getLastUpdatedInfo(nn.stats.seriesType, anchorDate, OperatorDict.LESSTHANOREQUAL, **kwargs)
 
         print('qualifying list length', len(qualifyingSymbolList))
 
@@ -329,7 +351,7 @@ class DataManager():
 
         return cls(
             precedingRange=nn.stats.precedingRange, followingRange=nn.stats.followingRange, seriesType=nn.stats.seriesType, threshold=nn.stats.changeThreshold, inputVectorFactory=nn.inputVectorFactory,
-            normalizationInfo=normalizationInfo, symbolList=symbolList,
+            symbolList=symbolList,
             forPredictor=True,
             **kwargs
         )
@@ -338,36 +360,12 @@ class DataManager():
     ## basically just to run through initialization to get all the print() info on pos/neg split counts
     @classmethod
     def forStats(cls, seriesType=SeriesType.DAILY, **kwargs):
-        # mocknormalizationInfo = { 'highMax': sys.maxsize, 'volumeMax': sys.maxsize }
-        # _, _, symbolList = dbm.getNormalizationData(seriesType, normalizationInfo=mocknormalizationInfo, **kwargs)
-
-        # return cls(
-        #     precedingRange=precedingRange, followingRange=followingRange, seriesType=seriesType, threshold=threshold,
-        #     symbolList=symbolList, normalizationInfo=mocknormalizationInfo,
-        #     statsOnly=True
-        # )
         return cls.forTraining(seriesType, statsOnly=True, **kwargs)
     
     @classmethod
-    def determineAllSetsTickerSplit(cls, setCount, seriesType: SeriesType=SeriesType.DAILY, network: NeuralNetworkInstance=None, **kwargs):
+    def determineAllSetsTickerSplit(cls, setCount, **kwargs):
                                     # precedingRange=0, followingRange=0, threshold=0,
-
-        if network:
-            normalizationInfo = network.stats.getNormalizationInfo()
-            _, _, symbolList = dbm.getNormalizationData(network.stats.seriesType, normalizationInfo=normalizationInfo, **kwargs)
-            kwargs['precedingRange'] = network.stats.precedingRange
-            kwargs['followingRange'] = network.stats.followingRange
-            kwargs['seriesType'] = network.stats.seriesType
-            kwargs['changeThreshold'] = network.stats.changeThreshold
-            kwargs['inputVectorFactory'] = network.inputVectorFactory
-        else:
-            normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType, **kwargs)
-            normalizationInfo = {}
-            for c in range(len(normalizationColumns)):
-                normalizationInfo[normalizationColumns[c]] = normalizationMaxes[c]
-
-        self = cls(
-            normalizationInfo=normalizationInfo, symbolList=symbolList,
+        self = cls.forAnalysis(
             initializeStockDataHandlersOnly=True,
             **kwargs
         )
@@ -538,7 +536,8 @@ class DataManager():
         sdhKWArgs = {
             'precedingRange': self.precedingRange,
             'followingRange': self.followingRange,
-            'maxIndicatorPeriod': maxIndicatorPeriod
+            'maxIndicatorPeriod': maxIndicatorPeriod,
+            'normalize': self.config.data.normalize
         }
         if self.shouldNormalize:
             ## use key loop?

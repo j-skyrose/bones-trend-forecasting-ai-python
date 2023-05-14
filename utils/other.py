@@ -15,9 +15,9 @@ from datetime import date, datetime, timedelta
 
 from globalConfig import config as gconfig
 from structures.inputVectorStats import InputVectorStats
-from utils.support import recdotdict, shortc, _isoformatd
+from utils.support import shortc, shortcdict
 from constants.values import stockOffset, canadaExchanges, usExchanges
-from constants.enums import MarketType, OutputClass, PrecedingRangeType, IndicatorType, SeriesType
+from constants.enums import MarketType, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType
 
 
 
@@ -173,6 +173,17 @@ def parseCommandLineOptions():
         kwargs[key] = massageVariable(key, val)
 
     return options, kwargs
+
+## add certain kwargs from the given config, for use in getting symbol list for dataManager init when not normalizing
+def setKWArgsFromConfigForGetSymbols(kwargs, config):
+    if config.feature.googleInterests.enabled: 
+        kwargs['googleTopicId'] = shortcdict(kwargs, 'googleTopicId', SQLHelpers.NOTNULL)
+    if config.feature.companyAge.enabled and config.feature.companyAge.dataRequired:
+        kwargs['founded'] = shortcdict(kwargs, 'founded', SQLHelpers.NOTNULL)
+    if config.feature.sector.enabled and config.feature.sector.dataRequired:
+        kwargs['sector'] = shortcdict(kwargs, 'sector', SQLHelpers.NOTNULL)
+    
+    return kwargs
 
 
 
