@@ -102,13 +102,13 @@ class DataManager():
 
         ## check for inappropriate argument combinations, and other misconfigurations
         if useAllSets and not useOptimizedSplitMethodForAllSets:
-            raise ArgumentError("Optimized split took lots of calculation and should be cached/saved, this should not be available yet")
+            raise ValueError("Optimized split took lots of calculation and should be cached/saved, this should not be available yet")
         if useAllSets and useOptimizedSplitMethodForAllSets and maxGoogleInterestHandlers:
-            raise ArgumentError('Cannot use max on Google Interests handlers along with windows, behavior not tested')
+            raise ValueError('Cannot use max on Google Interests handlers along with windows, behavior not tested')
         if explicitValidationSymbolList and setSplitTuple and setSplitTuple[1] != 0:
-            raise ArgumentError('Cannot use an explicit validation set and a validation split')
+            raise ValueError('Cannot use an explicit validation set and a validation split')
         if maxPageSize and useAllSets:
-            raise ArgumentError('Simultaneous use of pages and windows should be avoided, behavior not tested')
+            raise ValueError('Simultaneous use of pages and windows should be avoided, behavior not tested')
         if self.config.sets.instanceReduction.enabled and self.config.sets.instanceReduction.top + self.config.sets.instanceReduction.bottom > 1:
             raise ValueError('Top + bottom cannot be greater than 1 (i.e. more then all)')
         if not forPredictor and setCount is None and not initializeStockDataHandlersOnly and not skips.sets:
