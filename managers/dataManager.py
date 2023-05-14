@@ -887,7 +887,9 @@ class DataManager():
             self.explicitValidationSet = self.explicitValidationSet[:self.setCount]
         random.shuffle(self.explicitValidationSet)
 
-    def setupSets(self, setCount=None, setSplitTuple=None, minimumSetsPerSymbol=0, selectAll=False):
+    def setupSets(self, setCount=None, setSplitTuple=None, minimumSetsPerSymbol=0, selectAll=False, verbose=None):
+        verbose = shortc(verbose, self.verbose)
+
         if not setSplitTuple:
             setSplitTuple = shortc(self.setSplitTuple, (1/3,1/3))
 
@@ -901,17 +903,17 @@ class DataManager():
 
             ## determine window size for iterating through all sets            
             psints, nsints = getInstancesByClass(self.selectedInstances)
-            print('Class split ratio:', len(psints) / len(self.selectedInstances))
+            if verbose>=2: print('Class split ratio:', len(psints) / len(self.selectedInstances))
             if not selectAll:
                 if len(psints) / len(self.selectedInstances) < gconfig.sets.minimumClassSplitRatio: raise ValueError('Positive to negative set ratio below minimum threshold')
                 self.setsSlidingWindowPercentage = getAdjustedSlidingWindowPercentage(len(self.selectedInstances), setCount) 
-                print('Adjusted sets window size from', setCount, 'to', int(len(self.selectedInstances)*self.setsSlidingWindowPercentage))
+                if verbose>=2: print('Adjusted sets window size from', setCount, 'to', int(len(self.selectedInstances)*self.setsSlidingWindowPercentage))
 
         else:
             self.unselectedInstances = list(self.stockDataInstances.values())
             self.selectedInstances = []
 
-            if DEBUG: print('Selecting', setCount, 'instances')
+            if verbose>=2: print('Selecting', setCount, 'instances')
 
             ## cover minimums
             if minimumSetsPerSymbol > 0:
@@ -931,19 +933,19 @@ class DataManager():
                             self.selectedInstances.append(self.stockDataInstances[(h.getTickerTuple(), d)])
                         for d in selectDates[sampleSize:]:
                             self.unselectedInstances.append(self.stockDataInstances[(h.getTickerTuple(), d)])
-                if DEBUG: 
+                if verbose>=2: 
                     print(len(self.selectedInstances), 'instances selected to cover minimums')
                     print(len(self.unselectedInstances), 'instances available for remaining selection')
 
             ## check balance
             psints, nsints = getInstancesByClass(self.selectedInstances)
             puints, nuints = getInstancesByClass(self.unselectedInstances)
-            if DEBUG: print('sel rem', len(self.selectedInstances), setCount, len(self.selectedInstances) < setCount)
+            if verbose>=2: print('sel rem', len(self.selectedInstances), setCount, len(self.selectedInstances) < setCount)
             # select remaining
             if len(self.selectedInstances) < setCount:
                 pusamplesize = int(min(len(puints), setCount * gconfig.sets.positiveSplitRatio - len(psints)) if setCount / 2 - len(psints) > 0 else len(puints))
                 nusamplesize = int(min(len(nuints), setCount - len(self.selectedInstances)) if setCount - len(self.selectedInstances) > 0 else len(nuints))
-                if DEBUG:
+                if verbose>=2: 
                     print('Positive selected instances', len(psints))
                     print('Negative selected instances', len(nsints))
                     print('Available positive instances', len(puints))
@@ -954,8 +956,8 @@ class DataManager():
                 self.selectedInstances.extend(random.sample(puints, pusamplesize))
                 self.selectedInstances.extend(random.sample(nuints, nusamplesize))
             else:
-                if DEBUG: print('Warning: setCount too low for minimum sets per symbol')
-            if DEBUG:
+                print('Warning: setCount too low for minimum sets per symbol')
+            if verbose>=2:
                 psints, nsints = getInstancesByClass(self.selectedInstances)
                 print('All instances selected\nFinal balance:', len(psints), '/', len(nsints))
 
@@ -967,7 +969,7 @@ class DataManager():
         c1, c2 = getInstancesByClass(self.selectedInstances)
         trnStop = setSplitTuple[0]
         vldStop = setSplitTuple[1] + trnStop
-        if DEBUG: print('stops', trnStop, vldStop)
+        if verbose>=2: print('stops', trnStop, vldStop)
         ## adjust split indexes if split would result in instances being missed (e.g. trnStop = 500 but (math.floor) indexes result in 499)
         trsc1Index = math.floor(trnStop*len(c1))
         trsc2Index = math.floor(trnStop*len(c2))
@@ -984,7 +986,7 @@ class DataManager():
         random.shuffle(self.trainingSet)
         random.shuffle(self.validationSet)
         random.shuffle(self.testingSet)
-        if DEBUG: print('Sets split into', len(self.trainingSet), '/', len(self.validationSet), '/', len(self.testingSet))
+        if verbose>=1: print('Sets split into', len(self.trainingSet), '/', len(self.validationSet), '/', len(self.testingSet))
 
         # return trainingSet, validationSet, testingSet
 
