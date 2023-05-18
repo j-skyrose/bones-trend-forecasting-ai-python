@@ -688,7 +688,7 @@ class Collector:
                 maxdate -= timedelta(days=14)
             maxdate -= timedelta(days=maxdate.day)
 
-        overlap_period = timedelta(days=20)
+        overlap_period = timedelta(days=15)
         daily_period = timedelta(weeks=34) ## anything much more will start returning weekly blocks
         weekly_period = timedelta(weeks=266) ## anything much more will start returning monthly blocks
         period = weekly_period if interestType == InterestType.WEEKLY else daily_period
@@ -778,10 +778,13 @@ class Collector:
                                     startdate = maxStreamMinDate
                                     upsertData = True
                                     stream = maxStream
+                                    print(f'Re-using stream {stream}')
                                 else: ## need to start new stream
-                                    ## should ensure there is at least one week block that overlaps between last stream and this new one
-                                    startdate = date.fromisoformat(ginterests[-1].date) + timedelta(days=1) - overlap_period
+                                    ## should ensure there is at least one week block that overlaps between last stream and this new one, spanning the end of the last full month
+                                    lastgidate = date.fromisoformat(ginterests[-1].date)
+                                    startdate = lastgidate - timedelta(days=lastgidate.day) + timedelta(days=1) - overlap_period
                                     stream = maxStream + 1
+                                    print(f'Starting (new) stream {stream}')
                     else:
                         cur_direction = Direction.DESCENDING
                         ## adjust so for stream 0 most recent daily period aligns with end of latest month (could? cause problems calculating relative_interest otherwise once more streams are involved and proper overlaps are required)
