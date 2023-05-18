@@ -844,7 +844,6 @@ class Collector:
                 prioritybreak = False
                 somedatagathered=False
                 cur_period = period
-                lastPeriodInStream = False
                 advanceStreamAndOverlap = False
                 while not fullyUpdated() and not apierrorbreak:
                     directionmodifier = -1 if cur_direction == Direction.DESCENDING else 1
@@ -853,20 +852,23 @@ class Collector:
                     enddate = startdate + (cur_period * directionmodifier)
                     nextenddate = enddate + timedelta(days=1) + cur_period
 
-                    ## adjust enddate and/or final periods in this symbol's collection
-                    if enddate > maxdate: enddate = maxdate
-                    elif advanceStreamAndOverlap:
-                        ## this is the last period, so increment the stream and ensure there is sufficient overlap with previous stream
+                    if advanceStreamAndOverlap:
+                        ## this is the last period, so need to increment the stream and ensure there is sufficient overlap with previous stream
+                        ## insert current data into "previous" stream before incrementation
+                        if dryrun:  print('inserting to stream', stream)
+                        else:       insertGData(gData)
+                        gData = []
+
                         startdate -= overlap_period
                         stream += 1
-                    elif lastPeriodInStream:
-                        ## next period should be in incremented stream, as this period is month-end-aligned
+
+                    ## adjust enddate and/or final periods in this symbol's collection
+                    if enddate > maxdate: enddate = maxdate
+                    elif not advanceStreamAndOverlap and itype == InterestType.DAILY and cur_direction == Direction.ASCENDING and nextenddate > maxdate: 
+                        ## this will be the last full period, so need to make sure last full month is end of this stream and remainder is in the next so either method of keeping GI data up-to-date can be used (i.e. processing to relative values with or without corresponding monthly data for streams > 0)
+                        enddate -= timedelta(days=enddate.day)
                         advanceStreamAndOverlap = True
-                    elif itype == InterestType.DAILY and cur_direction == Direction.ASCENDING and nextenddate > maxdate: 
-                        ## this will be the last full period, so need to make sure last full month is end of this stream and remainder is in the next
-                        ## shift back to end of latest month and adjust period accordingly, no need for anything fancy as next and overlapping stream will far exceed maxdate
-                        cur_period = (nextenddate - timedelta(days=nextenddate.day) - enddate).days
-                        lastPeriodInStream = True
+
 
                     ## Google does not have/allow data before 2004-01-01
                     if startdate < minGoogleDate: break
@@ -922,8 +924,8 @@ class Collector:
                     startdate = enddate + (timedelta(days=1) * directionmodifier)
 
                 ## insert all collected GI data
-                if dryrun: print('inserting to stream', stream)
-                else:   insertGData(gData)
+                if dryrun:  print('inserting to stream', stream)
+                else:       insertGData(gData)
                 
                 if not prioritybreak:
                     symbollist.remove(s)
