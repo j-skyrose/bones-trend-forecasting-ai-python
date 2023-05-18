@@ -545,7 +545,7 @@ class DataManager():
             sdhKWArgs['volumeMax'] = self.normalizationInfo.volumeMax
 
         if gconfig.multicore:
-            for ticker, data in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate, queryLimit=queryLimit), symbolList, desc='Getting stock data'), verbose, desc='Creating stock handlers'):
+            for ticker, data in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate, queryLimit=queryLimit), symbolList, verbose, desc='Getting stock data'), verbose, desc='Creating stock handlers'):
                 if dataLengthCheck(data):
                     self.__getattribute__(dmProperty)[TickerKeyType(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArgLambda(ticker, data), **sdhKWArgs)
                 else:
