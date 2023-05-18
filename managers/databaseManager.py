@@ -2365,7 +2365,8 @@ class DatabaseManager(Singleton):
 
             # gidata = self.getGoogleInterests(t.exchange, t.symbol, raw=True)
             for itype in InterestType:
-                gidata = src_cursor.execute('SELECT * FROM google_interests_raw WHERE exchange=? and symbol=? and type=?', (t.exchange, t.symbol, itype.name)).fetchall()
+                maxStream = self.getMaxGoogleInterestStream(t.exchange, t.symbol, itype=itype)
+                gidata = self.getGoogleInterests(exchange=t.exchange, symbol=t.symbol, itype=itype, stream=maxStream, raw=True)
                 if len(gidata) > 0:
                     stmt = f'INSERT INTO google_interests_raw VALUES ({getValueQS(gidata[0])})'
                     dest_cursor.execute(stmt, list(gidata[0].values()))
