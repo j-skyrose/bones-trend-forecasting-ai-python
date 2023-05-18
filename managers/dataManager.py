@@ -545,7 +545,7 @@ class DataManager():
             sdhKWArgs['volumeMax'] = self.normalizationInfo.volumeMax
 
         if gconfig.multicore:
-            for ticker, data in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate, queryLimit=queryLimit), symbolList, chunksize=1, desc='Getting stock data'), verbose, desc='Creating stock handlers'):
+            for ticker, data in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate, queryLimit=queryLimit), symbolList, desc='Getting stock data'), verbose, desc='Creating stock handlers'):
                 if dataLengthCheck(data):
                     self.__getattribute__(dmProperty)[TickerKeyType(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArgLambda(ticker, data), **sdhKWArgs)
                 else:
@@ -648,7 +648,7 @@ class DataManager():
         ANALYZE3 = False
 
         if gconfig.multicore:
-            for ticker, data in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(multicore_getFinancialDataTickerTuples, symbolList, verbose, chunksize=1, desc='Getting financial data'), verbose, desc='Creating financial handlers'):
+            for ticker, data in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(multicore_getFinancialDataTickerTuples, symbolList, verbose, desc='Getting financial data'), verbose, desc='Creating financial handlers'):
                 self.financialDataHandlers[TickerKeyType(ticker.exchange, ticker.symbol)] = FinancialDataHandler(ticker, data)  
 
         else:
@@ -779,7 +779,7 @@ class DataManager():
         if refresh: self.stockSplitsHandlers.clear()
 
         if gconfig.multicore:
-            for ticker, data in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getStockSplitsTickerTuples), symbolList, verbose, chunksize=1, desc='Getting stock splits data'), verbose, desc='Creating stock splits handlers'):
+            for ticker, data in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getStockSplitsTickerTuples), symbolList, verbose, desc='Getting stock splits data'), verbose, desc='Creating stock splits handlers'):
                 self.stockSplitsHandlers[TickerKeyType(ticker.exchange, ticker.symbol)] = StockSplitsHandler(ticker.exchange, ticker.symbol, data)
                     
         else:
@@ -861,7 +861,7 @@ class DataManager():
 
 
         if gconfig.multicore and not self.maxGoogleInterestHandlers:
-            for ticker, relativedata in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getGoogleInterestsTickerTuples, queryLimit=queryLimit), symbolList, verbose, chunksize=1, desc='Getting Google interests data'), verbose, desc='Creating Google interests handlers'):
+            for ticker, relativedata in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getGoogleInterestsTickerTuples, queryLimit=queryLimit), symbolList, verbose, desc='Getting Google interests data'), verbose, desc='Creating Google interests handlers'):
                 key = TickerKeyType(ticker.exchange, ticker.symbol)
                 self.googleInterestsHandlers[key] = GoogleInterestsHandler(*key.getTuple(), relativedata)
                     

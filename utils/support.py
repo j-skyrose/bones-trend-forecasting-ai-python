@@ -347,8 +347,8 @@ def tqdmLoopHandleWrapper(iterable, verbose=0, **kwargs):
     return tqdm.tqdm(iterable, leave=verbose>=1, **kwargs) if verbose > 0 else iterable
 
 ## multicore TQDM progress bar, with verbose optionality
-def tqdmProcessMapHandlerWrapper(fn, iterable, verbose=0, **kwargs):
-    return process_map(fn, iterable, leave=verbose>=1, **kwargs) if verbose > 0 else list(map(fn, iterable))
+def tqdmProcessMapHandlerWrapper(fn, iterable, verbose=0, chunksize=1, **kwargs):
+    return process_map(fn, iterable, leave=verbose>=1, chunksize=chunksize, **kwargs) if verbose > 0 else list(map(fn, iterable))
 
 ## generates all fib values up to and including the given arg, e.g []
 def generateFibonacciSequence(limit):
