@@ -675,12 +675,12 @@ class Collector:
 
     ## collect google interests and insert to DB
     ## measures up-to-date-ness by comparing latest GI and stock data dates, if not then it will collect data up til maxdate rather than til the latest stock data date
-    def startGoogleInterestCollection(self, itype:InterestType=InterestType.DAILY, direction:Direction=Direction.ASCENDING, currentDate=None, collectStatsOnly=False, dryrun=False):
+    def startGoogleInterestCollection(self, interestType:InterestType=InterestType.DAILY, direction:Direction=Direction.ASCENDING, currentDate=None, collectStatsOnly=False, dryrun=False):
         gapi = Google()
 
         maxdate = date.fromisoformat(asISOFormat(shortc(currentDate, date.today())))
         ## up-to-date GI data is only available after 3 days
-        if itype == InterestType.DAILY:
+        if interestType == InterestType.DAILY:
             maxdate -= timedelta(days=4)
         else: ## WEEKLY or MONTHLY
             ## too close to beginning of month, need to go further back to get previous previous month
@@ -691,7 +691,7 @@ class Collector:
         overlap_period = timedelta(days=20)
         daily_period = timedelta(weeks=34) ## anything much more will start returning weekly blocks
         weekly_period = timedelta(weeks=266) ## anything much more will start returning monthly blocks
-        period = weekly_period if itype == InterestType.WEEKLY else daily_period
+        period = weekly_period if interestType == InterestType.WEEKLY else daily_period
 
         ## prioritizes based on how many '0's are in the period (i.e. daily search counts; popular tickers have more days where there are at least a handle of searches)
         useprioritythreshold = False
@@ -739,14 +739,14 @@ class Collector:
                     stats_nostockdata += 1
                     continue
 
-                ginterests = dbm.getGoogleInterests(s.exchange, s.symbol, itype=itype, raw=True)
+                ginterests = dbm.getGoogleInterests(s.exchange, s.symbol, itype=interestType, raw=True)
 
                 ## determine start date for first collection period if applicable (startdate not getting set typically means symbol is up-to-date)
                 startdate = None
                 cur_direction = None
                 upsertData = False
                 stream = 0
-                if itype == InterestType.MONTHLY:
+                if interestType == InterestType.MONTHLY:
                     cur_direction = Direction.ASCENDING
                     upsertData = True
                     if ginterests:
@@ -771,8 +771,8 @@ class Collector:
                             if dryrun: print(sdata[-1].date, ginterests[-1].date)
                             if sdata[-1].date > ginterests[-1].date:
                                 ## check if latest stream can be updated instead of starting a new stream
-                                maxStream = dbm.getMaxGoogleInterestStream(s.exchange, s.symbol, itype=itype)
-                                maxStreamData = dbm.getGoogleInterests(s.exchange, s.symbol, itype=itype, stream=maxStream, raw=True)
+                                maxStream = dbm.getMaxGoogleInterestStream(s.exchange, s.symbol, itype=interestType)
+                                maxStreamData = dbm.getGoogleInterests(s.exchange, s.symbol, itype=interestType, stream=maxStream, raw=True)
                                 maxStreamMinDate = date.fromisoformat(maxStreamData[0].date)
                                 if maxStreamMinDate + period >= maxdate: ## period can cover all latest stream dates as well, so stream can be reused and updated
                                     startdate = maxStreamMinDate
@@ -828,13 +828,13 @@ class Collector:
                     for g in data:
                         if g['endDate']: ## weekly or monthly
                             for d in [(g['startDate'] + timedelta(days=d)) for d in range((g['endDate'] - g['startDate']).days + 1)]:
-                                dbm.insertRawGoogleInterest(s.exchange, s.symbol, itype, d, g['relative_interest'], upsert=upsertData)
+                                dbm.insertRawGoogleInterest(s.exchange, s.symbol, interestType, d, g['relative_interest'], upsert=upsertData)
                         else: ## daily
-                            dbm.insertRawGoogleInterest(s.exchange, s.symbol, itype, g['startDate'], g['relative_interest'], stream, upsert=upsertData)
+                            dbm.insertRawGoogleInterest(s.exchange, s.symbol, interestType, g['startDate'], g['relative_interest'], stream, upsert=upsertData)
 
                     totalDataPointsCollected += len(data)
 
-                if itype == InterestType.MONTHLY:
+                if interestType == InterestType.MONTHLY:
                     ## only one loop will run, so covers all data
                     period = timedelta(days=(maxdate - startdate).days)
 
@@ -864,7 +864,7 @@ class Collector:
 
                     ## adjust enddate and/or final periods in this symbol's collection
                     if enddate > maxdate: enddate = maxdate
-                    elif not advanceStreamAndOverlap and itype == InterestType.DAILY and cur_direction == Direction.ASCENDING and nextenddate > maxdate: 
+                    elif not advanceStreamAndOverlap and interestType == InterestType.DAILY and cur_direction == Direction.ASCENDING and nextenddate > maxdate: 
                         ## this will be the last full period, so need to make sure last full month is end of this stream and remainder is in the next so either method of keeping GI data up-to-date can be used (i.e. processing to relative values with or without corresponding monthly data for streams > 0)
                         enddate -= timedelta(days=enddate.day)
                         advanceStreamAndOverlap = True

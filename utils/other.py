@@ -17,7 +17,7 @@ from globalConfig import config as gconfig
 from structures.inputVectorStats import InputVectorStats
 from utils.support import shortc, shortcdict
 from constants.values import stockOffset, canadaExchanges, usExchanges
-from constants.enums import MarketType, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType
+from constants.enums import InterestType, MarketType, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType
 
 
 
@@ -161,6 +161,8 @@ def parseCommandLineOptions():
             v = v.lower() == 'true'
         elif k.lower() == 'stype':
             v = SeriesType[v.upper()]
+        elif k.lower() == 'interesttype':
+            v = InterestType[v.upper()]
         elif re.match(r'[0-9]+.[0-9]+', v):
             v = float(v)
         elif re.match(r'[0-9]+$', v):
