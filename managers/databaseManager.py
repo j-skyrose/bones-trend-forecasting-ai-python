@@ -2392,14 +2392,15 @@ class DatabaseManager(Singleton):
             gidata = src_cursor.execute('SELECT * FROM google_interests_raw WHERE exchange=? AND symbol=?', (s.exchange, s.symbol)).fetchall()
             if len(gidata) == 0:
                 print('and no data')
-            elif len(gidata) < 3:
-                print('and no data collected')
             else:
-                print('and had some more data collected')
+                if len(gidata) < 3:
+                    print('and no data collected')
+                else:
+                    print('and had some more data collected')
+                print('GI:', gidata[0].date, '->', gidata[-1].date)
 
             hdata = src_cursor.execute('SELECT * FROM historical_data WHERE exchange=? and symbol=?', (s.exchange, s.symbol)).fetchall()
-            print('GI:', gidata[0].date, '->', gidata[-1].date)
-            print('HS:', hdata[0].date, '->', hdata[-1].date)
+            print('SD:', hdata[0].date, '->', hdata[-1].date)
 
 
         # print()
