@@ -18,6 +18,8 @@ mkdir %EXPORTDIR%\data
 echo "Exporting DB"
 @REM can be run while other process has DB open
 python %PROJECTDIR%/managers/databaseManager.py -f buildGIDBCopy verbose=0.5 > dbpath.txt
+echo %ERRORLEVEL%
+if %ERRORLEVEL% NEQ 0 exit /B
 set /p DBPATH=<dbpath.txt
 del dbpath.txt
 echo %DBPATH%
