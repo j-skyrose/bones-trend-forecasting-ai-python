@@ -2411,7 +2411,7 @@ class DatabaseManager(Singleton):
 ## 3677029
 
     ## import Google Interests data from a DB copy from elsewhere (e.g. EC2 instance)
-    def importFromGIDBCopy(self, src_db_path, verbose=1):
+    def importFromGIDBCopy(self, src_db_path, interestType: InterestType=None, dryrun=False, verbose=1):
         dest_cursor = self.dbc
         src_db = sqlite3.connect(src_db_path, timeout=15)
         src_db.row_factory = recdotdict_factory
@@ -2424,13 +2424,19 @@ class DatabaseManager(Singleton):
         ## update deleted topic IDs
         symbolerrors = src_cursor.execute('SELECT * FROM symbols WHERE google_topic_id IS NULL').fetchall()
         for s in symbolerrors:
-            dest_cursor.execute('UPDATE symbols SET google_topic_id=NULL WHERE exchange=? AND symbol=?', (s.exchange, s.symbol))
+            if dryrun:  print('Deleting google_topic_id for', s.exchange, s.symbol)
+            else:       dest_cursor.execute('UPDATE symbols SET google_topic_id=NULL WHERE exchange=? AND symbol=?', (s.exchange, s.symbol))
         if verbose>=1: print(f'Deleted {len(symbolerrors)} topic IDs')
 
         ## transfer GI data
-        gidata = src_cursor.execute('SELECT * FROM google_interests_raw ORDER BY exchange, symbol, date, type').fetchall()
+        gidata = src_cursor.execute(f'''
+            SELECT * FROM google_interests_raw 
+            {" WHERE type=? " if interestType else ""} 
+            ORDER BY exchange, symbol, date {", type" if not interestType else ""}
+        ''', (interestType.name,) if interestType else ()).fetchall()
         for g in tqdm(gidata, desc='Inserting data') if verbose > 0 else gidata:
-            dest_cursor.execute(f'INSERT OR IGNORE INTO google_interests_raw VALUES ({getValueQS(gidata[0])})', list(g.values()))
+            if dryrun:  print('Inserting values', list(g.values()))
+            else:       dest_cursor.execute(f'INSERT OR IGNORE INTO google_interests_raw VALUES ({getValueQS(gidata[0])})', list(g.values()))
         if verbose>=1: print(f'Inserted {len(gidata)} data points')
 
         self.commit()
