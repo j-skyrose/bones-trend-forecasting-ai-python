@@ -50,7 +50,8 @@ class Alphavantage:
             raise APITimeout
         except:
             print(resp)
-            print(resp.json())
+            try:    print(resp.json())
+            except: pass
             raise APIError
 
     def getTickerDetails(self, symbol):
