@@ -886,6 +886,7 @@ class Collector:
                     while not gResp:
                         if dryrun:
                             print('requesting for', startdate, '->', enddate)
+                            successfulRequestCount += 1
                             break
                         try:
                             gResp = gapi.getHistoricalInterests(s.google_topic_id, startdate, enddate)
