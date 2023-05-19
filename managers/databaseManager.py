@@ -287,9 +287,8 @@ class DatabaseManager(Singleton):
 
         stmt += ' ORDER BY ' + \
             (f'api_{api} {apiSortDirection.value}, ' if api else '') + \
-            'api_polygon ASC,' + \
-            (f'google_topic_id {googleTopicID.value}, ' if type(googleTopicID) == Direction else '') + \
-            'date ASC'
+            'api_polygon ASC, date ASC, ' + \
+            (f'google_topic_id {googleTopicID.value}' if type(googleTopicID) == Direction else '')
 
         return self.dbc.execute(stmt, tuple(args))
 
