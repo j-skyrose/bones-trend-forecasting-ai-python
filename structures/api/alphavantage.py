@@ -38,7 +38,7 @@ class Alphavantage:
                     raise APIError
                 elif len(rjson.keys()) == 1: raise APITimeout
 
-                print('got response', rjson)
+                print('got response', str(rjson)[:500], '...')
 
                 return rjson
             else:
