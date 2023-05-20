@@ -69,7 +69,7 @@ class DailyDataHandler:
         ## trim partial blocks between streams, leaving only possibly one at beginning of stream 0 and one at end of highest stream
         for s in range(len(self.blockManagers)):
             firstblock = self.blockManagers[s].getFirstBlock()
-            lastblock = self.blockManagers[s].getFirstBlock()
+            lastblock = self.blockManagers[s].getLastBlock()
             if s != 0:
                 if firstblock.isPartial(): self.blockManagers[s].blocks.remove(firstblock)
             if s != len(self.blockManagers) - 1:
