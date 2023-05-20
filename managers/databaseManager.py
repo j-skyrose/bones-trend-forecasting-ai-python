@@ -20,11 +20,9 @@ from structures.api.googleTrends.request import GoogleAPI
 
 from globalConfig import config as gconfig
 from managers.marketDayManager import MarketDayManager
-from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FeatureExtraType, FinancialReportType, IndicatorType, InterestType, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SeriesType, AccuracyType, SetType, Direction
-from constants.exceptions import InsufficientDataAvailable
-from utils.technicalIndicatorFormulae import unresumableGenerationIndicators, generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends
+from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FinancialReportType, IndicatorType, InterestType, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SeriesType, AccuracyType, SetType, Direction
 from utils.support import asDate, asISOFormat, asList, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, tqdmLoopHandleWrapper, unixToDatetime
-from utils.other import buildCommaSeparatedTickerPairString, getIndicatorPeriod, parseCommandLineOptions
+from utils.other import buildCommaSeparatedTickerPairString, parseCommandLineOptions
 from constants.values import unusableSymbols, apiList, standardExchanges
 
 ## for ad hoc SQL execution ################################################################################################
@@ -1476,134 +1474,6 @@ class DatabaseManager(Singleton):
     ## end migrations ####################################################################################################################################################################
     ####################################################################################################################################################################
     ## limited use utility ####################################################################################################################################################################
-
-    ## generates or updates cached technical indicator data; should be run after every stock data dump
-    def updateCalculatedTechnicalIndicatorData(self, exchange=[], stype: SeriesType=SeriesType.DAILY, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, doNotCacheADX=True):
-        def getLatestIndicator(i: IndicatorType, period):
-            for li in latestIndicators:
-                if li.indicator == i.key and li.period == period:
-                    return li
-                
-        exchange = asList(exchange)
-        tickers = self.dbc.execute('''
-            SELECT MAX(date) AS date, exchange, symbol FROM historical_data WHERE type=? {} group by exchange, symbol
-        '''.format(('AND exchange IN (\'{}\')'.format('\',\''.join(exchange))) if len(exchange)>0 else ''), (stype.name,)).fetchall()
-        print('Got {} tickers'.format(len(tickers)))
-
-        purged = len(tickers)
-        ## purge invalid/inappropriate tickers
-        tickers[:] = [t for t in tickers if (t.exchange, t.symbol) not in unusableSymbols]
-        purged -= len(tickers)
-        print('Purged {} tickers'.format(purged))
-
-        tickersupdated = 0
-        rowsadded = 0
-        cacheIndicators: List = gconfig.cache.indicators
-        if doNotCacheADX: cacheIndicators.remove(IndicatorType.ADX)
-        for t in tqdm(tickers, desc='Tickers'):
-            latestIndicators = self.dbc.execute('''
-                SELECT MAX(date) AS date, exchange, symbol, indicator, period, value FROM historical_calculated_technical_indicator_data WHERE date_type=? AND exchange=? AND symbol=? group by exchange, symbol, indicator, period
-            ''', (stype.name, t.exchange, t.symbol)).fetchall()
-
-            ## data should already be in ascending (date) order
-            stkdata = self.getStockData(t.exchange, t.symbol, SeriesType.DAILY)
-
-            ## skip if everything is already updated
-            missingIndicators = []
-            notuptodateIndicators = []
-            if len(latestIndicators) > 0:
-                ## check if any indicators are missing in DB
-                for ik in IndicatorType:
-                    missing = True
-                    for r in latestIndicators:
-                        if r.indicator == ik.key:
-                            missing = False
-                            break
-                    if missing: missingIndicators.append(ik)
-                ## check if all indicators are calculated up to latest stock data
-                for r in latestIndicators:
-                    if r.date < stkdata[-1].date:
-                        notuptodateIndicators.append(IndicatorType[r.indicator])
-                if len(missingIndicators) == 0 and len(notuptodateIndicators) == 0: continue
-
-            i: IndicatorType
-            for i in tqdm(cacheIndicators, desc='Indicators', leave=False):
-                iperiod = getIndicatorPeriod(i, indicatorConfig)
-
-                ## generate fresh/all data (some indicators use smoothing so their initial values contribute to their latest, meaning they cannot be 'picked up where they left off')
-                if i in missingIndicators or (i in notuptodateIndicators and i in unresumableGenerationIndicators):
-                    try:
-                        if i.isEMA():
-                            indcdata = generateEMAs_ExponentialMovingAverage(stkdata, iperiod)
-                        elif i == IndicatorType.RSI:
-                            indcdata = generateRSIs_RelativeStrengthIndex(stkdata, iperiod)
-                        elif i == IndicatorType.CCI:
-                            indcdata = generateCCIs_CommodityChannelIndex(stkdata, iperiod)
-                        elif i == IndicatorType.ATR:
-                            indcdata = generateATRs_AverageTrueRange(stkdata, iperiod)
-                        elif i == IndicatorType.DIS:
-                            indcdata = list(zip(
-                                generateDIs_DirectionalIndicator(stkdata, iperiod),
-                                generateDIs_DirectionalIndicator(stkdata, iperiod, positive=False)
-                            ))
-                        elif i == IndicatorType.ADX:
-                            indcdata = generateADXs_AverageDirectionalIndex(stkdata, iperiod)
-                        elif i == IndicatorType.MACD:
-                            indcdata = generateMACDs_MovingAverageConvergenceDivergence(stkdata)
-                        elif i == IndicatorType.BB:
-                            indcdata = generateBollingerBands(stkdata, iperiod)
-                        elif i == IndicatorType.ST:
-                            indcdata = generateSuperTrends(stkdata, iperiod)
-                    except InsufficientDataAvailable:
-                        continue
-
-                ## only generate missing values
-                elif i in notuptodateIndicators:
-                    latesti = getLatestIndicator(i, iperiod)   
-
-                    minDateIndex = 0
-                    for j in range(len(stkdata)-1, -1, -1):
-                        if stkdata[j].date == latesti.date:
-                            minDateIndex = j
-                            break
-
-                    if i.isEMA():
-                        indcdata = generateEMAs_ExponentialMovingAverage(stkdata[minDateIndex-1:], iperiod, usingLastEMA=latesti.value)
-                    elif i == IndicatorType.CCI:
-                        ## TODO: not currently cached
-                        indcdata = generateCCIs_CommodityChannelIndex(stkdata, iperiod)
-                    elif i == IndicatorType.MACD:
-                        ## TODO: not currently cached
-                        indcdata = generateMACDs_MovingAverageConvergenceDivergence(stkdata)
-                    elif i == IndicatorType.BB:
-                        indcdata = generateBollingerBands(stkdata[minDateIndex-iperiod+1:], iperiod)
-
-                else: ## already up to date
-                    continue
-
-                ## convert generated values to DB tuples in proper chronological order
-                tpls = []
-                for indx in range(len(indcdata)):
-                    val = indcdata[-(indx+1)]
-                    if i.featureExtraType == FeatureExtraType.MULTIPLE:
-                        if i == IndicatorType.ST:
-                            val = ','.join([str(val[0]), val[1].name])
-                        else:
-                            val = ','.join([str(v) for v in val])
-
-                    tpls.append((t.exchange, t.symbol, stype.name, stkdata[-(indx+1)].date, i.key, iperiod, val))
-
-                tpls.reverse()
-
-                self.dbc.executemany('''
-                    INSERT OR REPLACE INTO historical_calculated_technical_indicator_data VALUES (?,?,?,?,?,?,?)
-                ''', tpls)
-                rowsadded += len(tpls)
-
-            tickersupdated += 1
-        
-        print('Updated {} tickers'.format(tickersupdated))
-        print('Added or replaced {} rows'.format(rowsadded))
 
     ## generally only used after VIX update dumps
     ## fill any data gaps with artificial data using last real trading day

@@ -14,15 +14,17 @@ from multiprocessing.managers import SharedMemoryManager
 from typing import Dict, List
 
 from globalConfig import config as gconfig
-from constants.enums import IndicatorType, OutputClass
-from constants.values import indicatorsKey
+from constants.enums import FeatureExtraType, IndicatorType, OutputClass, SeriesType
+from constants.exceptions import InsufficientDataAvailable
+from constants.values import indicatorsKey, unusableSymbols
 from managers.databaseManager import DatabaseManager
 from managers.dataManager import DataManager
 from managers.inputVectorFactory import InputVectorFactory
 from structures.dataPointInstance import DataPointInstance
 from structures.skipsObj import SkipsObj
-from utils.other import getInstancesByClass, parseCommandLineOptions
-from utils.support import asISOFormat, asList, tqdmLoopHandleWrapper
+from utils.other import getIndicatorPeriod, getInstancesByClass, parseCommandLineOptions
+from utils.support import asISOFormat, asList, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
+from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends, unresumableGenerationIndicators
 from utils.vectorSimilarity import euclideanSimilarity_jit
 
 maxcpus = 3
@@ -250,6 +252,148 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
         if keyboardinterrupted: break
 
     if parallel: cpuCoreUsage[pid] = 0 ## unlock index for progress bar position
+
+
+def _multicore_updateTechnicalIndicatorData(ticker, stype: SeriesType, cacheIndicators, indicatorConfig):
+    dbm = DatabaseManager()
+    latestIndicators = dbm.dbc.execute('''
+        SELECT MAX(date) AS date, exchange, symbol, indicator, period, value FROM historical_calculated_technical_indicator_data WHERE date_type=? AND exchange=? AND symbol=? group by exchange, symbol, indicator, period
+    ''', (stype.name, ticker.exchange, ticker.symbol)).fetchall()
+    def getLatestIndicator(i: IndicatorType, period):
+        for li in latestIndicators:
+            if li.indicator == i.key and li.period == period:
+                return li
+
+    ## data should already be in ascending (date) order
+    stkdata = dbm.getStockData(ticker.exchange, ticker.symbol, SeriesType.DAILY)
+
+    ## skip if everything is already updated
+    missingIndicators = []
+    notuptodateIndicators = []
+    if len(latestIndicators) > 0:
+        ## check if any indicators are missing in DB
+        for ik in IndicatorType:
+            missing = True
+            for r in latestIndicators:
+                if r.indicator == ik.key:
+                    missing = False
+                    break
+            if missing: missingIndicators.append(ik)
+        ## check if all indicators are calculated up to latest stock data
+        for r in latestIndicators:
+            if r.date < stkdata[-1].date:
+                notuptodateIndicators.append(IndicatorType[r.indicator])
+        if len(missingIndicators) == 0 and len(notuptodateIndicators) == 0: return 0
+
+    returntpls = []
+    i: IndicatorType
+    for i in cacheIndicators:
+        iperiod = getIndicatorPeriod(i, indicatorConfig)
+
+        ## generate fresh/all data (some indicators use smoothing so their initial values contribute to their latest, meaning they cannot be 'picked up where they left off')
+        if i in missingIndicators or (i in notuptodateIndicators and i in unresumableGenerationIndicators):
+            try:
+                if i.isEMA():
+                    indcdata = generateEMAs_ExponentialMovingAverage(stkdata, iperiod)
+                elif i == IndicatorType.RSI:
+                    indcdata = generateRSIs_RelativeStrengthIndex(stkdata, iperiod)
+                elif i == IndicatorType.CCI:
+                    indcdata = generateCCIs_CommodityChannelIndex(stkdata, iperiod)
+                elif i == IndicatorType.ATR:
+                    indcdata = generateATRs_AverageTrueRange(stkdata, iperiod)
+                elif i == IndicatorType.DIS:
+                    indcdata = list(zip(
+                        generateDIs_DirectionalIndicator(stkdata, iperiod),
+                        generateDIs_DirectionalIndicator(stkdata, iperiod, positive=False)
+                    ))
+                elif i == IndicatorType.ADX:
+                    indcdata = generateADXs_AverageDirectionalIndex(stkdata, iperiod)
+                elif i == IndicatorType.MACD:
+                    indcdata = generateMACDs_MovingAverageConvergenceDivergence(stkdata)
+                elif i == IndicatorType.BB:
+                    indcdata = generateBollingerBands(stkdata, iperiod)
+                elif i == IndicatorType.ST:
+                    indcdata = generateSuperTrends(stkdata, iperiod)
+            except InsufficientDataAvailable:
+                continue
+
+        ## only generate missing values
+        elif i in notuptodateIndicators:
+            latesti = getLatestIndicator(i, iperiod)   
+
+            minDateIndex = 0
+            for j in range(len(stkdata)-1, -1, -1):
+                if stkdata[j].date == latesti.date:
+                    minDateIndex = j
+                    break
+
+            if i.isEMA():
+                indcdata = generateEMAs_ExponentialMovingAverage(stkdata[minDateIndex-1:], iperiod, usingLastEMA=latesti.value)
+            elif i == IndicatorType.CCI:
+                ## TODO: not currently cached
+                indcdata = generateCCIs_CommodityChannelIndex(stkdata, iperiod)
+            elif i == IndicatorType.MACD:
+                ## TODO: not currently cached
+                indcdata = generateMACDs_MovingAverageConvergenceDivergence(stkdata)
+            elif i == IndicatorType.BB:
+                indcdata = generateBollingerBands(stkdata[minDateIndex-iperiod+1:], iperiod)
+
+        else: ## already up to date
+            continue
+
+        ## convert generated values to DB tuples in proper chronological order
+        tpls = []
+        for indx in range(len(indcdata)):
+            val = indcdata[-(indx+1)]
+            if i.featureExtraType == FeatureExtraType.MULTIPLE:
+                if i == IndicatorType.ST:
+                    val = ','.join([str(val[0]), val[1].name])
+                else:
+                    val = ','.join([str(v) for v in val])
+
+            tpls.append((ticker.exchange, ticker.symbol, stype.name, stkdata[-(indx+1)].date, i.key, iperiod, val))
+
+        tpls.reverse()
+        returntpls.extend(tpls)
+
+    return returntpls
+
+## generates or updates cached technical indicator data; should be run after every stock data dump
+def technicalIndicatorDataCalculationAndInsertion(exchange=[], stype: SeriesType=SeriesType.DAILY, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, doNotCacheADX=True):
+    dbm = DatabaseManager()
+    exchange = asList(exchange)
+    tickers = dbm.dbc.execute('''
+        SELECT MAX(date) AS date, exchange, symbol FROM historical_data WHERE type=? {} group by exchange, symbol
+    '''.format(
+            ('AND exchange IN (\'{}\')'.format('\',\''.join(exchange))) if len(exchange)>0 else ''
+        ), (stype.name,)).fetchall()
+    print('Got {} tickers'.format(len(tickers)))
+
+    purgedCount = len(tickers)
+    ## purge invalid/inappropriate tickers
+    tickers[:] = [t for t in tickers if (t.exchange, t.symbol) not in unusableSymbols]
+    purgedCount -= len(tickers)
+    print('Purged {} tickers'.format(purgedCount))
+
+    tickersupdated = 0
+    rowsadded = 0
+    cacheIndicators: List = gconfig.cache.indicators
+    if doNotCacheADX: cacheIndicators.remove(IndicatorType.ADX)
+
+    inserttpls = []
+    for tpls in tqdmProcessMapHandlerWrapper(partial(_multicore_updateTechnicalIndicatorData, stype=stype, cacheIndicators=cacheIndicators, indicatorConfig=indicatorConfig), tickers, verbose=1, desc='Updating techInd data for tickers'):
+        if len(tpls) != 0:
+            rowsadded += len(tpls)
+            tickersupdated += 1
+            inserttpls.extend(tpls)
+    
+    dbm.dbc.executemany('''
+        INSERT OR REPLACE INTO historical_calculated_technical_indicator_data VALUES (?,?,?,?,?,?,?)
+    ''', inserttpls)
+
+    print('Updated {} tickers'.format(tickersupdated))
+    print('Added or replaced {} rows'.format(rowsadded))
+
 
 if __name__ == '__main__':
     opts, kwargs = parseCommandLineOptions()
