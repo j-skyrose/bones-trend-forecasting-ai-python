@@ -45,7 +45,8 @@ class Collector:
         dbm.dbc.execute('UPDATE symbols SET api_'+api+'=? WHERE exchange=? AND symbol=?',(val, exchange, symbol))
 
     def __loopCollectBySymbol(self, api, symbols, type):
-        counter = 0
+        updatedCount = 0
+        apiErrorErrors = []
         try:
             for sp in symbols:
                 try:
@@ -57,7 +58,7 @@ class Collector:
                                               exchange=sp.exchange))
                     self.__updateSymbolsAPIField(api, sp.exchange, sp.symbol, 1)
                     dbm.commit()
-                    counter += 1
+                    updatedCount += 1
                 except APIError:
                     print('api error',sys.exc_info()[0])
                     print(traceback.format_exc())
@@ -65,13 +66,16 @@ class Collector:
                     try:
                         self.__updateSymbolsAPIField(api, sp.exchange, sp.symbol, -1)
                     except:
+                        apiErrorErrors.append((sp.exchange, sp.symbol))
                         print('API update error', sp.exchange, sp.symbol)
 
         except APILimitReached:
             print('api limit reached for',api)
             pass
 
-        print('Updated', api, 'data for', counter, '/', len(symbols), 'symbols')
+        print('Updated', api, 'data for', updatedCount, 'symbols')
+        print('Got', len(self.apiErrors), 'API errors')
+        print(len(apiErrorErrors), '/', len(self.apiErrors), 'had errors while trying to update API field:', apiErrorErrors)
 
     def __loopCollectByDate(self, api):
         localDBM = DatabaseManager()
@@ -243,7 +247,7 @@ class Collector:
                         except KeyError:
                             print('key error checking if symbol is supported by api', api)
                             raise APIError
-                        if len(symbols) == self.apiManager.apis[api]['remaining']: break
+                        # if len(symbols) == self.apiManager.apis[api]['remaining']: break
 
                     print('symbol list size', len(symbols))
                     self.__loopCollectBySymbol(api, symbols, stype)
