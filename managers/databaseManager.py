@@ -226,9 +226,9 @@ class DatabaseManager(Singleton):
         return self.__purgeUnusableTickers(self.dbc.execute(stmt).fetchall())
 
     ## get raw data from last_updates
-    def getLastUpdatedInfo(self, stype, dt=None, dateModifier=OperatorDict.EQUAL, exchanges=[], symbols=[], assetTypes=[], **kwargs):
+    def getLastUpdatedInfo(self, seriesType, dt=None, dateModifier=OperatorDict.EQUAL, exchanges=[], symbols=[], assetTypes=[], **kwargs):
         stmt = 'SELECT * FROM last_updates lu JOIN symbols s on lu.exchange=s.exchange and lu.symbol=s.symbol WHERE lu.type=? AND lu.api IS NOT NULL'
-        args = [stype.function.replace('TIME_SERIES_','')]
+        args = [seriesType.function.replace('TIME_SERIES_','')]
         if dt:
             dt = asDate(dt)
             stmt += ' AND lu.date' + dateModifier.sqlsymbol + '? '
@@ -254,7 +254,7 @@ class DatabaseManager(Singleton):
         return self.__purgeUnusableTickers(self.dbc.execute(stmt, tuple(args)).fetchall(), **kwargs)
 
     ## used by collector to determine which stocks are more in need of new/updated data
-    def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, stype=None, api=None, googleTopicID:Union[SQLHelpers,Direction]=None, apiSortDirection:Direction=Direction.DESCENDING, apiFilter:Union[APIState, List[APIState]]=APIState.WORKING, exchanges=standardExchanges):
+    def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, seriesType=None, api=None, googleTopicID:Union[SQLHelpers,Direction]=None, apiSortDirection:Direction=Direction.DESCENDING, apiFilter:Union[APIState, List[APIState]]=APIState.WORKING, exchanges=standardExchanges):
         stmt = 'SELECT s.*, u.api, u.date FROM last_updates u join symbols s on u.exchange=s.exchange and u.symbol=s.symbol'
         adds = []
         args = []
@@ -268,9 +268,9 @@ class DatabaseManager(Singleton):
         if symbol:
             adds.append('u.symbol = ?')
             args.append(symbol)
-        if stype:
+        if seriesType:
             adds.append('type = ?')
-            args.append(stype.function.replace('TIME_SERIES_',''))
+            args.append(seriesType.function.replace('TIME_SERIES_',''))
         if type(googleTopicID) == str:
             adds.append('google_topic_id=?')
             args.append(googleTopicID)
@@ -298,14 +298,14 @@ class DatabaseManager(Singleton):
 
     ## get all historical data for ticker and seriesType
     ## sorted date ascending
-    def getStockData(self, exchange: str, symbol: str, type: SeriesType, minDate=None, fillGaps=False, queryLimit=None):
+    def getStockData(self, exchange: str, symbol: str, seriesType: SeriesType, minDate=None, fillGaps=False, queryLimit=None):
         stmt = 'SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ' 
         # return self._queryOrGetCache(stmt, (exchange, symbol, type.name), self._getHistoricalDataCount(), exchange+';'+symbol+';'+type.name)
         if minDate:    stmt += 'AND date > \'' + minDate + '\''
         stmt += ' ORDER BY date'
         if queryLimit: stmt += ' LIMIT ' + str(queryLimit)
 
-        data = self.dbc.execute(stmt, (exchange.upper(), symbol.upper(), type.name)).fetchall()
+        data = self.dbc.execute(stmt, (exchange.upper(), symbol.upper(), seriesType.name)).fetchall()
 
         return data
 
@@ -320,9 +320,9 @@ class DatabaseManager(Singleton):
         return self.dbc.execute(stmt).fetchall()
 
     ## setup helper for iterating through historical data in chronological order, stock by stock
-    def getHistoricalStartEndDates(self, exchange=None, symbol=None, type:SeriesType=SeriesType.DAILY):
+    def getHistoricalStartEndDates(self, exchange=None, symbol=None, seriesType:SeriesType=SeriesType.DAILY):
         stmt = 'SELECT min(date) as start, max(date) as finish, exchange, symbol FROM historical_data WHERE type=? '
-        tuple = (type.name,)
+        tuple = (seriesType.name,)
         if exchange:
             stmt += 'AND exchange=? '
             tuple += (exchange, )
@@ -435,7 +435,7 @@ class DatabaseManager(Singleton):
         return dateGaps
 
     ## returns normalizationColumns, normalizationMaxes, symbolList
-    def getNormalizationData(self, stype, normalizationInfo=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[], assetTypes=[], **kwargs):
+    def getNormalizationData(self, seriesType, normalizationInfo=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[], assetTypes=[], **kwargs):
         DEBUG = True
         normalizationColumns = ['high', 'volume']
 
@@ -447,7 +447,7 @@ class DatabaseManager(Singleton):
             stmt = ('SELECT exchange, symbol' + ', avg({})' * len(normalizationColumns) + ' FROM historical_data WHERE type=? GROUP BY exchange, symbol').format(*normalizationColumns)
             if gconfig.testing.enabled: stmt += ' LIMIT ' + str(gconfig.testing.stockQueryLimit)
 
-            data = self._queryOrGetCache(stmt, (stype.name,), self._getHistoricalDataCount(), 'getsandavg')
+            data = self._queryOrGetCache(stmt, (seriesType.name,), self._getHistoricalDataCount(), 'getsandavg')
 
             for c in normalizationColumns:
                 normalizationLists.append(
@@ -512,7 +512,7 @@ class DatabaseManager(Singleton):
                 stmt3 += ' AND s.sector IS NOT NULL'
 
 
-        tuple = (stype.name,)
+        tuple = (seriesType.name,)
         for i in range(len(normalizationColumns)):
             stmt3 += ' AND h.%s <= ? ' % normalizationColumns[i]
             tuple += (normalizationMaxes[i],)
@@ -712,9 +712,9 @@ class DatabaseManager(Singleton):
         else:
             return -1
 
-    def getTechnicalIndicatorData(self, exchange, symbol, indicator: IndicatorType, dateType: SeriesType=SeriesType.DAILY, date=None, period=None, valuesOnly=True):
+    def getTechnicalIndicatorData(self, exchange, symbol, indicator: IndicatorType, seriesType: SeriesType=SeriesType.DAILY, date=None, period=None, valuesOnly=True):
         stmt = 'SELECT {} FROM historical_calculated_technical_indicator_data WHERE exchange=? and symbol=? and indicator=? AND date_type=? '.format('*' if not valuesOnly else 'value')
-        args = [exchange, symbol, indicator.key, dateType.name]
+        args = [exchange, symbol, indicator.key, seriesType.name]
         if date:
             stmt += ' AND date=? '
             args.append(date)
@@ -732,13 +732,13 @@ class DatabaseManager(Singleton):
         res = self.dbc.execute(stmt).fetchall()
         return [e for e in res]
     
-    def getVectorSimilarity(self, exchange, symbol, dtype: SeriesType=None, dt=None, vclass: OutputClass=None, precedingRange=None, followingRange=None, threshold=None, orderBy='date'):
+    def getVectorSimilarity(self, exchange, symbol, seriesType: SeriesType=None, dt=None, vclass: OutputClass=None, precedingRange=None, followingRange=None, threshold=None, orderBy='date'):
         stmt = 'SELECT * FROM historical_vector_similarity_data WHERE exchange=? and symbol=? '
         args = [exchange, symbol]
 
-        if dtype:
+        if seriesType:
             stmt += 'AND date_type=? '
-            args.append(dtype.name)
+            args.append(seriesType.name)
         if dt:
             stmt += 'AND date=? '
             args.append(asISOFormat(dt))
@@ -810,7 +810,7 @@ class DatabaseManager(Singleton):
             self.dbc.executemany(stmt, tuples)
 
     ## insert data in historical_data table and update the last_updates table with the API used and current date
-    def insertData(self, exchange, symbol, typeName, api, data):
+    def insertData(self, exchange, symbol, seriesType: SeriesType, api, data):
         ## reset caching
         self.historicalDataCount = None
 
@@ -818,12 +818,12 @@ class DatabaseManager(Singleton):
         tuples = []
         for d in data:
             r = data[d]
-            tuples.append((exchange, symbol, typeName, str(d), r.open, r.high, r.low, r.close, r.volume, 0))
+            tuples.append((exchange, symbol, seriesType.name, str(d), r.open, r.high, r.low, r.close, r.volume, 0))
         self.dbc.executemany(stmt, tuples)
 
         ## insert successful, log the updation date and api
         stmt = 'UPDATE last_updates SET date=?, api=? WHERE exchange=? AND symbol=? AND type=?'
-        self.dbc.execute(stmt, (str(date.today()), api, exchange, symbol, typeName))
+        self.dbc.execute(stmt, (str(date.today()), api, exchange, symbol, seriesType.name))
         # print('Data inserted and updated')
 
     ## insert data in historical_data_minute table
@@ -931,9 +931,9 @@ class DatabaseManager(Singleton):
         val = self._convertVIXDataPoint(row) if row else point
         self.dbc.execute(stmt, (*val,))
 
-    def insertVectorSimilarity(self, exchange, symbol, dtype: SeriesType, dt, vclass: OutputClass, precedingRange, followingRange, threshold, val, upsert=True):
+    def insertVectorSimilarity(self, exchange, symbol, seriesType: SeriesType, dt, vclass: OutputClass, precedingRange, followingRange, threshold, val, upsert=True):
         stmt = f'INSERT {"OR IGNORE" if upsert else ""} INTO historical_vector_similarity_data VALUES (?,?,?,?,?,?,?,?,?)'
-        args = [exchange, symbol, dtype.name, asISOFormat(dt), vclass.name, precedingRange, followingRange, threshold]
+        args = [exchange, symbol, seriesType.name, asISOFormat(dt), vclass.name, precedingRange, followingRange, threshold]
         self.dbc.execute(stmt, tuple(args + [val]))
         if upsert:
             stmt = 'UPDATE historical_vector_similarity_data SET value=? WHERE exchange=? AND symbol=? AND date_type=? AND date=? AND vector_class=? AND preceding_range=? AND following_range=? AND change_threshold=?'
@@ -1618,17 +1618,17 @@ class DatabaseManager(Singleton):
                                 break
 
     ## detects order of magnitude jumps in stock price from one day to next, that may be representative of a stock split
-    def detectStockSplits(self, exchange=None, symbol=None, type:SeriesType=SeriesType.DAILY, verbose=0):
+    def detectStockSplits(self, exchange=None, symbol=None, seriesType:SeriesType=SeriesType.DAILY, verbose=0):
         MULTIPLE = exchange or not symbol
         results = self.getSymbols(exchange, symbol)
 
         splitDates = {} if MULTIPLE else []
-        if verbose > 0: print('Detecting {} stock splits'.format(type.name))
+        if verbose > 0: print('Detecting {} stock splits'.format(seriesType.name))
         # for r in tqdm(results):
         for r in results:
             if (r.exchange, r.symbol) in unusableSymbols: continue
 
-            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ORDER BY date', (r.exchange, r.symbol, type.name)).fetchall()
+            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ORDER BY date', (r.exchange, r.symbol, seriesType.name)).fetchall()
 
             for idx, d in enumerate(data):
                 try:
@@ -1655,12 +1655,12 @@ class DatabaseManager(Singleton):
         return splitDates
 
     ## detects stock symbols which have excessive strings of artificial dates within the historical data which may be representative of damage caused by abherrant data prior to proper symbol IPO and later gap filling attempts
-    def detectArtificiallyDamagedSymbols(self, exchange=None, symbol=None, type:SeriesType=SeriesType.DAILY, verbose=0):
+    def detectArtificiallyDamagedSymbols(self, exchange=None, symbol=None, seriesType:SeriesType=SeriesType.DAILY, verbose=0):
         results = self.getSymbols(exchange, symbol)
 
         damagedSymbols = []
         damageThresholdLength = 50
-        if verbose > 0: print('Detecting damage for {} data'.format(type.name))
+        if verbose > 0: print('Detecting damage for {} data'.format(seriesType.name))
         # for r in tqdm(results):
         for r in results:
 
@@ -1668,7 +1668,7 @@ class DatabaseManager(Singleton):
 
             if (r.exchange, r.symbol) in unusableSymbols: continue
 
-            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ORDER BY date', (r.exchange, r.symbol, type.name)).fetchall()
+            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ORDER BY date', (r.exchange, r.symbol, seriesType.name)).fetchall()
 
             artificialStringLength = 0
             for d in data:

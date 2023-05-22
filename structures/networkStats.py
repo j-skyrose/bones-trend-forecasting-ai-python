@@ -29,7 +29,7 @@ class NetworkStats:
     positiveAccuracy = 0
     epochs = 0
 
-    def __init__(self, id, threshold=None, precedingRange=None, followingRange=None, seriesType=None, accuracyType=None):
+    def __init__(self, id, threshold=None, precedingRange=None, followingRange=None, seriesType: SeriesType=None, accuracyType=None):
         self.id = id
         self.changeThreshold = threshold
         self.precedingRange = precedingRange

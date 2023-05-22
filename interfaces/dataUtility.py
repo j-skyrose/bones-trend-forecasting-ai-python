@@ -148,7 +148,7 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
             return {
                 'exchange': ticker.exchange,
                 'symbol': ticker.symbol,
-                'dtype': dm.seriesType,
+                'seriesType': dm.seriesType,
                 'dt': getDTArg(indx) if indx is not None else None,
                 'vclass': OutputClass.NEGATIVE,
                 **props
@@ -254,11 +254,11 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
     if parallel: cpuCoreUsage[pid] = 0 ## unlock index for progress bar position
 
 
-def _multicore_updateTechnicalIndicatorData(ticker, stype: SeriesType, cacheIndicators, indicatorConfig):
+def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cacheIndicators, indicatorConfig):
     dbm = DatabaseManager()
     latestIndicators = dbm.dbc.execute('''
         SELECT MAX(date) AS date, exchange, symbol, indicator, period, value FROM historical_calculated_technical_indicator_data WHERE date_type=? AND exchange=? AND symbol=? group by exchange, symbol, indicator, period
-    ''', (stype.name, ticker.exchange, ticker.symbol)).fetchall()
+    ''', (seriesType.name, ticker.exchange, ticker.symbol)).fetchall()
     def getLatestIndicator(i: IndicatorType, period):
         for li in latestIndicators:
             if li.indicator == i.key and li.period == period:
@@ -351,7 +351,7 @@ def _multicore_updateTechnicalIndicatorData(ticker, stype: SeriesType, cacheIndi
                 else:
                     val = ','.join([str(v) for v in val])
 
-            tpls.append((ticker.exchange, ticker.symbol, stype.name, stkdata[-(indx+1)].date, i.key, iperiod, val))
+            tpls.append((ticker.exchange, ticker.symbol, seriesType.name, stkdata[-(indx+1)].date, i.key, iperiod, val))
 
         tpls.reverse()
         returntpls.extend(tpls)

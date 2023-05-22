@@ -44,17 +44,17 @@ class Collector:
     def __updateSymbolsAPIField(self, api, exchange, symbol, val):
         dbm.dbc.execute('UPDATE symbols SET api_'+api+'=? WHERE exchange=? AND symbol=?',(val, exchange, symbol))
 
-    def __loopCollectBySymbol(self, api, symbols, type):
+    def __loopCollectBySymbol(self, api, symbols, seriesType):
         updatedCount = 0
         apiErrorErrors = []
         try:
             for sp in symbols:
                 try:
                     dbm.insertData(
-                        sp.exchange, sp.symbol, type.name, api, 
+                        sp.exchange, sp.symbol, seriesType, api, 
                         self.apiManager.query(api, sp.symbol, 
                                               ## av made DAILY a premium API, but DAILY_ADJUSTED provides same info and more
-                                              SeriesType.DAILY_ADJUSTED if api == 'alphavantage' and type == SeriesType.DAILY else type, 
+                                              SeriesType.DAILY_ADJUSTED if api == 'alphavantage' and seriesType == SeriesType.DAILY else seriesType, 
                                               exchange=sp.exchange))
                     self.__updateSymbolsAPIField(api, sp.exchange, sp.symbol, 1)
                     dbm.commit()
@@ -122,7 +122,7 @@ class Collector:
                     continue
 
                 # break
-                localDBM.insertData(exchangeQuery[0].exchange, s, SeriesType.DAILY.name, api, batchBySymbol[s])
+                localDBM.insertData(exchangeQuery[0].exchange, s, SeriesType.DAILY, api, batchBySymbol[s])
                 localDBM.commit()
                 counter += 1
             # else:
@@ -201,14 +201,14 @@ class Collector:
         self.activeThreads -= 1
         print(api,'collector complete','\nThreads remaining',self.activeThreads)
 
-    def startAPICollection(self, api, stype: SeriesType=SeriesType.DAILY):
+    def startAPICollection(self, api, seriesType: SeriesType=SeriesType.DAILY):
         typeAPIs = ['alphavantage'] #self.apiManager.getAPIList(sort=True)
         nonTypeAPIs = ['polygon']
 
         try:
 
             if api in ['polygon']:
-                if stype == SeriesType.MINUTE:
+                if seriesType == SeriesType.MINUTE:
                     tickerlist = dbm.getLatestMinuteDataRows(api)
 
                     debugc = 0
@@ -226,7 +226,7 @@ class Collector:
                 
             else:
                 ## gather symbols for this collection run
-                lastUpdatedList = dbm.getLastUpdatedCollectorInfo(stype=stype, api=api, googleTopicID=Direction.DESCENDING).fetchall()
+                lastUpdatedList = dbm.getLastUpdatedCollectorInfo(seriesType=seriesType, api=api, googleTopicID=Direction.DESCENDING).fetchall()
                 if DEBUG: print('lastUpdatedList length',len(lastUpdatedList))
 
                 if api == 'alphavantage':
@@ -250,7 +250,7 @@ class Collector:
                         # if len(symbols) == self.apiManager.apis[api]['remaining']: break
 
                     print('symbol list size', len(symbols))
-                    self.__loopCollectBySymbol(api, symbols, stype)
+                    self.__loopCollectBySymbol(api, symbols, seriesType)
 
                 elif api == 'neo':
                     for r in lastUpdatedList:
@@ -286,16 +286,16 @@ class Collector:
             for r in results:
                 resDict = {**resDict, **r}
 
-            dbm.insertData('NEO', symbol, SeriesType.DAILY.name, api, resDict)            
+            dbm.insertData('NEO', symbol, SeriesType.DAILY, api, resDict)            
 
     def startAPICollection_exploratoryAlphavantageAPIUpdates(self):
         api = 'alphavantage'
-        stype=SeriesType.DAILY
+        seriesType=SeriesType.DAILY
         tsePrioritySymbols = tseNoCommissionSymbols
     
         try:
             ## gather symbols for this collection run
-            lastUpdatedList: List = dbm.getLastUpdatedCollectorInfo(stype=stype, api=api, apiSortDirection=Direction.ASCENDING, apiFilter=[APIState.UNKNOWN, APIState.WORKING], exchanges=['TSX']).fetchall()
+            lastUpdatedList: List = dbm.getLastUpdatedCollectorInfo(seriesType=seriesType, api=api, apiSortDirection=Direction.ASCENDING, apiFilter=[APIState.UNKNOWN, APIState.WORKING], exchanges=['TSX']).fetchall()
             if DEBUG: print('lastUpdatedList length',len(lastUpdatedList))
 
             priorityRows = []
@@ -319,7 +319,7 @@ class Collector:
                 # if len(symbols) > 500: break
 
             print('symbol list size', len(symbols))
-            self.__loopCollectBySymbol(api, symbols, stype)
+            self.__loopCollectBySymbol(api, symbols, seriesType)
 
         except (KeyboardInterrupt, APIError):
             print('keyboard interrupt')

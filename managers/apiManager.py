@@ -65,7 +65,7 @@ class APIManager(Singleton):
             return sorted(self.apis.keys(), key=lambda a: self.apis[a]['priority'], reverse=True)
         return self.apis.keys()
 
-    def _checkLimits(self, a, stype=None, qdate=None, updateOnly=False):
+    def _checkLimits(self, a, seriesType=None, qdate=None, updateOnly=False):
         currentVal = date.today()
         sameDate = False
         if a.limitType == 'NONE':
