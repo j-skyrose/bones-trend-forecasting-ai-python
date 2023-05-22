@@ -9,7 +9,7 @@ sys.path.append(path)
 
 from globalConfig import config as gconfig
 
-import tqdm, math, gc, time
+import tqdm, math, gc, time, numpy
 from numpy.lib.function_base import median
 from tensorflow.keras.optimizers import Adam
 from datetime import date, datetime, timedelta
@@ -97,31 +97,56 @@ class Trainer:
         else:
             explicitValidation = self.dm.explicitValidationSet
             self.instance.network.useAllSets = True
+            usePatienceGradient = containsAllKeys(kwargs, 'initialPatience', 'finalPatience', throwSomeError=ValueError('Missing some patience gradience arguments'))
+
+            ## display runtime stats and estimated completion time (similar to TQDM)
+            iterationTimes = []
+            maxIterations = self.dm.getNumberOfWindowIterations()
+            def printCurrentStatus(s):
+                print('Slice', s+1, '/', maxIterations, end='')
+                if len(iterationTimes) > 0:
+                    avgtime = numpy.average(iterationTimes)
+                    print(' [{}<{}, {}s/it]'.format(
+                        ## time took
+                        '{0:02.0f}:{1:02.0f}'.format(*divmod(sum(iterationTimes), 60)),
+                        ## time remaining
+                        '{0:02.0f}:{1:02.0f}'.format(*divmod((maxIterations - s) * avgtime, 60)),
+                        ## rate
+                        '{:.2f}'.format(avgtime)
+                    ))
+                else: print()
 
             print('Iterating through set slices')
-            maxIterations = self.dm.getNumberOfWindowIterations()
-            usePatienceGradient = containsAllKeys(kwargs, 'initialPatience', 'finalPatience', throwSomeError=ValueError('Missing some patience gradience arguments'))
             for s in range(maxIterations):
+                startt = time.time()
+
                 if usePatienceGradient:
                     kwargs['patience'] = kwargs['initialPatience'] + int(s * (kwargs['finalPatience'] - kwargs['initialPatience']) / (maxIterations-1))
                     print('Patience:', kwargs['patience'])
 
-                print('Slice', s+1, '/', maxIterations)
+                printCurrentStatus(s)
                 self.instance.updateSets(**self._getSetKWParams(slice=s, omitValidation=True if explicitValidation and s > 0 else False))
                 self.instance.train(**kwargs)
                 gc.collect()
+                iterationTimes.append(time.time() - startt)
             
 
             if explicitValidation:
                 ## validation set never changes, so no loop and re-build required
                 self.instance.evaluate(reEvaluate=True)
             else:
+                iterationTimes = []
                 ## re-evaluating
                 for s in range(maxIterations):
-                    print('Slice', s+1, '/', maxIterations)
+                    startt = time.time()
+
+                    printCurrentStatus(s)
                     self.instance.updateSets(**self._getSetKWParams(slice=s, validationDataOnly=True))
                     self.instance.evaluate(reEvaluate=True)
                     gc.collect()
+
+                    iterationTimes.append(time.time() - startt)
+
             self.instance.network.printAccuracyStats()
 
     def saveNetwork(self, withSets=False):
