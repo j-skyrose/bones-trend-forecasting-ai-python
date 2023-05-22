@@ -333,7 +333,7 @@ class DatabaseManager(Singleton):
         return self.dbc.execute(stmt, tuple).fetchall()
 
     ## more of a helper function to fillHistoricalGaps
-    def getDailyHistoricalGaps(self, exchange=None, symbol=None):
+    def getDailyHistoricalGaps(self, exchange=None, symbol=None, autoUpdateDamagedSymbols=True):
         ALL = not (exchange and symbol)
         DEBUG = False
 
@@ -343,66 +343,96 @@ class DatabaseManager(Singleton):
         dateGaps = {} if ALL else []
         print('Determining DAILY historical gaps')
         damagedTickers = set()
-        for r in results if DEBUG else tqdm(results):
-            if (r.exchange, r.symbol) in unusableSymbols: continue
+        for rerun in range(2):
+            for r in results if DEBUG else tqdm(results):
+                if (r.exchange, r.symbol) in unusableSymbols or (r.exchange, r.symbol) in damagedTickers: continue
 
-            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ORDER BY date', (r.exchange, r.symbol, SeriesType.DAILY.name)).fetchall()
-            startDate = date.fromisoformat(r.start)
-            endDate = date.fromisoformat(r.finish)
-            if DEBUG: 
-                print('###############################################')
-                print(r.exchange, r.symbol)
-                print(startDate, ' -> ', endDate)
+                data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ORDER BY date', (r.exchange, r.symbol, SeriesType.DAILY.name)).fetchall()
+                startDate = date.fromisoformat(r.start)
+                endDate = date.fromisoformat(r.finish)
+                if DEBUG: 
+                    print('###############################################')
+                    print(r.exchange, r.symbol)
+                    print(startDate, ' -> ', endDate)
 
-            dindex = 0
-            cyear = 0
-            holidays = []
-            consecgaps = 0
-            for d in range(int((endDate - startDate).total_seconds() / (60 * 60 * 24))):
-                cdate = startDate + timedelta(days=d)
-                if DEBUG: print('Checking', cdate)
-                if cdate.weekday() > 4: # is Saturday (5) or Sunday (6)
-                    if DEBUG: print('is weekend')
-                    continue
+                dindex = 0
+                cyear = 0
+                holidays = []
+                consecgaps = 0
+                for d in range(int((endDate - startDate).total_seconds() / (60 * 60 * 24))):
+                    cdate = startDate + timedelta(days=d)
+                    if DEBUG: print('Checking', cdate)
+                    if cdate.weekday() > 4: # is Saturday (5) or Sunday (6)
+                        if DEBUG: print('is weekend')
+                        continue
 
-                ## holiday checker
-                if cyear != cdate.year:
-                    holidays = MarketDayManager.getMarketHolidays(cdate.year, r.exchange)
-                    cyear = cdate.year
-                    if DEBUG: print('holidays for', cyear, holidays)
-                if cdate in holidays:
-                    if DEBUG: print('is holiday')
-                    continue
+                    ## holiday checker
+                    if cyear != cdate.year:
+                        holidays = MarketDayManager.getMarketHolidays(cdate.year, r.exchange)
+                        cyear = cdate.year
+                        if DEBUG: print('holidays for', cyear, holidays)
+                    if cdate in holidays:
+                        if DEBUG: print('is holiday')
+                        continue
 
-                ## actual gap checker
-                if cdate != date.fromisoformat(data[dindex].date):
-                    if DEBUG: 
-                        ddt = date.fromisoformat(data[dindex].date)
-                        print('is gap')
-                    if ALL:
-                        try:
-                            dateGaps[cdate].append((r.exchange, r.symbol))
-                        except KeyError:
-                            dateGaps[cdate] = [(r.exchange, r.symbol)]
+                    ## actual gap checker
+                    if cdate != date.fromisoformat(data[dindex].date):
+                        if DEBUG: 
+                            ddt = date.fromisoformat(data[dindex].date)
+                            print('is gap')
+                        if ALL:
+                            try:
+                                dateGaps[cdate].append((r.exchange, r.symbol))
+                            except KeyError:
+                                dateGaps[cdate] = [(r.exchange, r.symbol)]
+                        else:
+                            dateGaps.append(cdate)
+                        consecgaps += 1
+
+                        if consecgaps > 75: 
+                            damagedTickers.add((r.exchange, r.symbol))
                     else:
-                        dateGaps.append(cdate)
-                    consecgaps += 1
+                        dindex += 1
+                        consecgaps = 0
 
-                    if consecgaps > 75: 
-                        # print('consecutive gaps too big for', r.exchange, r.symbol)
-                        # raise Exception('consecutive gaps too big for  (\'' + r.exchange + '\',\'' + r.symbol + '\')')
-                        damagedTickers.add((r.exchange, r.symbol))
+            if len(damagedTickers) == 0:
+                break
+            else:
+                print(buildCommaSeparatedTickerPairString(damagedTickers))
+                if autoUpdateDamagedSymbols and rerun == 0:
+                    print('Consecutive gaps too big for some symbols')
+
+                    ## update damagedSymbols variable, written directly to the constants/values file, then re-determine gaps omitting these tickers
+                    newfile = ''
+                    valuesFile = os.path.join(path, 'constants', 'values') + '.py'
+                    with open(valuesFile, 'r') as f:
+                        autoWrittenLineIsNext=False
+                        for line in f:
+                            if line.startswith('## AUTO-WRITTEN - DO NOT REMOVE OR CHANGE THIS OR NEXT TWO LINES'):
+                                autoWrittenLineIsNext = True
+                            elif autoWrittenLineIsNext:
+                                ## parse existing tickers, ensure no duplicates when appending damagedTickers
+                                line = line[:-1].replace(',(','')
+                                tickers = line.split(')')
+                                for tindx in range(len(tickers)):
+                                    tickers[tindx] = (*tickers[tindx].replace('\'','').split(','),)
+                                newDamagedTickers = set()
+                                for t in tickers:
+                                    newDamagedTickers.add(t)
+                                for t in damagedTickers:
+                                    newDamagedTickers.add(t)
+
+                                line = buildCommaSeparatedTickerPairString(newDamagedTickers) + '\n'
+                                autoWrittenLineIsNext = False
+                            newfile += line
+                    with open(valuesFile, 'w') as f:
+                        f.write(newfile)
+
+                    ## reset gaps so next iteration will re-build, excluding damaged symbols
+                    dateGaps = {} if ALL else []
+
                 else:
-                    dindex += 1
-                    consecgaps = 0
-
-            #     if dindex > 30: break
-            # break
-
-        if len(damagedTickers) > 0:
-            print(buildCommaSeparatedTickerPairString(damagedTickers))
-            raise Exception('consecutive gaps too big for some symbols')
-
+                    raise Exception('consecutive gaps too big for some symbols')
 
         return dateGaps
 
@@ -1539,7 +1569,7 @@ class DatabaseManager(Singleton):
 
     ## generally only used after large data acquisitions/dumps
     ## fill any data gaps (generally daily) with artificial data using last real trading day
-    def fillHistoricalGaps(self, exchange=None, symbol=None, type=SeriesType.DAILY, dryrun=False):
+    def fillHistoricalGaps(self, exchange=None, symbol=None, type=SeriesType.DAILY, dryrun=False, autoUpdateDamagedSymbols=True):
         ## reset caching
         self.historicalDataCount = None
 
@@ -1548,7 +1578,7 @@ class DatabaseManager(Singleton):
         tuples = []
         gaps = []
         if type == SeriesType.DAILY:
-            gaps = self.getDailyHistoricalGaps(exchange, symbol)
+            gaps = self.getDailyHistoricalGaps(exchange, symbol, autoUpdateDamagedSymbols=autoUpdateDamagedSymbols)
 
         print('Filling historical gaps for', type)
         for g in tqdm(gaps):
