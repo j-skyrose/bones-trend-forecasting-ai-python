@@ -31,6 +31,11 @@ from globalConfig import config as gconfig
 
 ivf: InputVectorFactory = InputVectorFactory()
 
+POSITIVE_THRESHOLD = 0.5
+JUST_BELOW_POSITIVE_THRESHOLD = 0.45
+def thresholdRound(val):
+    return 1 if val > POSITIVE_THRESHOLD else 0
+
 class Predictor(Singleton):
     vixm: VIXManager = VIXManager()
     dbc: DatabaseManager = DatabaseManager()
@@ -245,14 +250,14 @@ class Predictor(Singleton):
         ## (unpack and) massage prediction outputs
         if singleSymbol and len(anchorDates) < 2:
             p = predictResults[0][0]
-            predictResults = numpy.round(p) if gconfig.predictor.ifBinaryUseRaw else p
+            predictResults = thresholdRound(p) if gconfig.predictor.ifBinaryUseRaw else p
         else:
             lstlength = len(predictionTickers) if len(anchorDates) < 2 else len(anchorDates)
             loopHandle = tqdm.trange(lstlength, desc='Unpacking...') if verbose > 0 else range(lstlength)
             for ti in loopHandle:
                 p = predictResults[ti][0] #.numpy()
                 t = predictionTickers[ti]
-                val = numpy.round(p) if gconfig.predictor.ifBinaryUseRaw else p
+                val = thresholdRound(p) if gconfig.predictor.ifBinaryUseRaw else p
                 if singleSymbol:
                     predictionList.append((anchorDates[ti], val))
                 elif val == 1:
@@ -328,19 +333,31 @@ class Predictor(Singleton):
                     except (InternalError, KeyboardInterrupt):
                         pass
 
-                    tickersMeetingThreshold = len(weightedAccuracies)
+                    ## evaluate if tickers still meet threshold
+                    tickersMeetingThreshold = 0
+                    tickersJustBelowThreshold = 0
+                    for v in weightedAccuracies.values():
+                        reducedv = weightedAccuracyLambda(v)
+                        if reducedv > POSITIVE_THRESHOLD:
+                            tickersMeetingThreshold += 1
+                        elif reducedv > JUST_BELOW_POSITIVE_THRESHOLD:
+                            tickersJustBelowThreshold += 1
 
-                    if gconfig.testing.predictor:
+                    if verbose > 1:
                         print('wt_testing_getSymbolsTime', self.wt_testing_getSymbolsTime, 'seconds')
                         print('wt_testing_getStockAccuracyTime', self.wt_testing_getStockAccuracyTime, 'seconds::')
 
                     for k, v in sorted(weightedAccuracies.items(), key=lambda x: weightedAccuracyLambda(x[1])):
-                        print(k, ':', weightedAccuracyLambda(v), '%  <-', v)
+                        reducedv = weightedAccuracyLambda(v)
+                        if (tickersMeetingThreshold > 0 and reducedv > 0.5) or (tickersMeetingThreshold == 0 and reducedv > JUST_BELOW_POSITIVE_THRESHOLD) or verbose > 1:
+                            print(k, ':', reducedv, '%  <-', v)
                     print('Factors: predictions, network, sector, symbol, precrange')
 
 
                 print(predictionExceptionCounter, '/', len(tickers), 'had exceptions')
-                print(tickersMeetingThreshold, '/', len(tickers) - predictionExceptionCounter, 'predicted to exceed threshold from', dt.isoformat(), 'to', MarketDayManager.advance(MarketDayManager.getLastMarketDay(dt), nn.stats.followingRange).isoformat())
+                print(tickersMeetingThreshold, '/', len(tickers) - predictionExceptionCounter, 'predicted to exceed threshold from EOD', MarketDayManager.getPreviousMarketDay(dt.isoformat()), 'to', MarketDayManager.advance(MarketDayManager.getLastMarketDay(dt), nn.stats.followingRange).isoformat())
+                if tickersMeetingThreshold == 0:
+                    print(tickersJustBelowThreshold, '/', len(tickers) - predictionExceptionCounter, 'are just below the threshold')
 
         return predictResults if singleSymbol else weightedAccuracies
 
