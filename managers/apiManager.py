@@ -112,7 +112,7 @@ class APIManager(Singleton):
 
         return recdotobj(self.__executeAPIRequest(apiHandle, lambda: requestFunc(apiHandle), verbose))
 
-    def query(self, api, symbol=None, stype=None, qdate=None, exchange=None, fromDate=None, toDate=None, avCompact=False, verbose=0):
+    def query(self, api, symbol=None, seriesType=None, qdate=None, exchange=None, fromDate=None, toDate=None, avCompact=False, verbose=0):
         ## polygon
         if qdate:
             queryArgs = (qdate, verbose)
@@ -121,11 +121,11 @@ class APIManager(Singleton):
             queryArgs = (symbol, fromDate, toDate, verbose)
         ## alphavantage
         else:
-            queryArgs = (stype, symbol, exchange, avCompact)
+            queryArgs = (seriesType, symbol, exchange, avCompact)
         return self._executeRequestWrapper(
             api,
             lambda apih: apih.api.query(*queryArgs),
-            stype,
+            seriesType,
             qdate,
             verbose
         )

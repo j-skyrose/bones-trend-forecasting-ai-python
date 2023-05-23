@@ -361,13 +361,13 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
     return returntpls
 
 ## generates or updates cached technical indicator data; should be run after every stock data dump
-def technicalIndicatorDataCalculationAndInsertion(exchange=[], stype: SeriesType=SeriesType.DAILY, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, doNotCacheADX=True):
+def technicalIndicatorDataCalculationAndInsertion(exchange=[], seriesType: SeriesType=SeriesType.DAILY, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, doNotCacheADX=True):
     exchange = asList(exchange)
     tickers = dbm.dbc.execute('''
         SELECT MAX(date) AS date, exchange, symbol FROM historical_data WHERE type=? {} group by exchange, symbol
     '''.format(
             ('AND exchange IN (\'{}\')'.format('\',\''.join(exchange))) if len(exchange)>0 else ''
-        ), (stype.name,)).fetchall()
+        ), (seriesType.name,)).fetchall()
     print('Got {} tickers'.format(len(tickers)))
 
     purgedCount = len(tickers)
@@ -382,7 +382,7 @@ def technicalIndicatorDataCalculationAndInsertion(exchange=[], stype: SeriesType
     if doNotCacheADX: cacheIndicators.remove(IndicatorType.ADX)
 
     inserttpls = []
-    for tpls in tqdmProcessMapHandlerWrapper(partial(_multicore_updateTechnicalIndicatorData, stype=stype, cacheIndicators=cacheIndicators, indicatorConfig=indicatorConfig), tickers, verbose=1, desc='Updating techInd data for tickers'):
+    for tpls in tqdmProcessMapHandlerWrapper(partial(_multicore_updateTechnicalIndicatorData, seriesType=seriesType, cacheIndicators=cacheIndicators, indicatorConfig=indicatorConfig), tickers, verbose=1, desc='Updating techInd data for tickers'):
         if len(tpls) != 0:
             rowsadded += len(tpls)
             tickersupdated += 1

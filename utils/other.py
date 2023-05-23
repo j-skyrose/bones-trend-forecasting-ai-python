@@ -159,7 +159,7 @@ def parseCommandLineOptions():
     def massageVariable(k: str, v: str):
         if v.lower() in ['true', 'false']:
             v = v.lower() == 'true'
-        elif k.lower() == 'stype':
+        elif k.lower() == 'seriestype':
             v = SeriesType[v.upper()]
         elif k.lower() == 'interesttype':
             v = InterestType[v.upper()]
