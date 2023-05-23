@@ -25,5 +25,5 @@ class DeviationFromBasedEarlyStopping(keras.callbacks.Callback):
             print('No logs given, breaking...')
             self.model.stop_training = True
         
-        if self.__getattribute__('key') and logs[self.key] != self.base:
+        if hasattr(self, 'key') and logs[self.key] != self.base:
             self.model.stop_training = True

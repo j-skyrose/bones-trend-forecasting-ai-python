@@ -68,7 +68,7 @@ class Predictor(Singleton):
                     needNewDataManager = True
                     break
             
-        if needNewDataManager or not self.dm:
+        if needNewDataManager or not hasattr(self, 'dm'):
             self.dm: DataManager = DataManager.forPredictor(nn, **kwargs)
 
         self.exchanges = exchanges
