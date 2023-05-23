@@ -111,6 +111,9 @@ config = recdotdict({
             'bottom': 0.03,
             'method': ReductionMethod.FIBONACCI,
             'additionalParameter': Direction.DESCENDING,
+            # 'method': ReductionMethod.RANDOM,
+            # 'additionalParameter': 0.05,
+            # 'method': ReductionMethod.ALL,
             'classType': OutputClass.NEGATIVE
         }
     },

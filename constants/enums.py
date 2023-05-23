@@ -241,6 +241,7 @@ class ReductionMethod(Enum):
     NONE = 'NONE'
     FIBONACCI = 'FIBONACCI'
     RANDOM = 'RANDOM'
+    ALL = 'ALL'
 
 if __name__ == '__main__':
     print(AccuracyType.OVERALL.name, AccuracyType.OVERALL.value, AccuracyType.OVERALL.statsName)

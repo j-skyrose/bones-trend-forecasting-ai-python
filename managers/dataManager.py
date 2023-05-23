@@ -580,6 +580,7 @@ class DataManager():
         outputClassCounts = { o: 0 for o in OutputClass }
 
         instanceReductionMissingCount = 0
+        totalInstanceReduction = 0
         h: StockDataHandler
         for h in tqdmLoopHandleWrapper(stockDataHandlers, verbose, desc='Initializing stock instances'):
             availableIndexes = { o: [] for o in OutputClass }
@@ -597,12 +598,12 @@ class DataManager():
 
             if collectOutputClassesOnly: return outputClassCounts
 
-            if self.config.sets.instanceReduction.enabled:
+            if self.config.sets.instanceReduction.enabled and self.config.sets.instanceReduction.method != ReductionMethod.NONE:
                 def printInstanceCounts(before=True): print(f"{'Before' if before else 'After'} reduction| Total", *[o.name for o in OutputClass], sum([len(availableIndexes[o]) for o in OutputClass]), *[len(availableIndexes[o]) for o in OutputClass])
                 if verbose>=2: printInstanceCounts()
                 oupclass = self.config.sets.instanceReduction.classType
 
-                similarities = dbm.getVectorSimilarity(*h.getTickerTuple(), dtype=self.seriesType, vclass=oupclass, precedingRange=self.precedingRange, followingRange=self.followingRange, threshold=self.threshold, orderBy='value')
+                similarities = dbm.getVectorSimilarity(*h.getTickerTuple(), seriesType=self.seriesType, vclass=oupclass, precedingRange=self.precedingRange, followingRange=self.followingRange, threshold=self.threshold, orderBy='value')
 
                 if len(similarities) == 0: 
                     if verbose>=1: print('Similarities not present for', h.getTickerTuple())
@@ -622,6 +623,16 @@ class DataManager():
                         fibsequence = generateFibonacciSequence(len(middle))
                         removedDates = [vs.date for indx,vs in enumerate(middle) if indx not in fibsequence]
 
+                    elif self.config.sets.instanceReduction.method == ReductionMethod.RANDOM:
+                        random.shuffle(middle)
+                        selected = random.sample(middle, int(len(middle)*self.config.sets.instanceReduction.additionalParameter))
+                        removedDates = [vs.date for vs in middle if vs not in selected]
+
+                    elif self.config.sets.instanceReduction.method == ReductionMethod.ALL:
+                        removedDates = [vs.date for vs in middle]
+
+                    totalInstanceReduction += len(removedDates)
+
                     ## remove indexes from available selections
                     availableIndexes[oupclass][:] = [i for i in availableIndexes[oupclass] if h.data[i].date not in removedDates]
                     
@@ -634,7 +645,7 @@ class DataManager():
                         h, sindex, oupclass
                     )
         if instanceReductionMissingCount and verbose>=1: print(f'{instanceReductionMissingCount} tickers missing similarities data')
-
+        if verbose>=1: print(f'{totalInstanceReduction} total instances removed')
         
     def initializeFinancialDataHandlers(self, symbolList, explicitValidationSymbolList=[], refresh=False, verbose=None):
         verbose = shortc(verbose, self.verbose)
