@@ -144,6 +144,14 @@ class SQLHelpers(Enum):
     NULL = 'NULL'
     NOTNULL = 'NOT NULL'
 
+class SQLInsertHelpers(Enum):
+    NONE = ''
+    ABORT = ' OR ABORT '
+    FAIL = ' OR FAIL '
+    IGNORE = ' OR IGNORE '
+    REPLACE = ' OR REPLACE '
+    ROLLBACK = ' OR ROLLBACK '
+
 class OperatorDict(Enum):
     def __init__(self, a, b, c=None, d=None):
         self.function = a

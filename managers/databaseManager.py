@@ -70,6 +70,9 @@ class DatabaseManager(Singleton):
     def commitBatch(self): self.dbc.execute('COMMIT')
     def rollbackBatch(self): self.dbc.execute('ROLLBACK')
 
+    def _resetCachedHistoricalDataCount(self):
+        self.historicalDataCount = None
+
     def _getHistoricalDataCount(self):
         if not self.historicalDataCount:
             self.historicalDataCount = self.dbc.execute('SELECT MAX(rowid) FROM historical_data').fetchone()['MAX(rowid)']
@@ -331,108 +334,6 @@ class DatabaseManager(Singleton):
             tuple += (symbol, )
         stmt += 'GROUP BY exchange, symbol'
         return self.dbc.execute(stmt, tuple).fetchall()
-
-    ## more of a helper function to fillHistoricalGaps
-    def getDailyHistoricalGaps(self, exchange=None, symbol=None, autoUpdateDamagedSymbols=True, verbose=1):
-        ALL = not (exchange and symbol)
-
-        results = self.getHistoricalStartEndDates(exchange, symbol)
-        if verbose>=2: print('result count', len(results))
-
-        dateGaps = {} if ALL else []
-        damagedTickers = set()
-        for rerun in range(2):
-            for r in tqdmLoopHandleWrapper(results, verbose%2, desc='Determining DAILY historical gaps'):
-                if (r.exchange, r.symbol) in unusableSymbols or (r.exchange, r.symbol) in damagedTickers: continue
-
-                data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ORDER BY date', (r.exchange, r.symbol, SeriesType.DAILY.name)).fetchall()
-                startDate = date.fromisoformat(r.start)
-                endDate = date.fromisoformat(r.finish)
-                if verbose>=2: 
-                    print('###############################################')
-                    print(r.exchange, r.symbol)
-                    print(startDate, ' -> ', endDate)
-
-                dindex = 0
-                cyear = 0
-                holidays = []
-                consecgaps = 0
-                for d in range(int((endDate - startDate).total_seconds() / (60 * 60 * 24))):
-                    cdate = startDate + timedelta(days=d)
-                    if verbose>=2: print('Checking', cdate)
-                    if cdate.weekday() > 4: # is Saturday (5) or Sunday (6)
-                        if verbose>=2: print('is weekend')
-                        continue
-
-                    ## holiday checker
-                    if cyear != cdate.year:
-                        holidays = MarketDayManager.getMarketHolidays(cdate.year, r.exchange)
-                        cyear = cdate.year
-                        if verbose>=2: print('holidays for', cyear, holidays)
-                    if cdate in holidays:
-                        if verbose>=2: print('is holiday')
-                        continue
-
-                    ## actual gap checker
-                    if cdate != date.fromisoformat(data[dindex].date):
-                        if verbose>=2: 
-                            ddt = date.fromisoformat(data[dindex].date)
-                            print('is gap')
-                        if ALL:
-                            try:
-                                dateGaps[cdate].append((r.exchange, r.symbol))
-                            except KeyError:
-                                dateGaps[cdate] = [(r.exchange, r.symbol)]
-                        else:
-                            dateGaps.append(cdate)
-                        consecgaps += 1
-
-                        if consecgaps > 75: 
-                            damagedTickers.add((r.exchange, r.symbol))
-                    else:
-                        dindex += 1
-                        consecgaps = 0
-
-            if len(damagedTickers) == 0:
-                break
-            else:
-                if verbose>=1: print(buildCommaSeparatedTickerPairString(damagedTickers))
-                if autoUpdateDamagedSymbols and rerun == 0:
-                    if verbose>=1: print('Consecutive gaps too big for some symbols')
-
-                    ## update damagedSymbols variable, written directly to the constants/values file, then re-determine gaps omitting these tickers
-                    newfile = ''
-                    valuesFile = os.path.join(path, 'constants', 'values') + '.py'
-                    with open(valuesFile, 'r') as f:
-                        autoWrittenLineIsNext=False
-                        for line in f:
-                            if line.startswith('## AUTO-WRITTEN - DO NOT REMOVE OR CHANGE THIS OR NEXT TWO LINES'):
-                                autoWrittenLineIsNext = True
-                            elif autoWrittenLineIsNext:
-                                ## parse existing tickers, ensure no duplicates when appending damagedTickers
-                                line = line[:-1].replace(',(','')
-                                tickers = line.split(')')
-                                for tindx in range(len(tickers)):
-                                    tickers[tindx] = (*tickers[tindx].replace('\'','').split(','),)
-                                newDamagedTickers = set()
-                                for t in tickers:
-                                    newDamagedTickers.add(t)
-                                for t in damagedTickers:
-                                    newDamagedTickers.add(t)
-
-                                line = buildCommaSeparatedTickerPairString(newDamagedTickers) + '\n'
-                                autoWrittenLineIsNext = False
-                            newfile += line
-                    with open(valuesFile, 'w') as f:
-                        f.write(newfile)
-
-                    ## reset gaps so next iteration will re-build, excluding damaged symbols
-                    dateGaps = {} if ALL else []
-
-                else:
-                    raise Exception('consecutive gaps too big for some symbols')
-
-        return dateGaps
 
     ## returns normalizationColumns, normalizationMaxes, symbolList
     def getNormalizationData(self, seriesType, normalizationInfo=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[], assetTypes=[], **kwargs):
@@ -809,17 +710,18 @@ class DatabaseManager(Singleton):
 
             self.dbc.executemany(stmt, tuples)
 
+    def insertHistoricalData(self, tuples, modifier: SQLInsertHelpers=SQLInsertHelpers.NONE):
+        '''exchange, symbol, seriesType enum, ISO date string, open, high, low, close, volume, artifical bool'''
+
+        self._resetCachedHistoricalDataCount()
+
+        stmt = f'INSERT {modifier.value} INTO historical_data VALUES (?,?,?,?,?,?,?,?,?,?)'
+        self.dbc.executemany(stmt, tuples)
+
     ## insert data in historical_data table and update the last_updates table with the API used and current date
     def insertData(self, exchange, symbol, seriesType: SeriesType, api, data):
-        ## reset caching
-        self.historicalDataCount = None
-
-        stmt = 'INSERT OR REPLACE INTO historical_data VALUES (?,?,?,?,?,?,?,?,?,?)'
-        tuples = []
-        for d in data:
-            r = data[d]
-            tuples.append((exchange, symbol, seriesType.name, str(d), r.open, r.high, r.low, r.close, r.volume, 0))
-        self.dbc.executemany(stmt, tuples)
+        tuples = [(exchange, symbol, seriesType.name, str(d), r.open, r.high, r.low, r.close, r.volume, 0) for r in data]
+        self.insertHistoricalData(tuples, modifier=SQLInsertHelpers.REPLACE)
 
         ## insert successful, log the updation date and api
         stmt = 'UPDATE last_updates SET date=?, api=? WHERE exchange=? AND symbol=? AND type=?'
@@ -1564,58 +1466,6 @@ class DatabaseManager(Singleton):
                 dindex += 1
         
         print(gapsFilled, 'gaps filled')
-
-    ## generally only used after large data acquisitions/dumps
-    ## fill any data gaps (generally daily) with artificial data using last real trading day
-    def fillHistoricalGaps(self, exchange=None, symbol=None, seriesType=SeriesType.DAILY, dryrun=False, autoUpdateDamagedSymbols=True, verbose=1):
-        ## reset caching
-        self.historicalDataCount = None
-
-        ALL = not (exchange and symbol)
-        stmt = 'INSERT INTO historical_data VALUES (?,?,?,?,?,?,?,?,?,?)'
-        tuples = []
-        gaps = []
-        if seriesType == SeriesType.DAILY:
-            gaps = self.getDailyHistoricalGaps(exchange, symbol, autoUpdateDamagedSymbols=autoUpdateDamagedSymbols, verbose=verbose)
-
-        if len(gaps) == 0:
-            if verbose>=1: print('No gaps found')
-        else:
-            for g in tqdmLoopHandleWrapper(gaps, verbose, desc='Determining historical gap fillers for ' + seriesType):
-                for t in tqdmLoopHandleWrapper(gaps[g], verbose-0.5, desc=str(g)) if ALL else [(exchange, symbol)]:
-                    if (t[0], t[1]) in unusableSymbols: continue
-                    ## find closest date without going over
-                    prevclose = None
-                    for d in self.getStockData(t[0], t[1], seriesType):
-                        if date.fromisoformat(d.date) > g: break
-                        prevclose = d.close
-                    tuples.append((t[0], t[1], seriesType.name, str(g), prevclose, prevclose, prevclose, prevclose, 0, True))
-
-            if len(tuples) == 0:
-                if verbose>=1: print('No filling required')
-            else:
-                if verbose>=1: print('Writing gap fillers to database')
-                if not dryrun: 
-                    self.dbc.executemany(stmt, tuples)
-                elif verbose>=1:
-                    ## count number of gaps for each ticker
-                    sumdict = {}
-                    for t in tuples:
-                        sumdict[(t[0], t[1])] = 0
-                    for t in tuples:
-                        sumdict[(t[0], t[1])] += 1
-
-                    ## print first handful of gaps for each ticker
-                    sumdict = dict(sorted(sumdict.items(), key=lambda item: item[1]))
-                    for tk, v in sumdict.items():
-                        print(tk, v)
-                        c = 0
-                        for t in tuples:
-                            if (t[0], t[1]) == tk:
-                                print(t)
-                                c+=1
-                            if c > 4:
-                                break
 
     ## detects order of magnitude jumps in stock price from one day to next, that may be representative of a stock split
     def detectStockSplits(self, exchange=None, symbol=None, seriesType:SeriesType=SeriesType.DAILY, verbose=0):
