@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import tqdm, queue, atexit, traceback, math, requests, csv, codecs, json
+import tqdm, queue, atexit, traceback, math, requests, csv, codecs, copy
 import time as timer
 from random import random
 from datetime import date, datetime, timedelta
@@ -23,7 +23,7 @@ from structures.api.google import Google
 
 from constants.exceptions import APILimitReached, APIError, APITimeout
 from utils.other import parseCommandLineOptions
-from utils.support import asISOFormat, recdotdict, shortc, shortcdict
+from utils.support import asDate, asDatetime, recdotdict, shortcdict
 from constants.enums import APIState, FinancialReportType, FinancialStatementType, InterestType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
 from constants.values import tseNoCommissionSymbols, minGoogleDate
 
@@ -32,9 +32,15 @@ dbm: DatabaseManager = DatabaseManager()
 DEBUG = True
 
 class Collector:
-    def __init__(self):
+    def __init__(self, currentDate=date.today()):
         atexit.register(self.close)
-        self.apiManager: APIManager = APIManager()
+
+        currentDatetime = asDatetime(currentDate)
+        currentDate = asDate(currentDate)
+        self.currentDatetime = currentDatetime
+        self.currentDate = currentDate
+
+        self.apiManager: APIManager = APIManager(self.currentDate)
         self.apiErrors = []
 
     def close(self):
@@ -55,7 +61,8 @@ class Collector:
                         self.apiManager.query(api, sp.symbol, 
                                               ## av made DAILY a premium API, but DAILY_ADJUSTED provides same info and more
                                               SeriesType.DAILY_ADJUSTED if api == 'alphavantage' and seriesType == SeriesType.DAILY else seriesType, 
-                                              exchange=sp.exchange))
+                                              exchange=sp.exchange)
+                    )
                     self.__updateSymbolsAPIField(api, sp.exchange, sp.symbol, 1)
                     dbm.commit()
                     updatedCount += 1
@@ -81,16 +88,14 @@ class Collector:
         localDBM = DatabaseManager()
         batchByDate = {}
         startingPastDaysCount = self.apiManager.apis[api].priority * 365
-        lastUpdatedPastDaysCount = math.floor( (date.today() - self.apiManager.apis[api].updatedOn).total_seconds() / (60 * 60 * 24) )
+        lastUpdatedPastDaysCount = math.floor( (self.currentDate - self.apiManager.apis[api].updatedOn).total_seconds() / (60 * 60 * 24) )
         if DEBUG: print('max days', startingPastDaysCount, 'last updated delta', lastUpdatedPastDaysCount)
 
-        currentdate = date.today() ## TODO: fix so same day running is possible, with some sort of time gating
-        # currentdate = date(2023,3,11)
-        if currentdate.weekday() < 5: print('WARNING: running too early on weekdays may result in incomplete data\nOpt to run after ~6pm')
+        if self.currentDate.weekday() < 5: print('WARNING: running too early on weekdays may result in incomplete data\nOpt to run after ~6pm')
         for c in range(min(startingPastDaysCount, lastUpdatedPastDaysCount)-1, -1, -1):
         # for c in range(1):
             try:
-                d = (currentdate - timedelta(days=c)).isoformat()
+                d = (self.currentDate - timedelta(days=c)).isoformat()
                 # res = self.apiManager.apis[api].api.query(d)
                 res = self.apiManager.query(api, qdate=d, verbose=1)
                 if len(res) > 0:
@@ -122,7 +127,7 @@ class Collector:
                     continue
 
                 # break
-                localDBM.insertData(exchangeQuery[0].exchange, s, SeriesType.DAILY, api, batchBySymbol[s])
+                localDBM.insertData(exchangeQuery[0].exchange, s, SeriesType.DAILY, api, batchBySymbol[s], currentDate=currentDate)
                 localDBM.commit()
                 counter += 1
             # else:
@@ -148,7 +153,7 @@ class Collector:
                 try:
                     ## use batch in case of any interupts
                     dbm.startBatch()
-                    toDate = datetime.today()
+                    toDate = copy.deepcopy(self.currentDatetime)
 
                     anyData = False
                     multipler = 1
@@ -201,12 +206,11 @@ class Collector:
         self.activeThreads -= 1
         print(api,'collector complete','\nThreads remaining',self.activeThreads)
 
-    def startAPICollection(self, api, seriesType: SeriesType=SeriesType.DAILY):
+    def startAPICollection(self, api, seriesType: SeriesType=SeriesType.DAILY, **kwargs):
         typeAPIs = ['alphavantage'] #self.apiManager.getAPIList(sort=True)
         nonTypeAPIs = ['polygon']
 
         try:
-
             if api in ['polygon']:
                 if seriesType == SeriesType.MINUTE:
                     tickerlist = dbm.getLatestMinuteDataRows(api)
@@ -216,7 +220,7 @@ class Collector:
                         debugc += 1
                         # if debugc < 20: print(t, t.timestamp.date() if t.timestamp else None, datetime.now().date(), t.timestamp.date() >= datetime.now().date() if t.timestamp else False)
                         ## purge any up-to-date tickers or ones that would return partial data
-                        if t.timestamp and ((t.timestamp.date() == MarketDayManager.getPreviousMarketDay() or t.timestamp.date() == MarketDayManager.getLastMarketDay() or t.timestamp.date() > date.today()) and datetime.now().hour <= 19):
+                        if t.timestamp and ((t.timestamp.date() == MarketDayManager.getPreviousMarketDay(self.currentDate) or t.timestamp.date() == MarketDayManager.getLastMarketDay(self.currentDate) or t.timestamp.date() > self.currentDate) and self.currentDatetime.hour <= 19):
                             # print('removing {e}-{s}'.format(e=t.exchange, s=t.symbol))
                             tickerlist.remove(t)
 
@@ -237,7 +241,7 @@ class Collector:
                         #     continue
                         # above is obsolete while all alphavantage stocks have been collected at least once for the given series type within the past 2 years
                         # polygon can handle all these stocks now, unless they are not available from the api, in which case only alphavantage can retrieve updated info
-                        if date.fromisoformat(r.date) == date.today():
+                        if date.fromisoformat(r.date) >= self.currentDate:
                             continue
 
                         ## only include if symbol is supported by API
@@ -255,7 +259,7 @@ class Collector:
                 elif api == 'neo':
                     for r in lastUpdatedList:
                         ## skip if updated today
-                        if date.fromisoformat(r.date) == date.today():
+                        if date.fromisoformat(r.date) >= self.currentDate:
                             continue
                         ## skip if symbol not supported by API
                         try: 
@@ -274,7 +278,7 @@ class Collector:
         if api == 'neo':
             chunkSize = 90
             results = []
-            while sdate < date.today():
+            while sdate < self.currentDate:
                 try:
                     results.append(self.apiManager.query(api, symbol, fromDate=sdate, toDate=sdate + timedelta(days=chunkSize), verbose=0.5))
                 except APIError:
@@ -286,9 +290,9 @@ class Collector:
             for r in results:
                 resDict = {**resDict, **r}
 
-            dbm.insertData('NEO', symbol, SeriesType.DAILY, api, resDict)            
+            dbm.insertData('NEO', symbol, SeriesType.DAILY, api, resDict, currentDate=currentDate)            
 
-    def startAPICollection_exploratoryAlphavantageAPIUpdates(self):
+    def startAPICollection_exploratoryAlphavantageAPIUpdates(self, **kwargs):
         api = 'alphavantage'
         seriesType=SeriesType.DAILY
         tsePrioritySymbols = tseNoCommissionSymbols
@@ -326,7 +330,7 @@ class Collector:
 
         print('API Errors:',self.apiErrors)
 
-    def collectVIX(self):
+    def collectVIX(self, **kwargs):
         # url = "https://ww2.cboe.com/publish/scheduledtask/mktdata/datahouse/vixcurrent.csv"
         url = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
 
@@ -370,7 +374,7 @@ class Collector:
             else:
                 print('Unable to get Friday data')
 
-    def collectAPIDump_symbolInfo(self, api):
+    def collectAPIDump_symbolInfo(self, api, **kwargs):
         substmt = 'SELECT * FROM dump_symbol_info WHERE dump_symbol_info.exchange = staging_symbol_info.exchange AND dump_symbol_info.symbol = staging_symbol_info.symbol AND ' + api + ' IS NOT NULL'
         # stmt = 'SELECT exchange, symbol FROM symbols WHERE NOT EXISTS (' + substmt + ') AND api_' + api + ' = 1'
 
@@ -416,16 +420,16 @@ class Collector:
                 print(api+' limited reached')
                 break
 
-    def collectPolygonTickerDetails(self):
+    def collectPolygonTickerDetails(self, **kwargs):
         def postprocessing(details):
             details['ipoDate'] = details.pop('listdate')
             return details
         return self.__collectAPITickerDetails('polygon', postprocessing)
         
-    def collectFMPTickerDetails(self):
+    def collectFMPTickerDetails(self, **kwargs):
         return self.__collectAPITickerDetails('fmp')
 
-    def collectAlphavantageTickerDetails(self):
+    def collectAlphavantageTickerDetails(self, **kwargs):
         def postprocessing(details: dict):
             details['sector'] = details.pop('Sector')
             details['industry'] = details.pop('Industry')
@@ -435,7 +439,7 @@ class Collector:
         return self.__collectAPITickerDetails('alphavantage', postprocessing)          
 
 
-    def collectPolygonFinancials(self, ftype: FinancialReportType):
+    def collectPolygonFinancials(self, ftype: FinancialReportType, **kwargs):
         api = 'polygon'
         tickers = dbm.getSymbols_forFinancialStaging(api, ftype)
         print('collecting for',len(tickers),'tickers')
@@ -448,7 +452,7 @@ class Collector:
             # break
 
     ## financials seem to be premium APIs
-    def collectFMPFinancials(self, ftype: FinancialReportType, stype: FinancialStatementType):
+    def collectFMPFinancials(self, ftype: FinancialReportType, stype: FinancialStatementType, **kwargs):
         api = 'fmp'
         tickers = dbm.getSymbols_forFinancialStaging(api)
 
@@ -463,7 +467,7 @@ class Collector:
             break
 
     ## annual and quarterly come in same response
-    def collectAlphavantageFinancials(self, stype: FinancialStatementType):
+    def collectAlphavantageFinancials(self, stype: FinancialStatementType, **kwargs):
         api = 'alphavantage'
         tickers = dbm.getSymbols_forFinancialStaging(api)
         # tickers = [recdotdict({'exchange': 'NASDAQ', 'symbol': 'AAL'})]
@@ -534,10 +538,10 @@ class Collector:
 
     ## collect google interests and insert to DB
     ## measures up-to-date-ness by comparing latest GI and stock data dates, if not then it will collect data up til maxdate rather than til the latest stock data date
-    def startGoogleInterestCollection(self, interestType:InterestType=InterestType.DAILY, direction:Direction=Direction.ASCENDING, currentDate=None, collectStatsOnly=False, dryrun=False):
+    def startGoogleInterestCollection(self, interestType:InterestType=InterestType.DAILY, direction:Direction=Direction.ASCENDING, collectStatsOnly=False, dryrun=False, **kwargs):
         gapi = Google()
 
-        maxdate = date.fromisoformat(asISOFormat(shortc(currentDate, date.today())))
+        maxdate = copy.deepcopy(self.currentDate)
         ## up-to-date GI data is only available after 3 days
         if interestType == InterestType.DAILY:
             maxdate -= timedelta(days=4)
@@ -801,10 +805,10 @@ class Collector:
         finish()
 
 if __name__ == '__main__':
-    print('starting')
-    c = Collector()
-    
     opts, kwargs = parseCommandLineOptions()
+    currentDate = shortcdict(kwargs, 'currentDate', date.today())
+    c = Collector(currentDate)
+
     if opts.api:
         if opts.api == 'vix':
             c.collectVIX()

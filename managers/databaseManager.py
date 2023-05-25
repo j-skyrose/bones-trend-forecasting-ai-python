@@ -719,13 +719,13 @@ class DatabaseManager(Singleton):
         self.dbc.executemany(stmt, tuples)
 
     ## insert data in historical_data table and update the last_updates table with the API used and current date
-    def insertData(self, exchange, symbol, seriesType: SeriesType, api, data):
-        tuples = [(exchange, symbol, seriesType.name, str(d), r.open, r.high, r.low, r.close, r.volume, 0) for r in data]
+    def insertData(self, exchange, symbol, seriesType: SeriesType, api, data: Dict[str, Dict], currentDate=date.today()):
+        tuples = [(exchange, symbol, seriesType.name, str(d), r.open, r.high, r.low, r.close, r.volume, 0) for d,r in data.items()]
         self.insertHistoricalData(tuples, modifier=SQLInsertHelpers.REPLACE)
 
         ## insert successful, log the updation date and api
         stmt = 'UPDATE last_updates SET date=?, api=? WHERE exchange=? AND symbol=? AND type=?'
-        self.dbc.execute(stmt, (str(date.today()), api, exchange, symbol, seriesType.name))
+        self.dbc.execute(stmt, (str(currentDate), api, exchange, symbol, seriesType.name))
         # print('Data inserted and updated')
 
     ## insert data in historical_data_minute table

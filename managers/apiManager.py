@@ -18,11 +18,12 @@ import time as timer
 
 from constants.exceptions import APILimitReached, APITimeout, APIError
 from constants.enums import FinancialReportType, FinancialStatementType, TimespanType
-from utils.support import Singleton, recdotdict, recdotobj, shortc
+from utils.support import Singleton, asDate, recdotdict, recdotobj, shortc
 
 class APIManager(Singleton):
-    def __init__(self):
+    def __init__(self, currentDate=date.today()):
         # atexit.register(self.saveConfig)
+        self.currentDate = asDate(currentDate)
         self.config = ConfigManager()
         self.apis = {}
 
@@ -66,24 +67,23 @@ class APIManager(Singleton):
         return self.apis.keys()
 
     def _checkLimits(self, a, seriesType=None, qdate=None, updateOnly=False):
-        currentVal = date.today()
         sameDate = False
         if a.limitType == 'NONE':
             if qdate: a.updatedOn = date.fromisoformat(qdate)
             return 999
         elif a.limitType == 'DAILY':
-            sameDate = currentVal == a.updatedOn
+            sameDate = self.currentDate == a.updatedOn
         elif a.limitType == 'WEEKLY':
             ## todo, if API found for this type
             pass
         elif a.limitType == 'MONTHLY':
-            sameDate = currentVal.month() == a.updatedOn.month()
+            sameDate = self.currentDate.month() == a.updatedOn.month()
 
         if sameDate:
             if a.remaining == 0:
                 if not updateOnly: raise APILimitReached
         else:
-            if not updateOnly: a.updatedOn = currentVal
+            if not updateOnly: a.updatedOn = self.currentDate
             a.remaining = a.limit
 
         return a.remaining
@@ -127,7 +127,7 @@ class APIManager(Singleton):
             lambda apih: apih.api.query(*queryArgs),
             seriesType,
             qdate,
-            verbose
+            verbose=verbose
         )
 
     def getAggregates(self, api='polygon', symbol=None, multipler=None, timespan=None, fromDate=None, toDate=None, limit=50000, verbose=0):
