@@ -254,6 +254,8 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
         if keyboardinterrupted: break
 
     if parallel: cpuCoreUsage[pid] = 0 ## unlock index for progress bar position
+    
+    print(f' {"Would insert" if dryrun else "Inserted"} {numpy.count_nonzero(similaritiesSum)-len(dbsums)} new values and {"would update" if dryrun else "updated"} {len(dbsums)} values for', ticker.getTuple())
 
 
 def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cacheIndicators, indicatorConfig):
