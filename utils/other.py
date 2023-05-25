@@ -163,6 +163,10 @@ def parseCommandLineOptions():
             v = SeriesType[v.upper()]
         elif k.lower() == 'interesttype':
             v = InterestType[v.upper()]
+        elif re.match(r'^[0-9]{2,4}-[0-9]{1,2}-[0-9]{1,2}$', v):
+            year, month, day = v.split('-')
+            if len(year) == 2: v = '20' + v
+            v = date.fromisoformat(v)
         elif re.match(r'[0-9]+.[0-9]+', v):
             v = float(v)
         elif re.match(r'[0-9]+$', v):
