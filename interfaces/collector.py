@@ -195,17 +195,6 @@ class Collector:
                     raise e
             # break # do one at a time
 
-    def _collectFromAPI(self, api, symbols=None, type=None):
-        if type:
-            print(api,'collector started',len(symbols))
-            if api == 'alphavantage': self.__loopCollectBySymbol(api, symbols, type)
-        else:
-            print(api,'collector started')
-            if api == 'polygon': self.__loopCollectByDate(api)
-
-        self.activeThreads -= 1
-        print(api,'collector complete','\nThreads remaining',self.activeThreads)
-
     def startAPICollection(self, api, seriesType: SeriesType=SeriesType.DAILY, **kwargs):
         typeAPIs = ['alphavantage'] #self.apiManager.getAPIList(sort=True)
         nonTypeAPIs = ['polygon']
@@ -299,7 +288,7 @@ class Collector:
     
         try:
             ## gather symbols for this collection run
-            lastUpdatedList: List = dbm.getLastUpdatedCollectorInfo(seriesType=seriesType, api=api, apiSortDirection=Direction.ASCENDING, apiFilter=[APIState.UNKNOWN, APIState.WORKING], exchanges=['TSX']).fetchall()
+            lastUpdatedList: List = dbm.getLastUpdatedCollectorInfo(seriesType=seriesType, api=api, apiSortDirection=Direction.ASCENDING, apiFilter=[APIState.UNKNOWN, APIState.WORKING], exchange=['TSX']).fetchall()
             if DEBUG: print('lastUpdatedList length',len(lastUpdatedList))
 
             priorityRows = []

@@ -135,8 +135,9 @@ class DatabaseManager(Singleton):
         args = []
         
         if exchange:
-            adds.append('s.exchange = ?')
-            args.append(exchange)
+            exchList = asList(exchange)
+            adds.append(' s.exchange IN ({}) '.format(','.join(['?' for e in exchList])))
+            args.extend(exchList)
         if symbol:
             symList = asList(symbol)
             adds.append(' s.symbol IN ({}) '.format(','.join(['?' for s in symList])))
@@ -229,7 +230,7 @@ class DatabaseManager(Singleton):
         return self.__purgeUnusableTickers(self.dbc.execute(stmt).fetchall())
 
     ## get raw data from last_updates
-    def getLastUpdatedInfo(self, seriesType, dt=None, dateModifier=OperatorDict.EQUAL, exchanges=[], symbols=[], assetTypes=[], **kwargs):
+    def getLastUpdatedInfo(self, seriesType, dt=None, dateModifier=OperatorDict.EQUAL, exchange=None, symbol=None, assetTypes=[], **kwargs):
         stmt = 'SELECT * FROM last_updates lu JOIN symbols s on lu.exchange=s.exchange and lu.symbol=s.symbol WHERE lu.type=? AND lu.api IS NOT NULL'
         args = [seriesType.function.replace('TIME_SERIES_','')]
         if dt:
@@ -242,10 +243,10 @@ class DatabaseManager(Singleton):
                 dt = dt - timedelta(days=(weekday % 4))
 
             args.append(dt.isoformat())
-        if exchanges:
-            stmt += self._andXContainsListStatement('lu.exchange', exchanges)
-        if symbols:
-            stmt += self._andXContainsListStatement('lu.symbol', symbols)
+        if exchange:
+            stmt += self._andXContainsListStatement('lu.exchange', asList(exchange))
+        if symbol:
+            stmt += self._andXContainsListStatement('lu.symbol', asList(symbol))
         if assetTypes:
             stmt += self._andXContainsListStatement('s.asset_type', assetTypes)
 
@@ -257,17 +258,16 @@ class DatabaseManager(Singleton):
         return self.__purgeUnusableTickers(self.dbc.execute(stmt, tuple(args)).fetchall(), **kwargs)
 
     ## used by collector to determine which stocks are more in need of new/updated data
-    def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, seriesType=None, api=None, googleTopicID:Union[SQLHelpers,Direction]=None, apiSortDirection:Direction=Direction.DESCENDING, apiFilter:Union[APIState, List[APIState]]=APIState.WORKING, exchanges=standardExchanges):
+    def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, seriesType=None, api=None, googleTopicID:Union[SQLHelpers,Direction]=None, apiSortDirection:Direction=Direction.DESCENDING, apiFilter:Union[APIState, List[APIState]]=APIState.WORKING):
         stmt = 'SELECT s.*, u.api, u.date FROM last_updates u join symbols s on u.exchange=s.exchange and u.symbol=s.symbol'
         adds = []
         args = []
 
-        if exchange:
-            adds.append('u.exchange = ?')
-            args.append(exchange)
-        elif exchanges:
-            adds.append('(' + ' OR '.join(['u.exchange=?' for a in exchanges]) + ')')
-            args.extend(exchanges)
+        if exchange is not None:    exchange = asList(exchange)
+        else:                       exchange = standardExchanges
+        adds.append('(' + ' OR '.join(['u.exchange=?' for a in exchange]) + ')')
+        args.extend(exchange)
+
         if symbol:
             adds.append('u.symbol = ?')
             args.append(symbol)
@@ -336,7 +336,7 @@ class DatabaseManager(Singleton):
         return self.dbc.execute(stmt, tuple).fetchall()
 
     ## returns normalizationColumns, normalizationMaxes, symbolList
-    def getNormalizationData(self, seriesType, normalizationInfo=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[], assetTypes=[], **kwargs):
+    def getNormalizationData(self, seriesType, normalizationInfo=None, exchange=None, excludeExchange=None, sectors=[], excludeSectors=[], assetTypes=[], **kwargs):
         DEBUG = True
         normalizationColumns = ['high', 'volume']
 
@@ -389,13 +389,14 @@ class DatabaseManager(Singleton):
             stmt3 += ' AND h.exchange||h.symbol IN (SELECT DISTINCT q.exchange||q.symbol FROM vwtb_edgar_quarters q) AND REPLACE(h.date, \'-\', \'\') >= q.filed'
 
         if normalizationInfo or gconfig.testing.enabled:
+            exchange = asList(exchange)
             if gconfig.testing.enabled:
-                exchanges.append(gconfig.testing.exchange)
+                exchange.append(gconfig.testing.exchange)
 
-            if exchanges:
-                stmt3 += self._andXContainsListStatement('h.exchange', exchanges)
-            elif excludeExchanges:
-                stmt3 += self._andXContainsListStatement('h.exchange', excludeExchanges, notIn=True)
+            if exchange:
+                stmt3 += self._andXContainsListStatement('h.exchange', exchange)
+            elif excludeExchange:
+                stmt3 += self._andXContainsListStatement('h.exchange', asList(excludeExchange), notIn=True)
 
             if sectors:
                 stmt3 += self._andXContainsListStatement('h.sector', sectors)
@@ -435,12 +436,12 @@ class DatabaseManager(Singleton):
         return ' AND ' + column + (' not' if notIn else '') + ' in (\'' + '\',\''.join(lst) + '\')'
 
     ## generally one time use
-    def getGoogleTopicIDsForSymbols(self, symbolList=None, dryrun=False):
+    def getGoogleTopicIDsForSymbols(self, symbol=None, dryrun=False):
         print('Getting topic IDs from Google')
         DEBUG = True
         gapi = GoogleAPI()
         stmt = 'UPDATE symbols SET google_topic_id=? WHERE exchange=? AND symbol=? '
-        symbols = shortc(symbolList, self.getSymbols(api=['alphavantage', 'polygon'], googleTopicId=SQLHelpers.NULL))
+        symbols = shortc(asList(symbol), self.getSymbols(api=['alphavantage', 'polygon'], googleTopicId=SQLHelpers.NULL))
         topicsFound = []
         alreadyFound = 0
         for s in tqdm(symbols):
@@ -1766,14 +1767,15 @@ class DatabaseManager(Singleton):
 
 
     ## BATS seems to be all non-CS
-    def analyzePossibleSymbolAssetTypes(self, exchanges=['NYSE','NASDAQ','NYSE MKT','NYSE ARCA']):
+    def analyzePossibleSymbolAssetTypes(self, exchange=['NYSE','NASDAQ','NYSE MKT','NYSE ARCA']):
+        exchange = asList(exchange)
         stmt = 'SELECT * FROM symbols WHERE (api_polygon=1 OR api_fmp=1 or api_alphavantage=1) '
-        if exchanges:
-            stmt += self._andXContainsListStatement('exchange', exchanges)
+        if exchange:
+            stmt += self._andXContainsListStatement('exchange', exchange)
         stmt += ' ORDER BY symbol'
 
         res = self.dbc.execute(stmt).fetchall()
-        symbolGroups = { e: {} for e in exchanges }
+        symbolGroups = { e: {} for e in exchange }
         for s in tqdm(res, desc='Sorting symbols'):
             sdict = symbolGroups[s.exchange]
             try:

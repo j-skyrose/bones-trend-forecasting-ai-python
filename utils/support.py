@@ -179,6 +179,7 @@ def asDatetime(dt: Union[date, datetime, str]):
     raise ValueError('Unrecognized type')
 
 def asList(val):
+    if val is None: return []
     return val if type(val) is list else [val]
 
 ## basically a date that is the first day of the month it represents (including year)

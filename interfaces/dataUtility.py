@@ -66,8 +66,8 @@ def similarityCalculationAndInsertion(exchange=[], parallel=True, correctionRun=
         skipAllDataInitialization=True,
         **props,
         maxPageSize=1,
-        # exchanges=['NASDAQ'],
-        exchanges=asList(exchange),
+        # exchange=['NASDAQ'],
+        exchange=asList(exchange),
 
         inputVectorFactory=InputVectorFactory(cf),
         verbose=0.5

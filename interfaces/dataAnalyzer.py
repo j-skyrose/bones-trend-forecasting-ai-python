@@ -13,7 +13,7 @@ from datetime import date, datetime
 
 from managers.databaseManager import DatabaseManager
 from managers.marketDayManager import MarketDayManager
-from utils.support import Singleton, recdotdict, shortc
+from utils.support import Singleton, asList, recdotdict, shortc
 from constants.enums import OperatorDict, SeriesType
 
 dbm: DatabaseManager = DatabaseManager()
@@ -75,18 +75,18 @@ class DataAnalzer:
 
     def andPriceMoving(self, **kwargs):
         return self.getStocksWithPriceMoving(**kwargs)
-    def getStocksWithPriceMoving(self, anchorDate=None, exchanges=[], change=1):
+    def getStocksWithPriceMoving(self, anchorDate=None, exchange=None, change=1):
         def meetsCriteriaFunction(data, index):
             op = OperatorDict.LESSTHANOREQUAL.function if change >= 1 else OperatorDict.GREATERTHANOREQUAL.function
             if op(data[index].close / data[index-1].close, change):
                 ## does not meet close change threshold
                 return False
             return True      
-        return self.__processChangeFunction(anchorDate, exchanges, meetsCriteriaFunction)
+        return self.__processChangeFunction(anchorDate, asList(exchange), meetsCriteriaFunction)
 
     def andVolumeSMAMoving(self, **kwargs):
         return self.getStocksWithVolumeSMA(**kwargs)
-    def getStocksWithVolumeSMAMoving(self, anchorDate=None, exchanges=[], change=1, smaDays=1):
+    def getStocksWithVolumeSMAMoving(self, anchorDate=None, exchange=None, change=1, smaDays=1):
         def meetsCriteriaFunction(data, index):
             if index < smaDays:
                 ## not enough days in past for volume SMA
@@ -101,9 +101,9 @@ class DataAnalzer:
                 return False
 
             return True    
-        return self.__processChangeFunction(anchorDate, exchanges, meetsCriteriaFunction)
+        return self.__processChangeFunction(anchorDate, asList(exchange), meetsCriteriaFunction)
 
-# def getStocksMovingSharplyHigherOnLargeVolume(anchorDate=None, exchanges=[], priceChange=1.15, volumeChange=4, volumeSMADays=20):
+# def getStocksMovingSharplyHigherOnLargeVolume(anchorDate=None, exchange=None, priceChange=1.15, volumeChange=4, volumeSMADays=20):
 #     print('Anchor date:', anchorDate)
 
 
@@ -133,9 +133,9 @@ def prettyPrintResults(results):
         print(s.exchange, ':', s.symbol, '-', s.name)
 
 if __name__ == '__main__':
-    # getStocksMovingSharplyHigherOnLargeVolume(exchanges=['NASDAQ'], anchorDate='2021-11-04')
-    # res = DataAnalzer(100).getStocksWithPriceMoving(exchanges=['NYSE'], change=1.01)
-    res = DataAnalzer().getStocksWithVolumeSMAMoving(exchanges=['NYSE'], change=1.01, smaDays=5).andPriceMoving(change=0.98)
+    # getStocksMovingSharplyHigherOnLargeVolume(exchange=['NASDAQ'], anchorDate='2021-11-04')
+    # res = DataAnalzer(100).getStocksWithPriceMoving(exchange=['NYSE'], change=1.01)
+    res = DataAnalzer().getStocksWithVolumeSMAMoving(exchange=['NYSE'], change=1.01, smaDays=5).andPriceMoving(change=0.98)
 
     prettyPrintResults(res)
 

@@ -26,7 +26,7 @@ from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.stockDataHandler import StockDataHandler
 from constants.enums import AccuracyType, InputVectorDataType, OperatorDict, SeriesType
 from constants.exceptions import AnchorDateAheadOfLastDataDate, NoData, SufficientlyUpdatedDataNotAvailable
-from utils.support import Singleton, asDate, shortc, shortcdict
+from utils.support import Singleton, asDate, asList, shortc, shortcdict
 from globalConfig import config as gconfig
 
 ivf: InputVectorFactory = InputVectorFactory()
@@ -48,10 +48,10 @@ class Predictor(Singleton):
         pass
 
     def _initialize(self, **kwargs
-    # exchanges=[], symbols=[]
+    # exchange=[], symbols=[]
     ) -> Tuple[NeuralNetworkInstance, list]:
-        exchanges = shortcdict(kwargs, 'exchanges', [])
-        symbols = shortcdict(kwargs, 'symbols', [])
+        exchanges = asList(shortcdict(kwargs, 'exchange', []))
+        symbols = asList(shortcdict(kwargs, 'symbol', []))
 
         nn = self.nnm.get(kwargs['networkid']) if 'networkid' in kwargs.keys() else kwargs['network']
         nn.load()
@@ -95,7 +95,7 @@ class Predictor(Singleton):
         if 'anchorDates' in kwargs:
             anchorDate = None
 
-        return Predictor.predictAll(networkid, anchorDate, exchanges=[exchange], symbols=[symbol], **kwargs)
+        return Predictor.predictAll(networkid, anchorDate, exchange=[exchange], symbol=[symbol], **kwargs)
 
     ## returns stockData, precedingIndicators
     def __getPrecedingRangeData(self, network, exchange, symbol, anchorDate):
@@ -147,13 +147,13 @@ class Predictor(Singleton):
         anchorDate=None, #date.today().isoformat(),
         anchorDates=[],
         postPredictionWeighting=True,
-        # exchange=None, exchanges=[], excludeExchanges=[]
+        # exchange=None, exchange=[], excludeExchange=[]
         numberofWeightingsLimit=0,
         verbose=1,
         **kwargs
     ):
         self = cls()
-        singleSymbol = 'symbols' in kwargs and len(kwargs['symbols']) == 1
+        singleSymbol = 'symbol' in kwargs and len(kwargs['symbol']) == 1
 
 
         if anchorDate:
@@ -173,7 +173,7 @@ class Predictor(Singleton):
 
         if verbose == 1:
             if singleSymbol:
-                print('Starting prediction{} for'.format('' if len(anchorDates) < 2 else 's'), kwargs['exchanges'][0], ':', kwargs['symbols'][0])
+                print('Starting prediction{} for'.format('' if len(anchorDates) < 2 else 's'), kwargs['exchange'][0], ':', kwargs['symbol'][0])
             else:
                 print('Starting predictions for', len(tickers), 'tickers') ## starting on', anchorDate)
 
@@ -207,8 +207,8 @@ class Predictor(Singleton):
                     tsymbol = tkrORdt.symbol
                 else:
                     dt = tkrORdt
-                    texchange = kwargs['exchanges'][0]
-                    tsymbol = kwargs['symbols'][0]
+                    texchange = kwargs['exchange'][0]
+                    tsymbol = kwargs['symbol'][0]
                 try:
                     inptpl = self.__buildPredictInputTuple(nn, texchange, tsymbol, anchorDate=dt.isoformat())
                     if gconfig.network.recurrent:
