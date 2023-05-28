@@ -18,6 +18,10 @@ class TickerKeyType:
         self.exchange = exchange
         self.symbol = symbol
 
+    @classmethod
+    def fromDict(cls, d):
+        return cls(d.exchange, d.symbol)
+
     def getTuple(self) -> Tuple[str,str]:
         return (self.exchange, self.symbol)
     

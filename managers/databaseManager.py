@@ -1225,6 +1225,29 @@ class DatabaseManager(Singleton):
         stmt = 'DELETE FROM networks WHERE id = ?'
         self.dbc.execute(stmt, (id,))
 
+    def deleteVectorSimilarities(self, exchange, symbol, seriesType: SeriesType=None, dt=None, vclass: OutputClass=None, precedingRange=None, followingRange=None, threshold=None):
+        stmt = 'DELETE FROM historical_vector_similarity_data WHERE exchange=? AND symbol=?'
+        args = [exchange, symbol]
+        if seriesType:
+            stmt += ' AND date_type=?'
+            args.append(seriesType.name)
+        if dt:
+            stmt += ' AND date=?'
+            args.append(asDate(dt).isoformat())
+        if vclass:
+            stmt += ' AND vector_class=?'
+            args.append(vclass.name)
+        if precedingRange:
+            stmt += ' AND preceding_range=?'
+            args.append(str(precedingRange))
+        if followingRange:
+            stmt += ' AND following_range=?'
+            args.append(str(followingRange))
+        if threshold is not None:
+            stmt += ' AND change_threshold=?'
+            args.append(str(threshold))
+
+        self.dbc.execute(stmt, tuple(args))
 
 
     ## end deletes ####################################################################################################################################################################

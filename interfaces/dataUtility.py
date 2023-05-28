@@ -7,11 +7,9 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import tqdm, p_tqdm, random, numpy, numba
+import tqdm, numpy, numba
 from datetime import date, timedelta
 from functools import partial
-from multiprocessing import shared_memory
-from multiprocessing.managers import SharedMemoryManager
 from typing import Dict, List
 
 from globalConfig import config as gconfig
@@ -25,6 +23,7 @@ from managers.marketDayManager import MarketDayManager
 from structures.skipsObj import SkipsObj
 from utils.other import buildCommaSeparatedTickerPairString, getIndicatorPeriod, getInstancesByClass, parseCommandLineOptions
 from utils.support import asISOFormat, asList, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
+from utils.types import TickerKeyType
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends, unresumableGenerationIndicators
 from utils.vectorSimilarity import euclideanSimilarity_jit
 
@@ -37,9 +36,16 @@ Determines the Euclidean similarity between input vectors for all negative insta
 Input vector must only contain positive numbers, negatives may slightly change how accurate the similarity calculation is
 Can be interuptted and resumed, and should be able to handle new stock data addition to existing calculated values
 '''
-def similarityCalculationAndInsertion(exchange=[], parallel=True, correctionRun=False, dryrun=False):
-    parallel = parallel and not correctionRun and not dryrun
-
+def similarityCalculationAndInsertion(exchange=None, **kwargs):
+    '''KWARGS: checkDBIntegrity, wipeDataOnDBIntegrityFailure, correctImproperlyInsertedDates, dryrun, freshrun'''
+    ''' DB Integrity gets messed up when stock data is updated (or possibly due to a [local] symbol lookup bug); just something that needs to be dealt with whenever updating vector similarities
+            alphavantage: high/low/close/volume values can change possibly because the previous last day may not have gone til end of after-market trading
+                Data mismatch found for TSX FST
+                {'exchange': 'TSX', 'symbol': 'FST', 'type': 'DAILY', 'date': '2023-05-19', 'open': 43.24, 'high': 43.24, 'low': 43.14, 'close': 43.24, 'volume': 460.0}
+                {'exchange': 'TSX', 'symbol': 'FST', 'type': 'DAILY', 'date': '2023-05-19', 'open': 43.24, 'high': 43.26, 'low': 43.14, 'close': 43.26, 'volume': 500.0}
+            polygon: unknown reason
+    '''
+    
     ## remove unnecessary/redundant features
     ## only keep EMA200, since all are based on stock data, which is already included...and to not break stuff by having no indicators
     cf = gconfig
@@ -76,19 +82,12 @@ def similarityCalculationAndInsertion(exchange=[], parallel=True, correctionRun=
     normalizationInfo = dm.normalizationInfo
     tickerList = dm.symbolList
 
-    if parallel:
-        with SharedMemoryManager() as smm:
-            sharedmem = smm.ShareableList([0 for x in range(maxcpus)])
+    # for ticker in tqdm.tqdm(tickerList[217:], desc='Tickers'):
+    for ticker in tqdm.tqdm(tickerList, desc='Tickers'):
+        _calculateSimiliaritesAndInsertToDB(ticker, props, cf, normalizationInfo, **kwargs)
 
-            p_tqdm.p_umap(partial(_calculateSimiliaritesAndInsertToDB, props=props, config=cf, normalizationInfo=normalizationInfo, cpuCoreUsage_sharedMemoryName=sharedmem.shm.name, correctionRun=correctionRun, dryrun=dryrun), tickerList, num_cpus=maxcpus, position=0, desc='Tickers')
-
-    else: ## serial
-        # for ticker in tqdm.tqdm(tickerList[217:], desc='Tickers'):
-        for ticker in tqdm.tqdm(tickerList, desc='Tickers'):
-            _calculateSimiliaritesAndInsertToDB(ticker, props, cf, normalizationInfo, correctionRun=correctionRun, dryrun=dryrun)
-
-@numba.njit(numba.float64[:](numba.float64[:], numba.i8, numba.float64[:, :], numba.boolean), parallel=True)
-def _calculateSimiliarites(similaritiesSum:List[float], startindex, vectors, dryrun): ## eliminate loophandle
+@numba.njit(numba.float64[:](numba.float64[:], numba.i8, numba.float64[:, :]), parallel=True)
+def _calculateSimiliarites(similaritiesSum:List[float], startindex, vectors):
     ## numba.jit does not support tqdm loop wrappers
     for cindx in range(startindex, len(vectors)):
     # for cindx in tqdm.tqdm(range(startindex, len(vectors)), desc='Columns'):
@@ -97,11 +96,7 @@ def _calculateSimiliarites(similaritiesSum:List[float], startindex, vectors, dry
         ## calculate similarites for each row
         similarities = numpy.zeros(cindx)
         for rindx in range(0, cindx):
-            if not dryrun:
-                calculatedValue = euclideanSimilarity_jit(vector, vectors[rindx])
-            else:
-                calculatedValue = random.randint(0,100)
-
+            calculatedValue = euclideanSimilarity_jit(vector, vectors[rindx])
             similarities[rindx] = calculatedValue
 
         ## add similarites to running sums
@@ -113,11 +108,10 @@ def _calculateSimiliarites(similaritiesSum:List[float], startindex, vectors, dry
     
     return similaritiesSum
 
-def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizationInfo, cpuCoreUsage_sharedMemoryName=None, correctionRun=False, dryrun=False):
+def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizationInfo, checkDBIntegrity=False, wipeDataOnDBIntegrityFailure=False, correctImproperlyInsertedDates=False, dryrun=False, freshrun=False):
     dm: DataManager = DataManager(
         skips=SkipsObj(sets=True),
         saveSkips=True,
-        skipAllDataInitialization=True,
         **props,
         maxPageSize=1,
         analysis=True,
@@ -128,133 +122,111 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
         verbose=0
     )
 
-    parallel = cpuCoreUsage_sharedMemoryName
-    if parallel:
-        cpuCoreUsage = shared_memory.ShareableList(name=cpuCoreUsage_sharedMemoryName)
-        pid = cpuCoreUsage.index(0)
-        cpuCoreUsage[pid] = 1 ## lock index for progress bar position
+    ticker = TickerKeyType.fromDict(ticker)
+    neginstances = getInstancesByClass(dm.stockDataInstances.values())[1]
+    def getDTArg(indx): ## specifically for neg instances
+        return dm.stockDataHandlers[ticker].data[neginstances[indx].index].date
 
-    keyboardinterrupted = False
-    maxpage = dm.getSymbolListPageCount()
-    for i in range(maxpage):
-        ## only iterating one SDH at a time
-        dm.initializeAllDataForPage(i+1)
-        ticker = list(dm.stockDataHandlers.keys())[0]
+    ## prepare get/insert arguments
+    def prepareArgs(indx=None):
+        return {
+            'exchange': ticker.exchange,
+            'symbol': ticker.symbol,
+            'seriesType': dm.seriesType,
+            'dt': getDTArg(indx) if indx is not None else None,
+            'vclass': OutputClass.NEGATIVE,
+            **props
+        }
 
-        neginstances = getInstancesByClass(dm.stockDataInstances.values())[1]
-        def getDTArg(indx): ## specifically for neg instances
-            return dm.stockDataHandlers[ticker].data[neginstances[indx].index].date
+    similaritiesSum = numpy.zeros(len(neginstances))
 
-        ## prepare get/insert arguments
-        def prepareArgs(indx=None):
-            return {
-                'exchange': ticker.exchange,
-                'symbol': ticker.symbol,
-                'seriesType': dm.seriesType,
-                'dt': getDTArg(indx) if indx is not None else None,
-                'vclass': OutputClass.NEGATIVE,
-                **props
-            }
-
-        similaritiesSum = numpy.zeros(len(neginstances))
-        ## load already calculated sums from DB
-        if not dryrun or correctionRun:
+    ## load already calculated sums from DB
+    dbsums = []
+    def clearDataDueToIntegrityFailure():
+        nonlocal dbsums
+        print(f' DB integrity check failed for {ticker.getTuple()}, wiping data')
+        dbsums = []
+        if not dryrun: dbm.deleteVectorSimilarities(**prepareArgs())
+    if checkDBIntegrity or not freshrun:
+        try:
             dbsums = dbm.getVectorSimilarity(**prepareArgs())
             for dbsumindx in range(len(dbsums)):
                 similaritiesSum[dbsumindx] = dbsums[dbsumindx].value
-            if not parallel and len(dbsums) > 0: print(f'Loaded {len(dbsums)} values')
-        else: dbsums = []
+            ## load done
+        except IndexError as e:
+            if not checkDBIntegrity and not wipeDataOnDBIntegrityFailure: raise e
+            if wipeDataOnDBIntegrityFailure:
+                print(f' Missing date {dbsums[dbsumindx].date}')
+                clearDataDueToIntegrityFailure()
+            else: ## i.e. checkDBIntegrity = True
+                print(f' For {ticker.getTuple()}')
+                ## determine which date(s) are missing
+                neginstanceDates = set()
+                for nindx in range(len(neginstances)):
+                    neginstanceDates.add(getDTArg(nindx))
+                for dbsumindx in range(len(dbsums)):
+                    if dbsums[dbsumindx].date not in neginstanceDates:
+                        print(f'{dbsums[dbsumindx].date} not in negative instances, dbsums index {dbsumindx}')
 
-        ## temporary: correct already calculated data that was not inserted to DB with correct dates (used overall index rather than neginstance index)
-        if correctionRun:
-            dbsumCount = len(dbsums)
-            if dbsumCount == 0:
-                ## no data, no correction required
-                continue
-            else: ## some data
-                dbsumLastDate = dbsums[dbsumCount-1].date
-                stockDataDate = dm.stockDataHandlers[ticker].data[dbsumCount-1].date
-                if dbsumLastDate == stockDataDate:
-                    print(ticker.getTuple(), 'needs correction')
-                    for dindx in range(dbsumCount-1, -1, -1): ## run in reverse so there are no conflicts with yet-to-be-corrected data rows
-                        newDate = getDTArg(dindx)
-                        oldDate = dm.stockDataHandlers[ticker].data[dindx].date
-                        if not dryrun:
-                            args = [asISOFormat(newDate), ticker.exchange, ticker.symbol, dm.seriesType.name, asISOFormat(oldDate), OutputClass.NEGATIVE.name, *list(props.values())]
-                            dbm.dbc.execute('UPDATE historical_vector_similarity_data SET date=? WHERE exchange=? AND symbol=? AND date_type=? AND date=? AND vector_class=? AND preceding_range=? AND following_range=? AND change_threshold=?', tuple(args))
-                        else:
-                            print(oldDate, '->', newDate)
+        ## start/end date integrity checks
+        if len(dbsums) > 0 and (checkDBIntegrity or wipeDataOnDBIntegrityFailure):
+            integrityError = False
+            if dbsums[0].date != getDTArg(0):
+                print(f'Start dates do not align - DB {dbsums[0].date} vs NegInst {getDTArg(0)}')
+                integrityError = True
+            if len(dbsums) == len(neginstances):
+                if dbsums[-1].date != getDTArg(-1): 
+                    print(f'End dates do not align - DB {dbsums[-1].date} vs NegInst {getDTArg(-1)}')
+                    integrityError = True
 
-                else:
-                    print(ticker.getTuple(), 'is good')
-            continue
+            if checkDBIntegrity: return
+            if integrityError and wipeDataOnDBIntegrityFailure: clearDataDueToIntegrityFailure()
+        if checkDBIntegrity: return
 
-        ## skip if everything already calculated
-        startindex = len(dbsums)
-        if startindex == len(neginstances): continue
+    ## correct already calculated data that was not inserted to DB with correct dates (used overall index rather than neginstance index) [limited use now, corrections already done as of May 25, 2023]
+    if correctImproperlyInsertedDates:
+        dbsumCount = len(dbsums)
+        if dbsumCount == 0:
+            ## no data, no correction required
+            return
+        else: ## some data
+            dbsumLastDate = dbsums[dbsumCount-1].date
+            stockDataDate = dm.stockDataHandlers[ticker].data[dbsumCount-1].date
+            if dbsumLastDate == stockDataDate:
+                print(ticker.getTuple(), 'needs correction')
+                for dindx in range(dbsumCount-1, -1, -1): ## run in reverse so there are no conflicts with yet-to-be-corrected data rows
+                    newDate = getDTArg(dindx)
+                    oldDate = dm.stockDataHandlers[ticker].data[dindx].date
+                    if not dryrun:
+                        args = [asISOFormat(newDate), ticker.exchange, ticker.symbol, dm.seriesType.name, asISOFormat(oldDate), OutputClass.NEGATIVE.name, *list(props.values())]
+                        dbm.dbc.execute('UPDATE historical_vector_similarity_data SET date=? WHERE exchange=? AND symbol=? AND date_type=? AND date=? AND vector_class=? AND preceding_range=? AND following_range=? AND change_threshold=?', tuple(args))
+                    else:
+                        print(oldDate, '->', newDate)
 
-        try:
-            ## loop calculating by column, then adding to running row sums for each
+            else:
+                print(ticker.getTuple(), 'is good')
+        return
 
+    ## skip if everything already calculated
+    startindex = len(dbsums)
+    if startindex == len(neginstances): return
 
-            ## progress bars do not maintain position properly, jumps around and overwrite each other, especially if maxcpus > 2
-            ## tqdm issue is open with some possible workaround for linux but at this time does not sound like it for windows
-            ## https://github.com/tqdm/tqdm/issues/1000
-            # loopkwargs = {
-            #     'verbose': (0.5 if pid<1 else 0) if parallel else 0.5,
-            #     'desc': f'Core #{pid+1} Columns POS {(pid+1)*len(cpuCoreUsage)}' if parallel else 'Columns',
-            #     'position': (pid+1) if parallel else 0
-            # }
-            # loopHandle = tqdmLoopHandleWrapper(range(startindex, len(neginstances)), **loopkwargs)
+    if len(dbsums) > 0: print(f' Loaded {len(dbsums)} values for', ticker.getTuple())
 
-            ## series portion only
-            neginstancevectors = numpy.zeros((len(neginstances), dm.inputVectorFactory.getInputSize()[2]*dm.precedingRange))
-            for nindx in tqdm.tqdm(range(len(neginstances)), desc='Building input vectors', leave=False):
-                neginstancevectors[nindx] = neginstances[nindx].getInputVector()[2]
+    ## loop calculating by column, then adding to running row sums for each
+    ## series portion only
+    neginstancevectors = numpy.zeros((len(neginstances), dm.inputVectorFactory.getInputSize()[2]*dm.precedingRange))
+    for nindx in tqdm.tqdm(range(len(neginstances)), desc='Building input vectors', leave=False):
+        neginstancevectors[nindx] = neginstances[nindx].getInputVector()[2]
 
-            similaritiesSum = _calculateSimiliarites(similaritiesSum, startindex, neginstancevectors, dryrun)
+    similaritiesSum = _calculateSimiliarites(similaritiesSum, startindex, neginstancevectors)
 
-            # ## old method, for sequential/parallel (not jit) using regular lists/appends
-            # for cindx in tqdmLoopHandleWrapper(range(startindex, len(neginstances)), **loopkwargs):
-            #     ci = neginstances[cindx]
-            #     vector = ci.getInputVector()[2] ## series portion
+    if not dryrun:
+        dbm.startBatch()
+        for vsindx in range(numpy.count_nonzero(similaritiesSum)): ## only iterate through calculated values, filled 0 values indicate otherwise
+            dbm.insertVectorSimilarity(*prepareArgs(vsindx).values(), similaritiesSum[vsindx], upsert=True)
+        dbm.commitBatch()
 
-            #     ## calculate similarites for each row
-            #     similarities = []
-            #     # for rindx in tqdm.tqdm(range(0, cindx), desc=f'{pid} Rows', leave=False, position=(pid+2)*len(cpuCoreUsage)):
-            #     for rindx in range(0, cindx): ## parallel above, this temporary until tqdm lines are fixed
-            #     # for rindx in tqdm.tqdm(range(0, cindx), desc='Rows', leave=False): ## serial
-            #         ri = neginstances[rindx]
-            #         if not dryrun:
-            #             calculatedValue = euclideanSimilarity_jit(vector, ri.getInputVector()[2])
-            #         else:
-            #             calculatedValue = random.randint(0,100)
-
-            #         similarities.append(calculatedValue)
-
-            #     ## add similarites to running sums
-            #     for sindx in range(len(similarities)):
-            #         similaritiesSum[sindx] += similarities[sindx]
-                
-            #     ## sum similarities for current index
-            #     similaritiesSum.append(sum(similarities))
-        except KeyboardInterrupt:
-            keyboardinterrupted = True
-
-        if not dryrun:
-            pass
-            dbm.startBatch()
-            for vsindx in range(numpy.count_nonzero(similaritiesSum)): ## only iterate through calculated values, filled 0 values indicate otherwise
-                dbm.insertVectorSimilarity(*prepareArgs(vsindx).values(), similaritiesSum[vsindx], upsert=True)
-            dbm.commitBatch()
-        else:
-            pass
-
-
-        if keyboardinterrupted: break
-
-    if parallel: cpuCoreUsage[pid] = 0 ## unlock index for progress bar position
-    
     print(f' {"Would insert" if dryrun else "Inserted"} {numpy.count_nonzero(similaritiesSum)-len(dbsums)} new values and {"would update" if dryrun else "updated"} {len(dbsums)} values for', ticker.getTuple())
 
 
