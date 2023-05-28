@@ -512,7 +512,7 @@ def historicalGapCalculationAndInsertion(exchange=None, symbol=None, seriesType=
     if len(gaps) == 0:
         if verbose>=1: print('No gaps found')
     else:
-        for g in tqdmLoopHandleWrapper(gaps, verbose, desc='Determining historical gap fillers for ' + seriesType):
+        for g in tqdmLoopHandleWrapper(gaps, verbose, desc='Determining historical gap fillers for ' + seriesType.name):
             for t in tqdmLoopHandleWrapper(gaps[g], verbose-0.5, desc=str(g)) if ALL else [(exchange, symbol)]:
                 if (t[0], t[1]) in unusableSymbols: continue
                 ## find closest date without going over
