@@ -21,7 +21,7 @@ from structures.networkStats import NetworkStats
 from structures.EvaluationResultsObj import EvaluationResultsObj
 from constants.exceptions import LocationNotSpecificed
 from constants.enums import AccuracyType, DataFormType, LossAccuracy, SeriesType
-from utils.support import recdotdict, shortc, shortcdict
+from utils.support import asBytes, recdotdict, shortc, shortcdict
 from utils.other import maxQuarters
 from managers.inputVectorFactory import InputVectorFactory
 from structures.EvaluationDataHandler import EvaluationDataHandler
@@ -244,7 +244,7 @@ class NeuralNetworkInstance:
         folder = '_dynamicallyLoadedFactories'
         id = str(stats.id)
         with open(os.path.join(path, 'managers', folder, id) + '.py', 'wb') as f:
-            f.write(factoryFile)
+            f.write(asBytes(factoryFile))
         # factory = importlib.import_module('managers.' + folder + '.' + id).InputVectorFactory
         factoryModule = importlib.import_module('managers.' + folder + '.' + id)
         factory = None

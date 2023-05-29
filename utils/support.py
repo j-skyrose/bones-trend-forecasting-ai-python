@@ -182,6 +182,9 @@ def asList(val):
     if val is None: return []
     return val if type(val) is list else [val]
 
+def asBytes(val):
+    return val if type(val) == bytes else val.encode()
+
 ## basically a date that is the first day of the month it represents (including year)
 def asMonthKey(dt: Union[date, datetime, str]):
     dt = date.fromisoformat(asISOFormat(dt))
