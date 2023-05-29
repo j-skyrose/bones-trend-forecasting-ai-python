@@ -18,7 +18,7 @@ from argparse import ArgumentError
 
 from globalConfig import config as gconfig
 from constants.enums import DataFormType, Direction, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetType, DataManagerType, IndicatorType
-from utils.support import generateFibonacciSequence, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
+from utils.support import generateFibonacciSequence, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.other import getInstancesByClass, getMaxIndicatorPeriod, maxQuarters, getIndicatorPeriod, setKWArgsFromConfigForGetSymbols
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
 from constants.values import unusableSymbols, indicatorsKey
@@ -202,7 +202,7 @@ class DataManager():
         else:
             ## reduce amount of unneccessary data retrieved and maintained in memory during lifecycle
             self.queryLimit=None
-            if forPredictor and not postPredictionWeighting:
+            if forPredictor and not postPredictionWeighting and not someIndicatorEnabled(self.config):
                 self.queryLimit = self.precedingRange + 1
 
             if not skipAllDataInitialization:

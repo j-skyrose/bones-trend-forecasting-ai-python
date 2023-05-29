@@ -15,7 +15,7 @@ from multiprocessing import Pool, cpu_count
 from typing import Callable, Dict, Union
 from enum import Enum
 
-from constants.values import months, foundedSynonyms
+from constants.values import months, foundedSynonyms, indicatorsKey
 
 class DotDict(dict):
     def __getattr__(self, item):
@@ -361,6 +361,13 @@ def generateFibonacciSequence(limit):
         retseq.append(retseq[-1] + retseq[-2])
 
     return retseq
+
+## checks if any indicators in the config are enabled
+def someIndicatorEnabled(cf):
+    for v in cf.feature[indicatorsKey].values():
+        if v.enabled: return True
+    return False
+
 
 if __name__ == '__main__':
     # print(processRawValueToInsertValue(44))
