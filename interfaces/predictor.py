@@ -15,6 +15,7 @@ from tensorflow.python.framework.errors_impl import InternalError
 from typing import Tuple
 
 from utils.other import determinePrecedingRangeType
+from constants.values import standardExchanges
 from managers.databaseManager import DatabaseManager
 from managers.vixManager import VIXManager
 from managers.marketDayManager import MarketDayManager
@@ -94,6 +95,8 @@ class Predictor(Singleton):
             networkid = network.id
         if 'anchorDates' in kwargs:
             anchorDate = None
+        if 'maxPageSize' not in kwargs:
+            kwargs['maxPageSize'] = 500
 
         return Predictor.predictAll(networkid, anchorDate, exchange=[exchange], symbol=[symbol], **kwargs)
 
@@ -106,6 +109,8 @@ class Predictor(Singleton):
             if item.date == d.isoformat():
                 ind = index + 1
                 break
+        if ind is None:
+            raise ValueError(f'{anchorDate} not found for {exchange}:{symbol} stock data')
         return sdh.getPrecedingSet(ind), sdh.getPrecedingIndicators(ind)
 
     def __buildPredictInputTuple(self, network, exchange, symbol, anchorDate=date.today().isoformat()):
@@ -149,6 +154,7 @@ class Predictor(Singleton):
         postPredictionWeighting=True,
         # exchange=None, exchange=[], excludeExchange=[]
         numberofWeightingsLimit=0,
+        notMeetingThresholdsPrintLimit=5,
         verbose=1,
         **kwargs
     ):
@@ -178,7 +184,7 @@ class Predictor(Singleton):
                 print('Starting predictions for', len(tickers), 'tickers') ## starting on', anchorDate)
 
         predictionCounter = 0
-        predictionExceptionCounter = 0
+        predictionExceptions = []
         predictionList = []
         predictionInputVectors = {e: [] for e in InputVectorDataType} if gconfig.network.recurrent else []
         predictionTickers = []
@@ -222,10 +228,10 @@ class Predictor(Singleton):
                     predictionTickers.append(tkrORdt)
                 except (ValueError, tf.errors.InvalidArgumentError, SufficientlyUpdatedDataNotAvailable, KeyError, AnchorDateAheadOfLastDataDate, TypeError) as e:
                 # except IndexError:
-                    # print(e)
+                    print(e.__class__, e)
                     # raise e
 
-                    predictionExceptionCounter += 1
+                    predictionExceptions.append(e)
 
                     pass
 
@@ -238,6 +244,13 @@ class Predictor(Singleton):
                 *([predictionInputVectors[InputVectorDataType.SEMISERIES]] if gconfig.feature.financials.enabled else []),
                 predictionInputVectors[InputVectorDataType.SERIES]
             ]
+
+        if len(predictionInputVectors) == 0 or len(predictionInputVectors[0]) == 0:
+            print(predictionExceptions[0])
+            if not singleSymbol:
+                print(predictionExceptions[1])
+                print(predictionExceptions[2])
+            raise ValueError('No input vectors built')
 
         ## run batch predict for all vectors
         if verbose == 1: print('Predicting...')
@@ -260,7 +273,8 @@ class Predictor(Singleton):
                 val = thresholdRound(p) if gconfig.predictor.ifBinaryUseRaw else p
                 if singleSymbol:
                     predictionList.append((anchorDates[ti], val))
-                elif val == 1:
+                # elif val == 1:
+                else:
                     predictionList.append((t.exchange, t.symbol, p))
             if singleSymbol: predictResults = predictionList
 
@@ -272,16 +286,17 @@ class Predictor(Singleton):
 
         if len(anchorDates) < 2:
             if singleSymbol:
-                if predictionExceptionCounter:
+                if len(predictionExceptions) > 0:
                     print('There was an exception for this ticker')
                 else:
-                    print(('{}redicted to'.format('P' if predictResults == 1 else 'Not p')) if gconfig.predictor.ifBinaryUseRaw else '{:.2f}% chance ticker will'.format(predictResults*100), 'exceed threshold from', dt.isoformat(), 'to', MarketDayManager.advance(dt, nn.stats.followingRange).isoformat())
+                    print(('{}redicted to'.format('P' if predictResults == 1 else 'Not p')) if gconfig.predictor.ifBinaryUseRaw else '{:.2f}% chance ticker will'.format(predictResults*100), 'exceed threshold from EOD', MarketDayManager.getPreviousMarketDay(dt).isoformat(), 'to', MarketDayManager.advance(dt, nn.stats.followingRange).isoformat())
             else:
-                tickersMeetingThreshold = len(predictionList)
+                tickersMeetingThreshold = []
+                tickersJustBelowThreshold = []
+                tickersNotMeetingThreshold = []
+
                 ## perform additional weighting on the predict results accuracies
                 if postPredictionWeighting:
-                    weightedAccuracies = {}
-
                     key = AccuracyType.OVERALL
                     # if nn.stats.accuracyType == AccuracyType.POSITIVE:
                     #     key = AccuracyType.NEGATIVE
@@ -289,77 +304,117 @@ class Predictor(Singleton):
                     #     key = AccuracyType.POSITIVE
 
                     networkFactor = getattr(nn.stats, key.statsName)
-                    weightedAccuracyLambda = lambda v: reduce(operator.mul, list(v), 1) * 100
+                    weightedAccuracyLambda = lambda v: reduce(operator.mul, list(v), 1)
                     weightingsCount = 0
                     try:
-                        tqdmhandle = tqdm.tqdm(sorted(predictionList, key=lambda x: x[2], reverse=True), desc='Weighting...')
-                        for s in tqdmhandle:
-                            exchange, symbol, prediction = s
+                        sortedPredictionList = sorted(predictionList, key=lambda x: x[2], reverse=True)
+                        ## focus on higher value predictions first
+                        for phase,phaseString in enumerate(['raw prediction meets threshold', 'raw prediction just under threshold', 'remainder']):
+                            if phase == 1 and len(tickersMeetingThreshold) > 0: break
+                            elif phase == 2 and len(tickersJustBelowThreshold) > 0: break
 
-                            if gconfig.testing.predictor:
-                                startt = time.time()
-                            symbolInfo = self.dbc.getSymbols(exchange=exchange, symbol=symbol)[0]
-                            if gconfig.testing.predictor:
-                                self.wt_testing_getSymbolsTime += time.time() - startt
+                            ## determine weighting factors and assign ticker to appropriate set
+                            tqdmhandle = tqdm.tqdm(sortedPredictionList, desc=f'Weighting {phaseString}')
+                            for s in tqdmhandle:
+                                exchange, symbol, prediction = s
+                                ## raw prediction values below appropriate threshold will not rise above it with additional weighting, so skip until next phase
+                                if phase == 0 and prediction <= POSITIVE_THRESHOLD: continue
+                                elif phase == 1 and prediction <= JUST_BELOW_POSITIVE_THRESHOLD: continue
 
-                            sectorFactor = 1
-                            if symbolInfo.sector:
-                                pass
+                                if gconfig.testing.predictor:
+                                    startt = time.time()
+                                symbolInfo = self.dbc.getSymbols(exchange=exchange, symbol=symbol)[0]
+                                if gconfig.testing.predictor:
+                                    self.wt_testing_getSymbolsTime += time.time() - startt
 
-                            ## network analysis factors
-                            # nanm = NetworkAnalysisManager(nn)
-                            # symbolFactor = nanm.getStockAccuracy(exchange, symbol)
-                            # precedingRangeFactor = nanm.getStockPrecedingRangeTypesAccuracy(determinePrecedingRangeType(self.__getPrecedingRangeData(nn, exchange, symbol, anchorDates[0])))
+                                sectorFactor = 1
+                                if symbolInfo.sector:
+                                    pass
+
+                                ## network analysis factors
+                                # nanm = NetworkAnalysisManager(nn)
+                                # symbolFactor = nanm.getStockAccuracy(exchange, symbol)
+                                # precedingRangeFactor = nanm.getStockPrecedingRangeTypesAccuracy(determinePrecedingRangeType(self.__getPrecedingRangeData(nn, exchange, symbol, anchorDates[0])))
 
 
-                            # weightedAccuracies[s] = (prediction, networkFactor, sectorFactor, symbolFactor, precedingRangeFactor)
-                            weightedAccuracies[s] = (prediction, networkFactor, sectorFactor)
-                            weightingsCount += 1
-                            if numberofWeightingsLimit and weightingsCount >= numberofWeightingsLimit:
-                                break
+                                # val = (exchange, symbol, (prediction, networkFactor, sectorFactor, symbolFactor, precedingRangeFactor))
+                                # val = (exchange, symbol, (prediction, networkFactor, sectorFactor))
+                                val = (exchange, symbol, (prediction, networkFactor, sectorFactor))
+                                weightedAcc = weightedAccuracyLambda(val[2])
+                                if phase == 0 and weightedAcc > POSITIVE_THRESHOLD:
+                                    tickersMeetingThreshold.append(val)
+                                elif phase == 1 and weightedAcc > JUST_BELOW_POSITIVE_THRESHOLD:
+                                    tickersJustBelowThreshold.append(val)
+                                else:
+                                    tickersNotMeetingThreshold.append(val)
+                                weightingsCount += 1
+                                if numberofWeightingsLimit and weightingsCount >= numberofWeightingsLimit:
+                                    break
 
-                            c = 0
-                            postfixstr = ''
-                            for k, v in sorted(weightedAccuracies.items(), key=lambda x: weightedAccuracyLambda(x[1]), reverse=True):
-                                if c > 2: break
-                                if c > 0:
-                                    postfixstr += ' || '
-                                c += 1
-                                postfixstr += k[0] + ';' + k[1] + ': {:.3f}%'.format(float(weightedAccuracyLambda(v)))
+                                c = 0
+                                postfixstr = ''
+                                for exchange, symbol, factorTuple in sorted(tickersMeetingThreshold + tickersJustBelowThreshold + tickersNotMeetingThreshold, key=lambda x: weightedAccuracyLambda(x[2]), reverse=True):
+                                    if c > 2: break
+                                    if c > 0:
+                                        postfixstr += ' || '
+                                    c += 1
+                                    postfixstr += f'{exchange}:{symbol}; {float(weightedAccuracyLambda(factorTuple)):.3f}%'
 
-                            tqdmhandle.set_postfix_str(postfixstr)
-
+                                tqdmhandle.set_postfix_str(postfixstr)
 
                     except (InternalError, KeyboardInterrupt):
                         pass
 
-                    ## evaluate if tickers still meet threshold
-                    tickersMeetingThreshold = 0
-                    tickersJustBelowThreshold = 0
-                    for v in weightedAccuracies.values():
-                        reducedv = weightedAccuracyLambda(v)
-                        if reducedv > POSITIVE_THRESHOLD:
-                            tickersMeetingThreshold += 1
-                        elif reducedv > JUST_BELOW_POSITIVE_THRESHOLD:
-                            tickersJustBelowThreshold += 1
+                    ## sort each list of prediction tuples
+                    tickersMeetingThreshold.sort(key=lambda x: weightedAccuracyLambda(x[2]))
+                    tickersJustBelowThreshold.sort(key=lambda x: weightedAccuracyLambda(x[2]))
+                    tickersNotMeetingThreshold.sort(key=lambda x: weightedAccuracyLambda(x[2]))
 
                     if verbose > 1:
                         print('wt_testing_getSymbolsTime', self.wt_testing_getSymbolsTime, 'seconds')
                         print('wt_testing_getStockAccuracyTime', self.wt_testing_getStockAccuracyTime, 'seconds::')
 
-                    for k, v in sorted(weightedAccuracies.items(), key=lambda x: weightedAccuracyLambda(x[1])):
-                        reducedv = weightedAccuracyLambda(v)
-                        if (tickersMeetingThreshold > 0 and reducedv > 0.5) or (tickersMeetingThreshold == 0 and reducedv > JUST_BELOW_POSITIVE_THRESHOLD) or verbose > 1:
-                            print(k, ':', reducedv, '%  <-', v)
-                    print('Factors: predictions, network, sector, symbol, precrange')
 
+                else: ## no additional weighting of prediction outputs
+                    for tpl in sorted(predictionList, key=lambda x: x[2]):
+                        _,_,val = tpl
+                        if val > POSITIVE_THRESHOLD:
+                            tickersMeetingThreshold.append(tpl)
+                        elif val > JUST_BELOW_POSITIVE_THRESHOLD:
+                            tickersJustBelowThreshold.append(tpl)
+                        else:
+                            tickersNotMeetingThreshold.append(tpl)
 
-                print(predictionExceptionCounter, '/', len(tickers), 'had exceptions')
-                print(tickersMeetingThreshold, '/', len(tickers) - predictionExceptionCounter, 'predicted to exceed threshold from EOD', MarketDayManager.getPreviousMarketDay(dt.isoformat()), 'to', MarketDayManager.advance(MarketDayManager.getLastMarketDay(dt), nn.stats.followingRange).isoformat())
-                if tickersMeetingThreshold == 0:
-                    print(tickersJustBelowThreshold, '/', len(tickers) - predictionExceptionCounter, 'are just below the threshold')
+                ## determine most important set that has tickers; for output
+                noThresholdAdjacentTickers = False
+                outputTickers = tickersNotMeetingThreshold
+                if len(tickersMeetingThreshold) > 0:
+                    outputTickers = tickersMeetingThreshold
+                elif len(tickersJustBelowThreshold) > 0:
+                    outputTickers = tickersJustBelowThreshold
+                else:
+                    noThresholdAdjacentTickers = True
 
-        return predictResults if singleSymbol else weightedAccuracies
+                ## output tickers and their prediction (+ factors) from the highest value set
+                print()
+                printed = 0
+                for exchange, symbol, val in outputTickers:
+                    if noThresholdAdjacentTickers and printed >= notMeetingThresholdsPrintLimit: break
+                    printval = val
+                    if postPredictionWeighting:
+                        printval = weightedAccuracyLambda(val)
+                    print(f"{exchange}:{symbol} : {printval * 100} % {f'<- {val}' if postPredictionWeighting else ''}")
+                    printed += 1
+                if postPredictionWeighting: print('Factors: predictions, network, sector, symbol, precrange')
+
+                ## output summary of the predictions
+                print()
+                print(len(predictionExceptions), '/', len(predictionTickers), 'had exceptions')
+                print(len(tickersMeetingThreshold), '/', len(predictionTickers) - len(predictionExceptions), 'predicted to exceed threshold from EOD', MarketDayManager.getPreviousMarketDay(dt).isoformat(), 'to', MarketDayManager.advance(MarketDayManager.getLastMarketDay(dt), nn.stats.followingRange).isoformat())
+                if len(tickersMeetingThreshold) == 0:
+                    print(len(tickersJustBelowThreshold), '/', len(predictionTickers) - len(predictionExceptions), 'are just below the threshold')
+
+        return predictResults if singleSymbol else (tickersMeetingThreshold, tickersJustBelowThreshold, tickersNotMeetingThreshold)
 
 if __name__ == '__main__':
     # p: Predictor = Predictor()
@@ -378,17 +433,27 @@ if __name__ == '__main__':
     # p.predictAll('1623013426', '2021-05-30', exchange='NYSE') ## 0.15
     # p.predictAll('1623016597', '2021-05-30', exchange='NYSE') ## 0.2
     # p.predictAll('1623018727', '2021-05-30', exchange='NYSE') ## 0.25
-    # Predictor.predictAll('1633809914', '2021-12-11', exchanges=['NYSE', 'NASDAQ']) ## 0.05 - 10d
-    # Predictor.predictAll('1631423638', '2021-11-20', exchanges=['NYSE', 'NASDAQ'], numberOfWeightingsLimit=200) ## 0.1 - 30d
-    # p.predictAll('1631423638', exchanges=['NYSE', 'NASDAQ']) ## 0.1 - 30d
-    Predictor.predictAll('1681021857', '2023-04-07', exchanges=['NYSE', 'NASDAQ'], numberofWeightingsLimit=500, assetTypes=['CS', 'CLA', 'CLB', 'CLC'], maxPageSize=500) ## 0.05 - 10d - recurrent
-    # Predictor.predict('NYSE', 'GME', '2021-12-28', '1678667196')
+    # Predictor.predictAll('1633809914', '2021-12-11', exchange=['NYSE', 'NASDAQ']) ## 0.05 - 10d
+    # Predictor.predictAll('1631423638', '2021-11-20', exchange=['NYSE', 'NASDAQ'], numberOfWeightingsLimit=200) ## 0.1 - 30d
+    # p.predictAll('1631423638', exchange=['NYSE', 'NASDAQ']) ## 0.1 - 30d
+    Predictor.predictAll('1684532612', '2023-05-27', 
+                        #  exchange=standardExchanges, 
+                        exchange=['BATS','NASDAQ','NYSE','NYSE ARCA','NYSE MKT'],
+                         postPredictionWeighting=False,
+                        #  numberofWeightingsLimit=500, 
+                        #  assetTypes=['CS', 'CLA', 'CLB', 'CLC'], 
+                         maxPageSize=50) ## 0.05 - 10d - recurrent
+    # Predictor.predict('NYSE', 'PLTR', '2023-05-08', networkid='1684532612')
+    # print(Predictor.predict('NASDAQ', 'AAPL', networkid='1684532612', 
+    #                         anchorDates=[f'2023-04-{d}' for d in [(val if val > 9 else '0'+str(val)) for val in range(20,30)]])
+    #                         # anchorDates=[f'2023-05-{d}' for d in [(val if val > 9 else '0'+str(val)) for val in range(8,21)]])
+    #                         )
     # Predictor.predict('NYSE', 'GME', networkid='1641959005', anchorDates=['2021-12-28', '2021-12-31']) ## 0.05 - 10d - recurrent
 
 
     # for x in range(365):
     #     dt = date.today() - timedelta(days=x+1)
-    #     p.predictAll('1631423638', dt.isoformat(), exchanges=['NYSE', 'NASDAQ']) ## 0.1 - 30d
+    #     p.predictAll('1631423638', dt.isoformat(), exchange=['NYSE', 'NASDAQ']) ## 0.1 - 30d
 
     # c.start(SeriesType.DAILY)
     # c.start()
