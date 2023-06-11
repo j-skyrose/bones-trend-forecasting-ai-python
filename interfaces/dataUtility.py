@@ -378,10 +378,11 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, autoUpdateDamagedSymbols
     if verbose>=2: print('result count', len(results))
 
     dateGaps = {} if ALL else []
-    damagedTickers = set()
+    currentDamagedTickers = set()
+    lastDamagedTickers = set()
     for rerun in range(2):
         for r in tqdmLoopHandleWrapper(results, verbose%2, desc='Determining DAILY historical gaps'):
-            if (r.exchange, r.symbol) in unusableSymbols or (r.exchange, r.symbol) in damagedTickers: continue
+            if (r.exchange, r.symbol) in unusableSymbols or (r.exchange, r.symbol) in lastDamagedTickers: continue
 
             data = dbm.getStockData(r.exchange, r.symbol, SeriesType.DAILY)
             startDate = date.fromisoformat(r.start)
@@ -426,15 +427,15 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, autoUpdateDamagedSymbols
                     consecgaps += 1
 
                     if consecgaps > 75: 
-                        damagedTickers.add((r.exchange, r.symbol))
+                        currentDamagedTickers.add((r.exchange, r.symbol))
                 else:
                     dindex += 1
                     consecgaps = 0
 
-        if len(damagedTickers) == 0:
+        if len(currentDamagedTickers) == 0:
             break
         else:
-            if verbose>=1: print(buildCommaSeparatedTickerPairString(damagedTickers))
+            if verbose>=1: print(buildCommaSeparatedTickerPairString(currentDamagedTickers))
             if autoUpdateDamagedSymbols and rerun == 0:
                 if verbose>=1: print('Consecutive gaps too big for some symbols')
 
@@ -449,13 +450,13 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, autoUpdateDamagedSymbols
                         elif autoWrittenLineIsNext:
                             ## parse existing tickers, ensure no duplicates when appending damagedTickers
                             line = line[:-1].replace(',(','')
-                            tickers = line.split(')')
+                            tickers = line.split(')')[:-1] ## drop empty
                             for tindx in range(len(tickers)):
                                 tickers[tindx] = (*tickers[tindx].replace('\'','').split(','),)
                             newDamagedTickers = set()
                             for t in tickers:
                                 newDamagedTickers.add(t)
-                            for t in damagedTickers:
+                            for t in currentDamagedTickers:
                                 newDamagedTickers.add(t)
 
                             line = buildCommaSeparatedTickerPairString(newDamagedTickers) + '\n'
@@ -466,6 +467,8 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, autoUpdateDamagedSymbols
 
                 ## reset gaps so next iteration will re-build, excluding damaged symbols
                 dateGaps = {} if ALL else []
+                lastDamagedTickers = currentDamagedTickers.copy()
+                currentDamagedTickers.clear()
 
             else:
                 raise Exception('consecutive gaps too big for some symbols')
