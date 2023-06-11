@@ -144,7 +144,9 @@ class DataManager():
         self.initializeStockDataHandlersOnly = initializeStockDataHandlersOnly
         self.type: DataManagerType
         if analysis: self.type = DataManagerType.ANALYSIS
-        elif forPredictor: self.type = DataManagerType.PREDICTION
+        elif forPredictor: 
+            self.type = DataManagerType.PREDICTION
+            self.config.multicore = False ## concurrent.futures.process.BrokenProcessPool error breaks overall init, TODO: fix multicore init and remove this line
         elif statsOnly: self.type = DataManagerType.STATS
         else: self.type = DataManagerType.DEFAULT
         ##
