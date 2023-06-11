@@ -85,7 +85,6 @@ class Collector:
         print(len(apiErrorErrors), '/', len(self.apiErrors), 'had errors while trying to update API field:', apiErrorErrors)
 
     def __loopCollectByDate(self, api):
-        localDBM = DatabaseManager()
         batchByDate = {}
         startingPastDaysCount = self.apiManager.apis[api].priority * 365
         lastUpdatedPastDaysCount = math.floor( (self.currentDate - self.apiManager.apis[api].updatedOn).total_seconds() / (60 * 60 * 24) )
@@ -118,23 +117,17 @@ class Collector:
 
         ## commit data only if symbols are in the given bucket
         counter = 0
-        # bucketSymbols = [sp.symbol for sp in symbols]
         for s in tqdm.tqdm(batchBySymbol, desc='Inserting data'):
-            # if s in bucketSymbols:
-                exchangeQuery = localDBM.getSymbols(symbol=s, api=api)
-                if len(exchangeQuery) != 1:
-                    self.apiErrors.append(('-',s))
-                    continue
+            exchangeQuery = dbm.getSymbols(symbol=s, api=api)
+            if len(exchangeQuery) != 1:
+                self.apiErrors.append(('-',s))
+                continue
 
-                # break
-                localDBM.insertData(exchangeQuery[0].exchange, s, SeriesType.DAILY, api, batchBySymbol[s], currentDate=currentDate)
-                localDBM.commit()
-                counter += 1
-            # else:
-            #     self.apiErrors.append(('n/a', s))
+            dbm.insertData(exchangeQuery[0].exchange, s, SeriesType.DAILY, api, batchBySymbol[s], currentDate=self.currentDate)
+            dbm.commit()
+            counter += 1
 
         print('Updated', api, 'data for', counter, 'symbols')
-        localDBM.close()
 
     ## polygon only right now
     ## pre market is 4am-open, after market is close-8pm
