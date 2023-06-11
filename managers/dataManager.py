@@ -18,7 +18,7 @@ from argparse import ArgumentError
 
 from globalConfig import config as gconfig
 from constants.enums import DataFormType, Direction, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetType, DataManagerType, IndicatorType
-from utils.support import generateFibonacciSequence, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
+from utils.support import asList, generateFibonacciSequence, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.other import getInstancesByClass, getMaxIndicatorPeriod, maxQuarters, getIndicatorPeriod, setKWArgsFromConfigForGetSymbols
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
 from constants.values import unusableSymbols, indicatorsKey
@@ -84,7 +84,7 @@ class DataManager():
     def __init__(self,
         precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, threshold=0,
         setCount=None, setSplitTuple=None, minimumSetsPerSymbol=0, useAllSets=False,
-        inputVectorFactory=InputVectorFactory(), normalizationInfo={}, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, symbolList:List=[],
+        inputVectorFactory=InputVectorFactory(), normalizationInfo={}, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, symbolList:List=[], symbol:List=[],
         analysis=False, skips: SkipsObj=SkipsObj(), saveSkips=False,
 
         statsOnly=False, initializeStockDataHandlersOnly=False, useOptimizedSplitMethodForAllSets=True,
@@ -156,6 +156,9 @@ class DataManager():
         inappropriateSymbols = [(s.exchange, s.symbol) for s in explicitValidationSymbolList]
         symbolList[:] = [s for s in symbolList if (s.exchange, s.symbol) not in unusableSymbols + inappropriateSymbols]
 
+        if symbol:
+            symbols = asList(symbol)
+            symbolList[:] = [s for s in symbolList if s.symbol in symbols]
 
         self.explicitValidationSymbolList = explicitValidationSymbolList
         ##
