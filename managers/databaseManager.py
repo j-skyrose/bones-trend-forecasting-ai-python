@@ -306,7 +306,7 @@ class DatabaseManager(Singleton):
         # return self._queryOrGetCache(stmt, (exchange, symbol, type.name), self._getHistoricalDataCount(), exchange+';'+symbol+';'+type.name)
         if minDate:    stmt += 'AND date > \'' + minDate + '\''
         stmt += ' ORDER BY date'
-        if queryLimit: stmt += ' LIMIT ' + str(queryLimit)
+        if queryLimit: stmt += ' DESC LIMIT ' + str(queryLimit)
 
         data = self.dbc.execute(stmt, (exchange.upper(), symbol.upper(), seriesType.name)).fetchall()
 
