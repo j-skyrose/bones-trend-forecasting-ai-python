@@ -371,6 +371,16 @@ def someIndicatorEnabled(cf):
         if v.enabled: return True
     return False
 
+def convertToCamelCase(string, firstCapital=False):
+    ret = ''
+    capitalizeCurrent = False
+    for char in string:
+        if capitalizeCurrent: ret += str(char).capitalize()
+        elif char != '_': ret += char
+
+        capitalizeCurrent = char == '_'
+    if firstCapital: ret = str(ret[0]).capitalize() + ret[1:]
+    return ret
 
 if __name__ == '__main__':
     # print(processRawValueToInsertValue(44))

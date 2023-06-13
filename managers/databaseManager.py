@@ -20,8 +20,9 @@ from structures.api.googleTrends.request import GoogleAPI
 
 from globalConfig import config as gconfig
 from managers.marketDayManager import MarketDayManager
-from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FinancialReportType, IndicatorType, InterestType, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SeriesType, AccuracyType, SetType, Direction
-from utils.support import asDate, asISOFormat, asList, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, tqdmLoopHandleWrapper, unixToDatetime
+from managers._generatedDatabaseAnnotations.databaseRowObjects import AccuracyLastUpdatesRow, CboeVolatilityIndexRow, DataSetsRow, DumpStockSplitsPolygonRow, HistoricalDataRow, HistoricalVectorSimilarityDataRow, NetworkAccuraciesRow, NetworksRow, StagingSymbolInfoRow, SymbolsRow
+from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FinancialReportType, IndicatorType, InterestType, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, AccuracyType, SetType, Direction
+from utils.support import asDate, asISOFormat, asList, convertToCamelCase, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, tqdmLoopHandleWrapper, unixToDatetime
 from utils.other import buildCommaSeparatedTickerPairString, parseCommandLineOptions
 from constants.values import unusableSymbols, apiList, standardExchanges
 
@@ -105,11 +106,42 @@ class DatabaseManager(Singleton):
         if raw: return data
         return [d for d in data if (d.exchange, d.symbol) not in unusableSymbols]
 
+    ## auto-generate a file full of annotation objects for the rows of each table in the database: _generatedDatabaseAnnotations/databaseRowObjects.py
+    def _generateDatabaseAnnotationObjectsFile(self):
+        def __generateArgTypeString(cname, t):
+            if t in ['TEXT', 'STRING']: return ': str'
+            elif t in ['', 'NUMERIC', 'INTEGER'] and cname in ['artificial', 'migrated', 'fmp_isetf', 'duplicate', 'wksi', 'prevrpt', 'detail', 'custom', 'abstract']: return ': bool'
+            elif t in ['REAL', 'BIGDOUBLE', 'NUMERIC']: return ': float'
+            elif t in ['NUM', 'NUMBER', 'INTEGER', 'INT', 'BIGINT']: return ': int'
+            elif t in ['BYTE', 'BLOB']: return ': bytes'
+            elif t in ['DATETIME']: return ': datetime'
+            return ''
+
+        filestring = 'from datetime import datetime\n\n'
+        tables = [r.tbl_name for r in self.dbc.execute('SELECT * FROM sqlite_master WHERE type=?', ('table',)).fetchall()]
+        for t in tables:
+            columns = self.dbc.execute(f'PRAGMA table_info({t})').fetchall()
+            initargsList = []
+            initfuncString = ''
+            for c in columns:
+                cname = convertToCamelCase(c.name)
+                initargsList.append(f"{cname}Value{__generateArgTypeString(c['name'], c['type'])}")
+                # initfuncString += f'\t\tsetattr(self, \'{cname}\', {cname}Value)\n'
+                initfuncString += f'\t\tself.{cname} = {cname}Value\n'
+
+            filestring += f'class {convertToCamelCase(t, firstCapital=True)}Row():\n'
+            filestring += f"\t## {', '.join([c['name'] for c in columns])}\n"
+            filestring += f"\tdef __init__(self, {', '.join(initargsList)}):\n"
+            filestring += initfuncString
+            filestring += '\n'
+
+        with open(os.path.join(path, 'managers', '_generatedDatabaseAnnotations', 'databaseRowObjects.py'), 'w') as f:
+            f.write(filestring)
 
     ####################################################################################################################################################################
     ## gets ####################################################################################################################################################################
 
-    def getMaxRowID(self, table='google_interests_raw'):
+    def getMaxRowID(self, table='google_interests_raw') -> int:
         return self.dbc.execute(f'SELECT MAX(rowid) FROM {table}').fetchone()['MAX(rowid)']
 
     def getLoadedQuarters(self):
@@ -129,7 +161,7 @@ class DatabaseManager(Singleton):
         return recdotdict(ret)
 
     ## get data from symbol_list table
-    def getSymbols(self, exchange=None, symbol=None, assetType=None, api=None, googleTopicId:Union[str, SQLHelpers]=None, founded:Union[str, SQLHelpers]=None, sector:Union[str, SQLHelpers]=None, withDetailsMissing=False, **kwargs):
+    def getSymbols(self, exchange=None, symbol=None, assetType=None, api=None, googleTopicId:Union[str, SQLHelpers]=None, founded:Union[str, SQLHelpers]=None, sector:Union[str, SQLHelpers]=None, withDetailsMissing=False, **kwargs) -> List[SymbolsRow]:
         stmt = 'SELECT * FROM symbols s '
         adds = []
         args = []
@@ -205,18 +237,18 @@ class DatabaseManager(Singleton):
 
         return self.dbc.execute(stmt).fetchall()
 
-    def getStagedSymbolRows(self):
+    def getStagedSymbolRows(self) -> List[StagingSymbolInfoRow]:
         # return self.dbc.execute('SELECT * FROM staging_symbol_info WHERE exchange=?', ('NYSE',)).fetchall()
         return self.dbc.execute('SELECT * FROM staging_symbol_info').fetchall()
 
     ## get symbols of which financials retrieval has not already been attempted
-    def getSymbols_forFinancialStaging(self, api, ftype: FinancialReportType=None):
+    def getSymbols_forFinancialStaging(self, api, ftype: FinancialReportType=None) -> List[SymbolsRow]:
         # stmt = 'SELECT s.exchange, s.symbol FROM symbols s LEFT JOIN staging_financials sf ON s.exchange = sf.exchange AND s.symbol = sf.symbol WHERE sf.exchange IS NULL AND sf.symbol IS NULL AND s.api_' + api + ' = 1'
         # if ftype:
         #     stmt += ' AND sf.period = \'' + ftype.name + '\''
         substmt = 'SELECT * FROM staging_financials WHERE exchange = symbols.exchange AND symbol = symbols.symbol AND ' + api + ' IS NOT NULL'
         if ftype: substmt += ' AND period = \'' + ftype.name + '\''
-        stmt = 'SELECT exchange, symbol FROM symbols WHERE NOT EXISTS (' + substmt + ') AND api_' + api + ' = 1'
+        stmt = 'SELECT * FROM symbols WHERE NOT EXISTS (' + substmt + ') AND api_' + api + ' = 1'
         return self.dbc.execute(stmt).fetchall()
 
     ## get the row for each symbol with the latest datetime from historical_data_minute
@@ -295,13 +327,13 @@ class DatabaseManager(Singleton):
 
     ## get network stats
     ## used by setManager when getting a saved data set
-    def getSetInfo(self, id):
-        stmt = 'SELECT changeThreshold, precedingRange, followingRange, highMax, volumeMax FROM networks WHERE id = ?'
+    def getSetInfo(self, id) -> NetworksRow:
+        stmt = 'SELECT * FROM networks WHERE id = ?'
         return self.dbc.execute(stmt, (id,)).fetchone()
 
     ## get all historical data for ticker and seriesType
     ## sorted date ascending
-    def getStockData(self, exchange: str, symbol: str, seriesType: SeriesType, minDate=None, fillGaps=False, queryLimit=None):
+    def getStockData(self, exchange: str, symbol: str, seriesType: SeriesType, minDate=None, fillGaps=False, queryLimit=None) -> List[HistoricalDataRow]:
         stmt = 'SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ' 
         # return self._queryOrGetCache(stmt, (exchange, symbol, type.name), self._getHistoricalDataCount(), exchange+';'+symbol+';'+type.name)
         if minDate:    stmt += 'AND date > \'' + minDate + '\''
@@ -313,7 +345,7 @@ class DatabaseManager(Singleton):
         return data
 
     ## get saved data set for network
-    def getDataSet(self, id, setid):
+    def getDataSet(self, id, setid) -> List[DataSetsRow]:
         stmt = 'SELECT * FROM data_sets WHERE network_id = ? AND network_set_id = ?'
         return self.dbc.execute(stmt, (id, setid)).fetchall()
 
@@ -466,11 +498,11 @@ class DatabaseManager(Singleton):
 
         return processDBQuartersToDicts(res) if not raw else res
 
-    def getVIXData(self):
+    def getVIXData(self) -> List[CboeVolatilityIndexRow]:
         stmt = 'SELECT * FROM cboe_volatility_index ORDER BY date'
         return self.dbc.execute(stmt).fetchall()
 
-    def getVIXMax(self):
+    def getVIXMax(self) -> float:
         stmt = 'SELECT max(high) FROM cboe_volatility_index'
         m = self.dbc.execute(stmt).fetchone()['max(high)']
         if m > 100:
@@ -495,11 +527,11 @@ class DatabaseManager(Singleton):
         res = self.dbc.execute(stmt).fetchall()
         return res if asRowDict else [r['sector'] for r in res]
 
-    def getMostRecentNetworkAccuracyUpdateRows(self, nnid):
+    def getMostRecentNetworkAccuracyUpdateRows(self, nnid) -> List[AccuracyLastUpdatesRow]:
         stmt = 'SELECT * FROM accuracy_last_updates WHERE network_id=?'
         return self.dbc.execute(stmt, (str(nnid),)).fetchall()
 
-    def getNetworkAccuracy(self, nnid, acctype: AccuracyAnalysisTypes, arg1: Union[PrecedingRangeType, str], arg2=None):
+    def getNetworkAccuracy(self, nnid, acctype: AccuracyAnalysisTypes, arg1: Union[PrecedingRangeType, str], arg2=None) -> List[NetworkAccuraciesRow]:
         stmt = 'SELECT subtype2, sum, count FROM network_accuracies WHERE network_id=? AND accuracy_type=? AND subtype1=?'
         tple = [str(nnid), acctype.value]
         if acctype == AccuracyAnalysisTypes.STOCK:
@@ -532,7 +564,7 @@ class DatabaseManager(Singleton):
             raise ValueError('Too many returned rows')
         return recdotobj(res[0]['pickled_split'])
 
-    def getLatestSplitDate(self, exchange=None):
+    def getLatestSplitDate(self, exchange=None) -> str:
         stmt = 'SELECT max(date) as date FROM stock_splits'
         args = []
         exchange = asList(shortc(exchange, []))
@@ -547,7 +579,7 @@ class DatabaseManager(Singleton):
         else:
             return res
     
-    def getStockSplits(self, exchange=None, symbol=None):
+    def getStockSplits(self, exchange=None, symbol=None) -> List[DumpStockSplitsPolygonRow]:
         # stmt = 'SELECT * FROM stock_splits'
         stmt = 'SELECT * FROM dump_stock_splits_polygon'
         args = []
@@ -591,7 +623,7 @@ class DatabaseManager(Singleton):
 
         return self.dbc.execute(stmt, tuple(args)).fetchall()
 
-    def getMaxGoogleInterestStream(self, exchange=None, symbol=None, gtopicid=None, itype:InterestType=InterestType.DAILY):
+    def getMaxGoogleInterestStream(self, exchange=None, symbol=None, gtopicid=None, itype:InterestType=InterestType.DAILY) -> int:
         stmt = 'SELECT MAX(stream) AS maxstream FROM google_interests_raw gi '
         args = []
         if gtopicid:
@@ -634,7 +666,7 @@ class DatabaseManager(Singleton):
         res = self.dbc.execute(stmt).fetchall()
         return [e for e in res]
     
-    def getVectorSimilarity(self, exchange, symbol, seriesType: SeriesType=None, dt=None, vclass: OutputClass=None, precedingRange=None, followingRange=None, threshold=None, orderBy='date'):
+    def getVectorSimilarity(self, exchange, symbol, seriesType: SeriesType=None, dt=None, vclass: OutputClass=None, precedingRange=None, followingRange=None, threshold=None, orderBy='date') -> List[HistoricalVectorSimilarityDataRow]:
         stmt = 'SELECT * FROM historical_vector_similarity_data WHERE exchange=? and symbol=? '
         args = [exchange, symbol]
 
