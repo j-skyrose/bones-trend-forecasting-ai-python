@@ -137,8 +137,9 @@ def _flattenGen(li: list):
     else:
         yield li
 
+## used on rows from historical_data table
 def _isoformatd(d) -> date:
-    return date.fromisoformat(d.date)
+    return date.fromisoformat(d.period_date)
 
 def _edgarformatd(d) -> date:
     return date(int(d[:4]), int(d[4:6]), int(d[6:]))

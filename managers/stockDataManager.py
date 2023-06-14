@@ -111,7 +111,7 @@ class StockDataManager(Singleton):
 
     def __initializeInstances(self, h: StockDataHandler, f: FinancialDataHandler):
         for s in h.getAvailableSelections():
-            self.instances[(h.symbolData.exchange, h.symbolData.symbol, h.data[s].date)] = self.__buildInstance(h, s, f)
+            self.instances[(h.symbolData.exchange, h.symbolData.symbol, h.data[s].period_date)] = self.__buildInstance(h, s, f)
 
     def __buildInstance(self, stockDataHandler, stockDataIndex, financialDataHandler):
         d = stockDataHandler.data

@@ -339,8 +339,8 @@ class DatabaseManager(Singleton):
     def getStockData(self, exchange: str, symbol: str, seriesType: SeriesType, minDate=None, fillGaps=False, queryLimit=None) -> List[HistoricalDataRow]:
         stmt = 'SELECT * from historical_data WHERE exchange=? AND symbol=? AND series_type=? ' 
         # return self._queryOrGetCache(stmt, (exchange, symbol, type.name), self._getHistoricalDataCount(), exchange+';'+symbol+';'+type.name)
-        if minDate:    stmt += 'AND date > \'' + minDate + '\''
-        stmt += ' ORDER BY date'
+        if minDate:    stmt += 'AND period_date > \'' + minDate + '\''
+        stmt += ' ORDER BY period_date'
         if queryLimit: stmt += ' DESC LIMIT ' + str(queryLimit)
 
         data = self.dbc.execute(stmt, (exchange.upper(), symbol.upper(), seriesType.name)).fetchall()
@@ -359,7 +359,7 @@ class DatabaseManager(Singleton):
 
     ## setup helper for iterating through historical data in chronological order, stock by stock
     def getHistoricalStartEndDates(self, exchange=None, symbol=None, seriesType:SeriesType=SeriesType.DAILY):
-        stmt = 'SELECT min(date) as start, max(date) as finish, exchange, symbol FROM historical_data WHERE series_type=? '
+        stmt = 'SELECT min(period_date) as start, max(period_date) as finish, exchange, symbol FROM historical_data WHERE series_type=? '
         tuple = (seriesType.name,)
         if exchange:
             stmt += 'AND exchange=? '
@@ -421,7 +421,7 @@ class DatabaseManager(Singleton):
         if gconfig.feature.financials.enabled and gconfig.feature.financials.dataRequired:
             stmt += ' , vwtb_edgar_quarters q'
             stmt2 += ' AND h.exchange = q.exchange AND h.symbol = q.symbol '
-            stmt3 += ' AND h.exchange||h.symbol IN (SELECT DISTINCT q.exchange||q.symbol FROM vwtb_edgar_quarters q) AND REPLACE(h.date, \'-\', \'\') >= q.filed'
+            stmt3 += ' AND h.exchange||h.symbol IN (SELECT DISTINCT q.exchange||q.symbol FROM vwtb_edgar_quarters q) AND REPLACE(h.period_date, \'-\', \'\') >= q.filed'
 
         if normalizationInfo or gconfig.testing.enabled:
             exchange = asList(exchange)
@@ -781,8 +781,8 @@ class DatabaseManager(Singleton):
         #     tpls = []
         #     for i in dset:
         #         h = i.handler
-        #         # print('d', h.data[i.index], h.data[i.index].date)
-        #         tpls.append((id, h.exchange, h.symbol, h.seriesType.name, h.data[i.index].date, setId, stype.name))
+        #         # print('d', h.data[i.index], h.data[i.index].period_date)
+        #         tpls.append((id, h.exchange, h.symbol, h.seriesType.name, h.data[i.index].period_date, setId, stype.name))
         #     return tpls
 
         ## save to data_sets
@@ -804,7 +804,7 @@ class DatabaseManager(Singleton):
             for i in tqdm(dset, desc='Saving ' + stype.name + ' set and interests'):
                 ## save to data_sets
                 h = i.handler
-                self.dbc.execute(ds_stmt, (id, h.symbolData.exchange, h.symbolData.symbol, h.seriesType.name, h.data[i.index].date, setId, stype.name))
+                self.dbc.execute(ds_stmt, (id, h.symbolData.exchange, h.symbolData.symbol, h.seriesType.name, h.data[i.index].period_date, setId, stype.name))
             
         # for t in SetType
         _saveSet(trainingSet, SetType.TRAINING)
@@ -1391,7 +1391,7 @@ class DatabaseManager(Singleton):
 
                     if len(data) > 0:
                         print('Mismatch found', ipolist, s.exchange, s.symbol)
-                        earliestdate = date.fromisoformat(data[0].date)
+                        earliestdate = date.fromisoformat(data[0].period_date)
                         ipodates = [date.fromisoformat(d) for d in ipolist]
 
                         resultdate = None
@@ -1504,7 +1504,7 @@ class DatabaseManager(Singleton):
                 if DEBUG: print('holidays for', cyear, holidays)
 
             ## actual gap checker
-            if cdate != date.fromisoformat(data[dindex].date):
+            if cdate != date.fromisoformat(data[dindex].period_date):
                 artificial = 1
                 if cdate in holidays:
                     if fillForNonUSMarkets:
@@ -1537,7 +1537,7 @@ class DatabaseManager(Singleton):
         for r in results:
             if (r.exchange, r.symbol) in unusableSymbols: continue
 
-            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND series_type=? ORDER BY date', (r.exchange, r.symbol, seriesType.name)).fetchall()
+            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND series_type=? ORDER BY period_date', (r.exchange, r.symbol, seriesType.name)).fetchall()
 
             for idx, d in enumerate(data):
                 try:
@@ -1545,17 +1545,17 @@ class DatabaseManager(Singleton):
                     if ratio >= 2 or ratio <= 0.5:
                         if MULTIPLE:
                             try:
-                                splitDates[d.date].append((r.exchange, r.symbol))
+                                splitDates[d.period_date].append((r.exchange, r.symbol))
                             except KeyError:
-                                splitDates[d.date] = [(r.exchange, r.symbol)]
+                                splitDates[d.period_date] = [(r.exchange, r.symbol)]
                         else:
-                            splitDates.append(d.date)
+                            splitDates.append(d.period_date)
 
                         ## determine split
                         ratio = Decimal(ratio).as_integer_ratio()
 
                         if verbose > 0: 
-                            print(r.exchange, r.symbol, '{} : {}'.format(math.ceil(ratio[0]*10)/10, math.ceil(ratio[1]*10)/10), d.date)
+                            print(r.exchange, r.symbol, '{} : {}'.format(math.ceil(ratio[0]*10)/10, math.ceil(ratio[1]*10)/10), d.period_date)
                             print('\t', d.close, '->', data[idx+2].close)                        
 
                 except IndexError:
@@ -1577,7 +1577,7 @@ class DatabaseManager(Singleton):
 
             if (r.exchange, r.symbol) in unusableSymbols: continue
 
-            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND series_type=? ORDER BY date', (r.exchange, r.symbol, seriesType.name)).fetchall()
+            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND series_type=? ORDER BY period_date', (r.exchange, r.symbol, seriesType.name)).fetchall()
 
             artificialStringLength = 0
             for d in data:
@@ -1878,14 +1878,14 @@ class DatabaseManager(Singleton):
 
         errorTickers = []
         ratioErrorTickers = []
-        selectStmt = 'SELECT * FROM historical_data WHERE date >= ? AND date <= ? AND exchange = ? AND symbol = ? AND series_type=? ORDER BY date DESC LIMIT 2'
+        selectStmt = 'SELECT * FROM historical_data WHERE period_date >= ? AND period_date <= ? AND exchange = ? AND symbol = ? AND series_type=? ORDER BY period_date DESC LIMIT 2'
         updateStmt = 'UPDATE stock_splits SET status=? WHERE date=? AND exchange=? AND symbol=?'
         c=0
         for t in tqdm(tickersToCheck, desc='Validating stock splits') if verbose > 0 and not dryRun else tickersToCheck:
             tpl = (t.date, t.exchange, t.symbol)
             try:
                 splitDayData, prevDayData = self.dbc.execute(selectStmt, ((date.fromisoformat(t.date)-timedelta(days=4)).isoformat(),)+tpl+(SeriesType.DAILY.name,)).fetchall()
-                if splitDayData.date != t.date: raise ValueError
+                if splitDayData.period_date != t.date: raise ValueError
             except (ValueError, AttributeError):
             # except Exception as e:
                 # print(e)
@@ -2208,7 +2208,7 @@ class DatabaseManager(Singleton):
                 print('GI:', gidata[0].date, '->', gidata[-1].date)
 
             hdata = src_cursor.execute('SELECT * FROM historical_data WHERE exchange=? and symbol=?', (s.exchange, s.symbol)).fetchall()
-            print('SD:', hdata[0].date, '->', hdata[-1].date)
+            print('SD:', hdata[0].period_date, '->', hdata[-1].period_date)
 
 
         # print()

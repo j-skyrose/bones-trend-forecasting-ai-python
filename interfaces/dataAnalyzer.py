@@ -44,7 +44,7 @@ class DataAnalzer:
             stockdata = dbm.getStockData(s.exchange, s.symbol, SeriesType.DAILY)
             anchorDateIndex = None
             for p in range(len(stockdata)):
-                if stockdata[p].date == anchorDate: 
+                if stockdata[p].period_date == anchorDate: 
                     anchorDateIndex = p
                     break
             if not anchorDateIndex:

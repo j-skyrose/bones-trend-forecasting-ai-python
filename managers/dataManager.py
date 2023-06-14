@@ -472,9 +472,9 @@ class DataManager():
         precedingIndicators: Dict = stockDataSet.getPrecedingIndicators(stockDataIndex)
         self.getprecindctime += time.time() - startt
 
-        anchordate = date.fromisoformat(stockDataSet.data[stockDataIndex].date)
+        anchordate = date.fromisoformat(stockDataSet.data[stockDataIndex].period_date)
 
-        try: splitsset = self.stockSplitsHandlers[stockDataSet.getTickerTuple()].getForRange(precset[0].date, precset[-1].date)
+        try: splitsset = self.stockSplitsHandlers[stockDataSet.getTickerTuple()].getForRange(precset[0].period_date, precset[-1].period_date)
         except KeyError: splitsset = []
 
         try: googleinterests = self.googleInterestsHandlers[stockDataSet.getTickerTuple()].getPrecedingRange(anchordate.isoformat(), self.precedingRange)
@@ -639,13 +639,13 @@ class DataManager():
                     totalInstanceReduction += len(removedDates)
 
                     ## remove indexes from available selections
-                    availableIndexes[oupclass][:] = [i for i in availableIndexes[oupclass] if h.data[i].date not in removedDates]
+                    availableIndexes[oupclass][:] = [i for i in availableIndexes[oupclass] if h.data[i].period_date not in removedDates]
                     
                     if verbose>=2: printInstanceCounts(before=False)
 
             for oupclass, indexes in availableIndexes.items():
                 for sindex in indexes:
-                    self.__getattribute__(dmProperty)[TickerDateKeyType(*h.getTickerTuple(), h.data[sindex].date)] = DataPointInstance(
+                    self.__getattribute__(dmProperty)[TickerDateKeyType(*h.getTickerTuple(), h.data[sindex].period_date)] = DataPointInstance(
                         self.buildInputVector,
                         h, sindex, oupclass
                     )
@@ -942,7 +942,7 @@ class DataManager():
                     available = h.getAvailableSelections()
                     sampleSize = min(minimumSetsPerSymbol, len(available))
                     if sampleSize > 0:
-                        selectDates = [h.data[d].date for d in available]
+                        selectDates = [h.data[d].period_date for d in available]
                         # print('preshuffle')
                         # print(available)
                         # print(sampleSize)

@@ -125,7 +125,7 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
     ticker = TickerKeyType.fromDict(ticker)
     neginstances = getInstancesByClass(dm.stockDataInstances.values())[1]
     def getDTArg(indx): ## specifically for neg instances
-        return dm.stockDataHandlers[ticker].data[neginstances[indx].index].date
+        return dm.stockDataHandlers[ticker].data[neginstances[indx].index].period_date
 
     ## prepare get/insert arguments
     def prepareArgs(indx=None):
@@ -191,12 +191,12 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
             return
         else: ## some data
             dbsumLastDate = dbsums[dbsumCount-1].date
-            stockDataDate = dm.stockDataHandlers[ticker].data[dbsumCount-1].date
+            stockDataDate = dm.stockDataHandlers[ticker].data[dbsumCount-1].period_date
             if dbsumLastDate == stockDataDate:
                 print(ticker.getTuple(), 'needs correction')
                 for dindx in range(dbsumCount-1, -1, -1): ## run in reverse so there are no conflicts with yet-to-be-corrected data rows
                     newDate = getDTArg(dindx)
-                    oldDate = dm.stockDataHandlers[ticker].data[dindx].date
+                    oldDate = dm.stockDataHandlers[ticker].data[dindx].period_date
                     if not dryrun:
                         args = [asISOFormat(newDate), ticker.exchange, ticker.symbol, dm.seriesType.name, asISOFormat(oldDate), OutputClass.NEGATIVE.name, *list(props.values())]
                         dbm.dbc.execute('UPDATE historical_vector_similarity_data SET date=? WHERE exchange=? AND symbol=? AND date_type=? AND date=? AND vector_class=? AND preceding_range=? AND following_range=? AND change_threshold=?', tuple(args))
@@ -257,7 +257,7 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
             if missing: missingIndicators.append(ik)
         ## check if all indicators are calculated up to latest stock data
         for r in latestIndicators:
-            if r.date < stkdata[-1].date:
+            if r.date < stkdata[-1].period_date:
                 notuptodateIndicators.append(IndicatorType[r.indicator])
         if len(missingIndicators) == 0 and len(notuptodateIndicators) == 0: return 0
 
@@ -299,7 +299,7 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
 
             minDateIndex = 0
             for j in range(len(stkdata)-1, -1, -1):
-                if stkdata[j].date == latesti.date:
+                if stkdata[j].period_date == latesti.date:
                     minDateIndex = j
                     break
 
@@ -327,7 +327,7 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
                 else:
                     val = ','.join([str(v) for v in val])
 
-            tpls.append((ticker.exchange, ticker.symbol, seriesType.name, stkdata[-(indx+1)].date, i.key, iperiod, val))
+            tpls.append((ticker.exchange, ticker.symbol, seriesType.name, stkdata[-(indx+1)].period_date, i.key, iperiod, val))
 
         tpls.reverse()
         returntpls.extend(tpls)
@@ -338,7 +338,7 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
 def technicalIndicatorDataCalculationAndInsertion(exchange=[], seriesType: SeriesType=SeriesType.DAILY, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, doNotCacheADX=True):
     exchange = asList(exchange)
     tickers = dbm.dbc.execute('''
-        SELECT MAX(date) AS date, exchange, symbol FROM historical_data WHERE series_type=? {} group by exchange, symbol
+        SELECT MAX(period_date) AS date, exchange, symbol FROM historical_data WHERE series_type=? {} group by exchange, symbol
     '''.format(
             ('AND exchange IN (\'{}\')'.format('\',\''.join(exchange))) if len(exchange)>0 else ''
         ), (seriesType.name,)).fetchall()
@@ -413,9 +413,9 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, autoUpdateDamagedSymbols
                     continue
 
                 ## actual gap checker
-                if cdate != date.fromisoformat(data[dindex].date):
+                if cdate != date.fromisoformat(data[dindex].period_date):
                     if verbose>=2: 
-                        ddt = date.fromisoformat(data[dindex].date)
+                        ddt = date.fromisoformat(data[dindex].period_date)
                         print('is gap')
                     if ALL:
                         try:
@@ -493,7 +493,7 @@ def historicalGapCalculationAndInsertion(exchange=None, symbol=None, seriesType=
                 ## find closest date without going over
                 prevclose = None
                 for d in dbm.getStockData(t[0], t[1], seriesType):
-                    if date.fromisoformat(d.date) > g: break
+                    if date.fromisoformat(d.period_date) > g: break
                     prevclose = d.close
                 tuples.append((t[0], t[1], seriesType.name, str(g), prevclose, prevclose, prevclose, prevclose, 0, True))
 

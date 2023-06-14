@@ -39,7 +39,7 @@ class DailyDataHandler:
         if collectStats: startt = time.time()
         ## separate data into streams and omit anything not within range of actual stock data
         for d in dailygdata:
-            if d.date >= stockdata[0].date and d.date <= stockdata[-1].date:
+            if d.date >= stockdata[0].period_date and d.date <= stockdata[-1].period_date:
                 rawblocks[d.stream].append(d)
         if collectStats: sm.ddhseparatetostreams += time.time() - startt
 

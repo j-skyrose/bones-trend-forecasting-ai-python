@@ -126,7 +126,7 @@ class InputVectorFactory(Singleton):
             elif extraType == FeatureExtraType.VIXKEY:
                 vectorListType = InputVectorDataType.SERIES
                 if collectStats: startt = time.time()
-                vectorAsList = [(vixData[d.date])[k] for d in stockDataSet]
+                vectorAsList = [(vixData[d.period_date])[k] for d in stockDataSet]
                 if collectStats: sm.extraTypevixkeytime += time.time() - startt
 
             elif k == 'dayOfWeek':
@@ -190,13 +190,13 @@ class InputVectorFactory(Singleton):
                 mindate = minGoogleDate.isoformat()
                 vectorAsList = []
                 for index,d in enumerate(stockDataSet):
-                    giHasDate = d.date in googleInterests
+                    giHasDate = d.period_date in googleInterests
                     vectorAsList.extend([
-                        1 if d.date < mindate else 0,               ## date is before any Google data is available, 0 !=~ 0
+                        1 if d.period_date < mindate else 0,               ## date is before any Google data is available, 0 !=~ 0
                         1 if index > len(stockDataSet) - 4 else 0,  ## data is not available on date due to how recent it is, 0 !=~ 0
                         1 if not giHasDate else 0,                  ## data unknown, may have not been collected yet or due to lack of topic ID
-                        googleInterests[d.date] if giHasDate and index <= len(stockDataSet) - 4 else 0
-                        # googleInterests[d.date] if index <= len(stockDataSet) - 4 else 0
+                        googleInterests[d.period_date] if giHasDate and index <= len(stockDataSet) - 4 else 0
+                        # googleInterests[d.period_date] if index <= len(stockDataSet) - 4 else 0
                     ])
 
                 if collectStats: sm.ktypegoogleintereststime += time.time() - startt
@@ -204,16 +204,16 @@ class InputVectorFactory(Singleton):
             elif k == 'stockSplits':
                 vectorListType = InputVectorDataType.SERIES
                 if collectStats: startt = time.time()
-                # stockSplitDates = [s.date for s in stockSplits]
+                # stockSplitDates = [s.period_date for s in stockSplits]
                 ## zero center split ratio: 1:2 -> 2, 3:1 -> -3
                 stockSplitDict = {s.date: ((max(s.split_from, s.split_to) / min(s.split_from, s.split_to)) - 1) * (1 if s.split_from < s.split_to else -1) for s in stockSplits}
-                # vectorAsList = [*([1,stockSplitDict[d.date]] if d.date in stockSplitDict.keys() else [0,0]) for d in stockDataSet]
-                # vectorAsList = [1 if d.date in stockSplitDict.keys() else 0 for d in stockDataSet]
-                # vectorAsList += [stockSplitDict[d.date] if d.date in stockSplitDict.keys() else 0 for d in stockDataSet]
-                vectorAsList = [(1 if splitBooleanAndNotRatio else stockSplitDict[d.date]) if d.date in stockSplitDict.keys() else 0 for d in stockDataSet for splitBooleanAndNotRatio in [True, False]]
+                # vectorAsList = [*([1,stockSplitDict[d.period_date]] if d.period_date in stockSplitDict.keys() else [0,0]) for d in stockDataSet]
+                # vectorAsList = [1 if d.period_date in stockSplitDict.keys() else 0 for d in stockDataSet]
+                # vectorAsList += [stockSplitDict[d.period_date] if d.period_date in stockSplitDict.keys() else 0 for d in stockDataSet]
+                vectorAsList = [(1 if splitBooleanAndNotRatio else stockSplitDict[d.period_date]) if d.period_date in stockSplitDict.keys() else 0 for d in stockDataSet for splitBooleanAndNotRatio in [True, False]]
 
-                # seriesmatrix.append([1 if d.date in stockSplitDict.keys() else 0 for d in stockDataSet])
-                # seriesmatrix.append([stockSplitDict[d.date] if d.date in stockSplitDict.keys() else 0 for d in stockDataSet])
+                # seriesmatrix.append([1 if d.period_date in stockSplitDict.keys() else 0 for d in stockDataSet])
+                # seriesmatrix.append([stockSplitDict[d.period_date] if d.period_date in stockSplitDict.keys() else 0 for d in stockDataSet])
                 if collectStats: sm.ktypestocksplitstime += time.time() - startt
 
             elif compositeKey.startswith(indicatorsKey):
@@ -453,7 +453,7 @@ class InputVectorFactory(Singleton):
         mocklistdt = '1970-01-01'
         mockipodt = '1999-01-01'
         mockstockDataSet = [recdotdict({
-            'date': mockipodt,
+            'period_date': mockipodt,
             'open': 5,
             'high': 5,
             'low': 5,

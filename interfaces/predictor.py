@@ -106,7 +106,7 @@ class Predictor(Singleton):
         d = MarketDayManager.getPreviousMarketDay(asDate(anchorDate))
         ind = None
         for index, item in enumerate(sdh.data):
-            if item.date == d.isoformat():
+            if item.period_date == d.isoformat():
                 ind = index + 1
                 break
         if ind is None:

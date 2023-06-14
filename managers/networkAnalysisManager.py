@@ -195,7 +195,7 @@ class NetworkAnalysisManager(Singleton):
             _,_, seriesSize = self.nn.inputVectorFactory.getInputSize() ## eval
             accuracies = recdotdict({ e: { c: 0 for c in CorrBool } for e in PrecedingRangeType })
             newaccuracies = copy.deepcopy(accuracies)
-            newmindate = list(dm.stockDataHandlers.values())[0].data[-(self.nn.stats.precedingRange+self.nn.stats.followingRange+1)].date
+            newmindate = list(dm.stockDataHandlers.values())[0].data[-(self.nn.stats.precedingRange+self.nn.stats.followingRange+1)].period_date
             lastexchange = None
             lastsymbol = None
             interrupted = False
@@ -225,13 +225,13 @@ class NetworkAnalysisManager(Singleton):
                     elif acctype == AccuracyAnalysisTypes.PRECEDING_RANGE:
                         # ## predict method-1 >> ~11% slower than evaluate method-2, perhaps low enough that some fixes to method-1 might help
                         # selectionsEndIndex = 100 if gconfig.testing.enabled else None
-                        # anchorDates = [sdh.data[di].date for di in sdh.selections]
+                        # anchorDates = [sdh.data[di].period_date for di in sdh.selections]
                         # if gconfig.testing.enabled: anchorDates = anchorDates[:selectionsEndIndex]
                         # predictions = predictorModule.Predictor.predict(kexchange, symbol, anchorDates=anchorDates, network=nn, verbose=0)
 
                         # for dindex in tqdm.tqdm(sdh.selections[:selectionsEndIndex], desc='Predicting ' + str(key)):
                         #     prectype = self.__determinePrecedingRangeType(sdh.data[dindex - nn.stats.precedingRange:dindex])
-                        #     # prediction = predictorModule.Predictor.predict(kexchange, symbol, sdh.data[dindex].date, network=nn, verbose=0)
+                        #     # prediction = predictorModule.Predictor.predict(kexchange, symbol, sdh.data[dindex].period_date, network=nn, verbose=0)
                         #     dt, prediction = predictions[dindex-nn.stats.precedingRange]
                         #     try:
                         #         change = (sdh.data[dindex + nn.stats.followingRange].low / sdh.data[dindex - 1].high) - 1

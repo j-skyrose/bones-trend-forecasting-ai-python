@@ -602,7 +602,7 @@ class Collector:
                             maxdate - timedelta(weeks=278), ## offset >275? weeks to trigger monthly buckets
                             max(
                                 minGoogleDate, 
-                                date.fromisoformat(sdata[0].date) - timedelta(weeks=5) ## need to offset further to actually get month data for first stock data month
+                                date.fromisoformat(sdata[0].period_date) - timedelta(weeks=5) ## need to offset further to actually get month data for first stock data month
                             )
                         )
                 else: ## DAILY or WEEKLY
@@ -610,11 +610,11 @@ class Collector:
                         cur_direction = direction
                         if cur_direction == Direction.DESCENDING:
                             ## should only be a continuation of initial (stream 0) data collection
-                            if sdata[0].date < ginterests[0].date:
+                            if sdata[0].period_date < ginterests[0].date:
                                 startdate = date.fromisoformat(ginterests[0].date) - timedelta(days=1)
                         else: ## ascending
-                            if dryrun: print(sdata[-1].date, ginterests[-1].date)
-                            if sdata[-1].date > ginterests[-1].date:
+                            if dryrun: print(sdata[-1].period_date, ginterests[-1].date)
+                            if sdata[-1].period_date > ginterests[-1].date:
                                 ## check if latest stream can be updated instead of starting a new stream
                                 maxStream = dbm.getMaxGoogleInterestStream(s.exchange, s.symbol, itype=interestType)
                                 maxStreamData = dbm.getGoogleInterests(s.exchange, s.symbol, itype=interestType, stream=maxStream, raw=True)
@@ -651,7 +651,7 @@ class Collector:
                 else:
                     print(tickergidString)
                     if ginterests: 
-                        print(cur_direction, '|  STK:', sdata[0].date, '->', sdata[-1].date, '|  GI:', ginterests[0].date, '->', ginterests[-1].date)
+                        print(cur_direction, '|  STK:', sdata[0].period_date, '->', sdata[-1].period_date, '|  GI:', ginterests[0].date, '->', ginterests[-1].date)
                         stats_partiallycollected += 1
                     else:
                         stats_notstarted += 1
@@ -660,10 +660,10 @@ class Collector:
                 ## is GI data up-to-date yet
                 def fullyUpdated():
                     if cur_direction == Direction.DESCENDING:
-                        return startdate < date.fromisoformat(sdata[0].date)
+                        return startdate < date.fromisoformat(sdata[0].period_date)
                     else:
                         return startdate > maxdate
-                        # return startdate > date.fromisoformat(sdata[-1].date)
+                        # return startdate > date.fromisoformat(sdata[-1].period_date)
 
                 ## insert interests data in chronological order into DB
                 def insertGData(data:List):
