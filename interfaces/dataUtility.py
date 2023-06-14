@@ -338,7 +338,7 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
 def technicalIndicatorDataCalculationAndInsertion(exchange=[], seriesType: SeriesType=SeriesType.DAILY, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, doNotCacheADX=True):
     exchange = asList(exchange)
     tickers = dbm.dbc.execute('''
-        SELECT MAX(date) AS date, exchange, symbol FROM historical_data WHERE type=? {} group by exchange, symbol
+        SELECT MAX(date) AS date, exchange, symbol FROM historical_data WHERE series_type=? {} group by exchange, symbol
     '''.format(
             ('AND exchange IN (\'{}\')'.format('\',\''.join(exchange))) if len(exchange)>0 else ''
         ), (seriesType.name,)).fetchall()

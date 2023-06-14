@@ -337,7 +337,7 @@ class DatabaseManager(Singleton):
     ## get all historical data for ticker and seriesType
     ## sorted date ascending
     def getStockData(self, exchange: str, symbol: str, seriesType: SeriesType, minDate=None, fillGaps=False, queryLimit=None) -> List[HistoricalDataRow]:
-        stmt = 'SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ' 
+        stmt = 'SELECT * from historical_data WHERE exchange=? AND symbol=? AND series_type=? ' 
         # return self._queryOrGetCache(stmt, (exchange, symbol, type.name), self._getHistoricalDataCount(), exchange+';'+symbol+';'+type.name)
         if minDate:    stmt += 'AND date > \'' + minDate + '\''
         stmt += ' ORDER BY date'
@@ -359,7 +359,7 @@ class DatabaseManager(Singleton):
 
     ## setup helper for iterating through historical data in chronological order, stock by stock
     def getHistoricalStartEndDates(self, exchange=None, symbol=None, seriesType:SeriesType=SeriesType.DAILY):
-        stmt = 'SELECT min(date) as start, max(date) as finish, exchange, symbol FROM historical_data WHERE type=? '
+        stmt = 'SELECT min(date) as start, max(date) as finish, exchange, symbol FROM historical_data WHERE series_type=? '
         tuple = (seriesType.name,)
         if exchange:
             stmt += 'AND exchange=? '
@@ -380,7 +380,7 @@ class DatabaseManager(Singleton):
         else:
             print('Getting symbols and averages')
             normalizationLists = []
-            stmt = ('SELECT exchange, symbol' + ', avg({})' * len(normalizationColumns) + ' FROM historical_data WHERE type=? GROUP BY exchange, symbol').format(*normalizationColumns)
+            stmt = ('SELECT exchange, symbol' + ', avg({})' * len(normalizationColumns) + ' FROM historical_data WHERE series_type=? GROUP BY exchange, symbol').format(*normalizationColumns)
             if gconfig.testing.enabled: stmt += ' LIMIT ' + str(gconfig.testing.stockQueryLimit)
 
             data = self._queryOrGetCache(stmt, (seriesType.name,), self._getHistoricalDataCount(), 'getsandavg')
@@ -414,9 +414,9 @@ class DatabaseManager(Singleton):
         stmt = '''SELECT s.exchange, s.symbol, s.sector, s.industry, s.founded, s.asset_type, s.google_topic_id 
             FROM historical_data h JOIN symbols s'''
         stmt2 = ' ON h.exchange=s.exchange AND h.symbol=s.symbol '
-        stmt3 = 'WHERE h.type=?'
-        # stmt = 'SELECT * FROM historical_data h JOIN symbols s, staging_symbol_info st ON h.exchange=s.exchange AND h.symbol=s.symbol and h.exchange = st.exchange and h.symbol = st.symbol WHERE h.type=?'
-        # stmt = 'SELECT h.exchange as exchange, h.symbol as symbol, s.asset_type as asset_type, s.google_topic_id as google_topic_id FROM historical_data h JOIN symbols s ON h.exchange=s.exchange AND h.symbol=s.symbol WHERE h.type=?'
+        stmt3 = 'WHERE h.series_type=?'
+        # stmt = 'SELECT * FROM historical_data h JOIN symbols s, staging_symbol_info st ON h.exchange=s.exchange AND h.symbol=s.symbol and h.exchange = st.exchange and h.symbol = st.symbol WHERE h.series_type=?'
+        # stmt = 'SELECT h.exchange as exchange, h.symbol as symbol, s.asset_type as asset_type, s.google_topic_id as google_topic_id FROM historical_data h JOIN symbols s ON h.exchange=s.exchange AND h.symbol=s.symbol WHERE h.series_type=?'
 
         if gconfig.feature.financials.enabled and gconfig.feature.financials.dataRequired:
             stmt += ' , vwtb_edgar_quarters q'
@@ -1537,7 +1537,7 @@ class DatabaseManager(Singleton):
         for r in results:
             if (r.exchange, r.symbol) in unusableSymbols: continue
 
-            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ORDER BY date', (r.exchange, r.symbol, seriesType.name)).fetchall()
+            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND series_type=? ORDER BY date', (r.exchange, r.symbol, seriesType.name)).fetchall()
 
             for idx, d in enumerate(data):
                 try:
@@ -1577,7 +1577,7 @@ class DatabaseManager(Singleton):
 
             if (r.exchange, r.symbol) in unusableSymbols: continue
 
-            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND type=? ORDER BY date', (r.exchange, r.symbol, seriesType.name)).fetchall()
+            data = self.dbc.execute('SELECT * from historical_data WHERE exchange=? AND symbol=? AND series_type=? ORDER BY date', (r.exchange, r.symbol, seriesType.name)).fetchall()
 
             artificialStringLength = 0
             for d in data:
@@ -1619,7 +1619,7 @@ class DatabaseManager(Singleton):
         matchSpread = {x: 0 for x in range(101)}
         tickers = self.dbc.execute('SELECT DISTINCT exchange, symbol FROM historical_data').fetchall()
         for t in tqdm(tickers):
-            data = self.dbc.execute('SELECT * FROM historical_data WHERE exchange=? AND symbol=? AND type=?', (t.exchange, t.symbol, seriesType.name)).fetchall()
+            data = self.dbc.execute('SELECT * FROM historical_data WHERE exchange=? AND symbol=? AND series_type=?', (t.exchange, t.symbol, seriesType.name)).fetchall()
             if len(data) < precedingRange + followingRange + 1:
                 continue
             data = data[precedingRange-1:]
@@ -1878,7 +1878,7 @@ class DatabaseManager(Singleton):
 
         errorTickers = []
         ratioErrorTickers = []
-        selectStmt = 'SELECT * FROM historical_data WHERE date >= ? AND date <= ? AND exchange = ? AND symbol = ? AND type=? ORDER BY date DESC LIMIT 2'
+        selectStmt = 'SELECT * FROM historical_data WHERE date >= ? AND date <= ? AND exchange = ? AND symbol = ? AND series_type=? ORDER BY date DESC LIMIT 2'
         updateStmt = 'UPDATE stock_splits SET status=? WHERE date=? AND exchange=? AND symbol=?'
         c=0
         for t in tqdm(tickersToCheck, desc='Validating stock splits') if verbose > 0 and not dryRun else tickersToCheck:
