@@ -26,21 +26,56 @@ from utils.support import asDate, asISOFormat, asList, convertToCamelCase, recdo
 from utils.other import buildCommaSeparatedTickerPairString, parseCommandLineOptions
 from constants.values import unusableSymbols, apiList, standardExchanges
 
-## for ad hoc SQL execution ################################################################################################
-# conn = sqlite3.connect(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'raw/sp2Database.db'))
-# dbc = conn.cursor()
-# # importFromSymbolDumps(dbc)
-# # dbc.execute("DELETE FROM symbols WHERE symbol like '%-%';")
-# # dbc.execute("DELETE FROM symbols WHERE asset_type IS NOT NULL  ;")
-# # dbc.execute("UPDATE symbols SET api_alphavantage=0 where asset_type IS NULL")
-# addLastUpdatesRowsForAllSymbols(dbc)
-#
-# conn.commit()
-# conn.close()
-## end ad hoc SQL execution ################################################################################################
+
+defaultDBPath = os.path.join(path, 'data/sp2Database.db')
+
+## auto-generate a file full of annotation objects for the rows of each table in the database: _generatedDatabaseAnnotations/databaseRowObjects.py
+def _generateDatabaseAnnotationObjectsFile(dbpath=defaultDBPath):
+    connect = sqlite3.connect(dbpath, timeout=15)
+    connect.row_factory = recdotdict_factory
+    dbc = connect.cursor()
+    def __generateArgTypeString(cname, t):
+        if t in ['TEXT', 'STRING']: return ': str'
+        elif t in ['', 'NUMERIC', 'INTEGER'] and cname in ['artificial', 'migrated', 'fmp_isetf', 'duplicate', 'wksi', 'prevrpt', 'detail', 'custom', 'abstract']: return ': bool'
+        elif t in ['REAL', 'BIGDOUBLE', 'NUMERIC']: return ': float'
+        elif t in ['NUM', 'NUMBER', 'INTEGER', 'INT', 'BIGINT']: return ': int'
+        elif t in ['BYTE', 'BLOB']: return ': bytes'
+        elif t in ['DATETIME']: return ': datetime'
+        return ''
+
+    filestring = 'from datetime import datetime\n\n'
+    tables = [r.tbl_name for r in dbc.execute('SELECT * FROM sqlite_master WHERE type=?', ('table',)).fetchall()]
+    for t in tables:
+        columns = dbc.execute(f'PRAGMA table_info({t})').fetchall()
+        initargsList = []
+        initfuncString = ''
+        for c in columns:
+            cname = convertToCamelCase(c.name)
+            initargsList.append(f"{cname}Value{__generateArgTypeString(c['name'], c['type'])}")
+            # initfuncString += f'\t\tsetattr(self, \'{cname}\', {cname}Value)\n'
+            initfuncString += f'\t\tself.{cname} = {cname}Value\n'
+
+        commaSeparatedColumnNames = ', '.join([f"'{c['name']}'" for c in columns])
+        filestring += f'## TABLE: {t} ######################################\n'
+        filestring += f'{convertToCamelCase(t)}Columns = [{commaSeparatedColumnNames}]\n'
+        filestring += f'class {convertToCamelCase(t, firstCapital=True)}Row():\n'
+        # filestring += f"\t## {commaSeparatedColumnNames}\n"
+        filestring += f"\tdef __init__(self, {', '.join(initargsList)}):\n"
+        filestring += initfuncString
+        filestring += '\n'
+
+    with open(os.path.join(path, 'managers', '_generatedDatabaseAnnotations', 'databaseRowObjects.py'), 'w') as f:
+        f.write(filestring)
+
+    connect.close()
+
+## generate before import to ensure things are up-to-date for the current execution
+_generateDatabaseAnnotationObjectsFile()
+from managers._generatedDatabaseAnnotations.databaseRowObjects import AccuracyLastUpdatesRow, CboeVolatilityIndexRow, DataSetsRow, DumpStockSplitsPolygonRow, HistoricalDataRow, HistoricalVectorSimilarityDataRow, NetworkAccuraciesRow, NetworksRow, StagingSymbolInfoRow, SymbolsRow
 
 class DatabaseManager(Singleton):
-    def init(self, dbpath=os.path.join(path, 'data/sp2Database.db')):
+
+    def init(self, dbpath=defaultDBPath):
         atexit.register(self.close)
         self.connect = sqlite3.connect(dbpath, timeout=15)
         # self.connect.row_factory = sqlite3.Row
@@ -105,38 +140,6 @@ class DatabaseManager(Singleton):
     def __purgeUnusableTickers(self, data, raw=False, **kwargs):
         if raw: return data
         return [d for d in data if (d.exchange, d.symbol) not in unusableSymbols]
-
-    ## auto-generate a file full of annotation objects for the rows of each table in the database: _generatedDatabaseAnnotations/databaseRowObjects.py
-    def _generateDatabaseAnnotationObjectsFile(self):
-        def __generateArgTypeString(cname, t):
-            if t in ['TEXT', 'STRING']: return ': str'
-            elif t in ['', 'NUMERIC', 'INTEGER'] and cname in ['artificial', 'migrated', 'fmp_isetf', 'duplicate', 'wksi', 'prevrpt', 'detail', 'custom', 'abstract']: return ': bool'
-            elif t in ['REAL', 'BIGDOUBLE', 'NUMERIC']: return ': float'
-            elif t in ['NUM', 'NUMBER', 'INTEGER', 'INT', 'BIGINT']: return ': int'
-            elif t in ['BYTE', 'BLOB']: return ': bytes'
-            elif t in ['DATETIME']: return ': datetime'
-            return ''
-
-        filestring = 'from datetime import datetime\n\n'
-        tables = [r.tbl_name for r in self.dbc.execute('SELECT * FROM sqlite_master WHERE type=?', ('table',)).fetchall()]
-        for t in tables:
-            columns = self.dbc.execute(f'PRAGMA table_info({t})').fetchall()
-            initargsList = []
-            initfuncString = ''
-            for c in columns:
-                cname = convertToCamelCase(c.name)
-                initargsList.append(f"{cname}Value{__generateArgTypeString(c['name'], c['type'])}")
-                # initfuncString += f'\t\tsetattr(self, \'{cname}\', {cname}Value)\n'
-                initfuncString += f'\t\tself.{cname} = {cname}Value\n'
-
-            filestring += f'class {convertToCamelCase(t, firstCapital=True)}Row():\n'
-            filestring += f"\t## {', '.join([c['name'] for c in columns])}\n"
-            filestring += f"\tdef __init__(self, {', '.join(initargsList)}):\n"
-            filestring += initfuncString
-            filestring += '\n'
-
-        with open(os.path.join(path, 'managers', '_generatedDatabaseAnnotations', 'databaseRowObjects.py'), 'w') as f:
-            f.write(filestring)
 
     ####################################################################################################################################################################
     ## gets ####################################################################################################################################################################
