@@ -57,7 +57,7 @@ def _generateDatabaseAnnotationObjectsFile(dbpath=defaultDBPath):
 
         commaSeparatedColumnNames = ', '.join([f"'{c['name']}'" for c in columns])
         filestring += f'## TABLE: {t} ######################################\n'
-        filestring += f'{convertToCamelCase(t)}Columns = [{commaSeparatedColumnNames}]\n'
+        filestring += f'{convertToCamelCase(t)}TableColumns = [{commaSeparatedColumnNames}]\n'
         filestring += f'class {convertToCamelCase(t, firstCapital=True)}Row():\n'
         # filestring += f"\t## {commaSeparatedColumnNames}\n"
         filestring += f"\tdef __init__(self, {', '.join(initargsList)}):\n"
