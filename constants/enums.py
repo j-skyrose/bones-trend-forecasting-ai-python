@@ -251,6 +251,17 @@ class ReductionMethod(Enum):
     RANDOM = 'RANDOM'
     ALL = 'ALL'
 
+class NormalizationGroupings(Enum):
+    def __init__(self, a):
+        self.tableName = a
+    HISTORICAL = 'historical_data'
+    STOCK = 'symbols'
+    FINANCIAL = 'vwtb_edgar_financial_nums'
+
+class ChangeType(Enum):
+    PERCENTAGE = 'PERCENTAGE'
+    ABSOLUTE = 'ABSOLUTE'
+
 if __name__ == '__main__':
     print(AccuracyType.OVERALL.name, AccuracyType.OVERALL.value, AccuracyType.OVERALL.statsName)
     print(FinancialReportType.YEAR.name, FinancialReportType.YEAR.value)

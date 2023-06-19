@@ -17,9 +17,9 @@ from functools import partial
 from argparse import ArgumentError
 
 from globalConfig import config as gconfig
-from constants.enums import DataFormType, Direction, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetType, DataManagerType, IndicatorType
+from constants.enums import DataFormType, Direction, NormalizationGroupings, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetType, DataManagerType, IndicatorType
 from utils.support import asList, generateFibonacciSequence, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
-from utils.other import getInstancesByClass, getMaxIndicatorPeriod, maxQuarters, getIndicatorPeriod, setKWArgsFromConfigForGetSymbols
+from utils.other import getInstancesByClass, getMaxIndicatorPeriod, maxQuarters, getIndicatorPeriod, addAdditionalDefaultKWArgs
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
 from constants.values import unusableSymbols, indicatorsKey
 from managers.stockDataManager import StockDataManager
@@ -31,6 +31,7 @@ from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.financialDataHandler import FinancialDataHandler
 from structures.stockDataHandler import StockDataHandler
 from structures.dataPointInstance import DataPointInstance
+from structures.normalizationDataHandler import NormalizationDataHandler
 from structures.stockSplitsHandler import StockSplitsHandler
 from structures.googleInterestsHandler import GoogleInterestsHandler
 from structures.api.googleTrends.request import GoogleAPI
@@ -84,7 +85,7 @@ class DataManager():
     def __init__(self,
         precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, threshold=0,
         setCount=None, setSplitTuple=None, minimumSetsPerSymbol=0, useAllSets=False,
-        inputVectorFactory=InputVectorFactory(), normalizationInfo={}, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, symbolList:List=[], symbol:List=[],
+        inputVectorFactory=InputVectorFactory(), normalizationData=NormalizationDataHandler(), indicatorConfig=gconfig.defaultIndicatorFormulaConfig, symbolList:List=[], symbol:List=[],
         analysis=False, skips: SkipsObj=SkipsObj(), saveSkips=False,
 
         statsOnly=False, initializeStockDataHandlersOnly=False, useOptimizedSplitMethodForAllSets=True,
@@ -96,7 +97,7 @@ class DataManager():
         maxGoogleInterestHandlers=50,
         verbose=None, **kwargs
         # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
-        # neuralNetwork: NeuralNetworkInstance=None, exchanges=[], excludeExchanges=[], sectors=[], excludeSectors=[]
+        # neuralNetwork: NeuralNetworkInstance=None, exchange=[], excludeExchange=[], sectors=[], excludeSectors=[]
     ):
         self.config = inputVectorFactory.config
 
@@ -111,7 +112,7 @@ class DataManager():
             raise ValueError('Simultaneous use of pages and windows should be avoided, behavior not tested')
         if 'instanceReduction' in self.config.sets.keys() and self.config.sets.instanceReduction.enabled and self.config.sets.instanceReduction.top + self.config.sets.instanceReduction.bottom > 1:
             raise ValueError('Top + bottom cannot be greater than 1 (i.e. more then all)')
-        if not forPredictor and setCount is None and not initializeStockDataHandlersOnly and not skips.sets:
+        if not forPredictor and not analysis and setCount is None and not initializeStockDataHandlersOnly and not skips.sets:
             raise ValueError('setCount required when initializing sets')
         
         ## timers
@@ -129,7 +130,7 @@ class DataManager():
         self.seriesType = seriesType
         self.threshold = threshold
         self.minDate = minDate
-        self.normalizationInfo = recdotdict(normalizationInfo)
+        self.normalizationData = normalizationData
         self.indicatorConfig = indicatorConfig
         self.skips = skips if saveSkips else SkipsObj()
         ## if paging for predictor remove restriction on GI handler initialization as there should be sufficient space to init them
@@ -271,19 +272,14 @@ class DataManager():
 
     ## TODO: optimized class methods, forTraining needs to have option of providing a networkid for use in getting the ticker window split
     @classmethod
-    def forTraining(cls, seriesType=SeriesType.DAILY, **kwargs):
+    def forTraining(cls, **kwargs):
         config = kwargs['inputVectorFactory'].config if 'inputVectorFactory' in kwargs else gconfig
+        kwargs = addAdditionalDefaultKWArgs(kwargs, config)
+
         if config.data.normalize:
-            normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType, **kwargs)
-        
-            kwargs['normalizationInfo'] = {}
-            for c in range(len(normalizationColumns)):
-                kwargs['normalizationInfo'][normalizationColumns[c]] = normalizationMaxes[c]
-        else:
-            ## replicate some of the conditions from getNormalizationData as it will not be used to retrieve a symbol list
-            kwargs = setKWArgsFromConfigForGetSymbols(kwargs, config)
-            kwargs['seriesType'] = seriesType
-            symbolList = dbm.getSymbols(**kwargs)
+            kwargs['normalizationData'] = dbm.getNormalizationData(**kwargs)
+
+        symbolList = dbm.getSymbols(**kwargs)
 
         return cls(
             symbolList=symbolList, 
@@ -293,7 +289,6 @@ class DataManager():
     @classmethod
     def forAnalysis(cls,
                     network: NeuralNetworkInstance=None,
-                    seriesType: SeriesType=SeriesType.DAILY,
                     skips: SkipsObj=SkipsObj(),
                     **kwargs):
         
@@ -301,32 +296,18 @@ class DataManager():
 
         config = network.config if network else (kwargs['inputVectorFactory'].config if 'inputVectorFactory' in kwargs else gconfig)
         shouldNormalize = config.data.normalize
-        if not shouldNormalize:
-            ## replicate some of the conditions from getNormalizationData as it will not be used to retrieve a symbol list
-            kwargs = setKWArgsFromConfigForGetSymbols(kwargs, config)
+        kwargs = addAdditionalDefaultKWArgs(kwargs, config)
 
         if network:
-            if shouldNormalize:
-                kwargs['normalizationInfo'] = network.stats.getNormalizationInfo()
-                _, _, symbolList = dbm.getNormalizationData(network.stats.seriesType, **kwargs)
-            kwargs['precedingRange'] = network.stats.precedingRange
-            kwargs['followingRange'] = network.stats.followingRange
-            kwargs['seriesType'] = network.stats.seriesType
-            kwargs['changeThreshold'] = network.stats.changeThreshold
             kwargs['inputVectorFactory'] = network.inputVectorFactory
-        else:
-            kwargs['seriesType'] = seriesType
-
+            kwargs = { **kwargs, **network.stats.getNetworksTableData(camelCase=True) }
             if shouldNormalize:
-                normalizationColumns, normalizationMaxes, symbolList = dbm.getNormalizationData(seriesType, **kwargs)
-                kwargs['normalizationInfo'] = {}
-                for c in range(len(normalizationColumns)):
-                    kwargs['normalizationInfo'][normalizationColumns[c]] = normalizationMaxes[c]
-        
-        try: symbolList
-        except UnboundLocalError: ## i.e. normalize=False, never initialized
-            symbolList = dbm.getSymbols(**kwargs)
+                kwargs['normalizationData'] = network.stats.normalizationData
+        else:
+            if shouldNormalize:
+                kwargs['normalizationData'] = dbm.getNormalizationData(**kwargs)
 
+        symbolList = dbm.getSymbols(**kwargs)
 
         return cls(
             symbolList=symbolList,
@@ -344,18 +325,17 @@ class DataManager():
     @classmethod
     def forPredictor(cls, nn: NeuralNetworkInstance, anchorDate, **kwargs):
         if nn.config.data.normalize:
-            kwargs['normalizationInfo'] = nn.stats.getNormalizationInfo()
-        qualifyingSymbolList = dbm.getLastUpdatedInfo(nn.stats.seriesType, anchorDate, OperatorDict.LESSTHANOREQUAL, **kwargs)
+            kwargs['normalizationData'] = nn.stats.normalizationData
+        symbolList = dbm.getLastUpdatedInfo(nn.stats.seriesType, anchorDate, OperatorDict.LESSTHANOREQUAL, **kwargs)
 
-        print('qualifying list length', len(qualifyingSymbolList))
+        print('OG list length', len(symbolList))
 
-        symbolList = []
-        for t in qualifyingSymbolList:
-            if len(symbolList) == gconfig.testing.REDUCED_SYMBOL_SCOPE: break
-            symbolList.append(dbm.getSymbols(exchange=t.exchange, symbol=t.symbol)[0])
+        if gconfig.testing.REDUCED_SYMBOL_SCOPE:
+            symbolList[:] = symbolList[:gconfig.testing.REDUCED_SYMBOL_SCOPE]
 
         return cls(
-            precedingRange=nn.stats.precedingRange, followingRange=nn.stats.followingRange, seriesType=nn.stats.seriesType, threshold=nn.stats.changeThreshold, inputVectorFactory=nn.inputVectorFactory,
+            **nn.stats.getNetworkTrainingConfigTableData(camelCase=True),
+            inputVectorFactory=nn.inputVectorFactory,
             symbolList=symbolList,
             forPredictor=True,
             **kwargs
@@ -545,9 +525,7 @@ class DataManager():
             'normalize': self.config.data.normalize
         }
         if self.shouldNormalize:
-            ## use key loop?
-            sdhKWArgs['highMax'] = self.normalizationInfo.highMax
-            sdhKWArgs['volumeMax'] = self.normalizationInfo.volumeMax
+            sdhKWArgs['normalizationData'] = self.normalizationData.get(NormalizationGroupings.HISTORICAL)
 
         if gconfig.multicore:
             for ticker, data in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate, queryLimit=queryLimit), symbolList, verbose, desc='Getting stock data'), verbose, desc='Creating stock handlers'):
@@ -1092,7 +1070,10 @@ class DataManager():
             if shortc(slice,0) > 0: raise IndexError('Not setup to use all sets')
             else: slice = None
 
-        staticSize, semiseriesSize, seriesSize = self.inputVectorFactory.getInputSize()
+        ## "cache" values for constrList functions
+        if gconfig.network.recurrent:
+            staticSize, semiseriesSize, seriesSize = self.inputVectorFactory.getInputSize()
+
         def constrList_helper(set: List[DataPointInstance], isInput, showProgress=True):
             retList = []
             for i in tqdm.tqdm(set, desc='Building {} vector array'.format('input' if isInput else 'output'), leave=(verbose > 0.5)) if showProgress and isInput and verbose != 0 else set:

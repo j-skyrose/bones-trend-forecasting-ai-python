@@ -13,6 +13,7 @@ from typing import List, Tuple
 from globalConfig import config as gconfig
 from constants.values import stockOffset
 from constants.enums import IndicatorType, SeriesType
+from structures.normalizationDataHandler import NormalizationDataHandler
 from utils.types import TickerKeyType
 from utils.support import GetMemoryUsage, recdotdict, recdotobj, shortc
 from utils.other import normalizeStockData, denormalizeStockData, getIndicatorPeriod
@@ -27,7 +28,7 @@ data should be in date ascending order, where each item is one row from DB table
 '''
 class StockDataHandler(GetMemoryUsage):
 
-    def __init__(self, symbolData, seriesType, data, highMax=None, volumeMax=None, precedingRange=None, followingRange=None, normalize=False, offset=stockOffset,
+    def __init__(self, symbolData, seriesType, data, normalizationData: NormalizationDataHandler=None, precedingRange=None, followingRange=None, normalize=False, offset=stockOffset,
         maxIndicatorPeriod=0
     ):
         self.symbolData = symbolData
@@ -39,7 +40,7 @@ class StockDataHandler(GetMemoryUsage):
         self.normalized = False
         self.shouldNormalize = normalize
         self.dataOffset = offset
-        self.setData(data, highMax, volumeMax, precedingRange, followingRange)
+        self.setData(data, normalizationData, precedingRange, followingRange)
 
     def getTickerTuple(self) -> Tuple[str,str]:
         return (self.symbolData.exchange, self.symbolData.symbol)
@@ -57,24 +58,25 @@ class StockDataHandler(GetMemoryUsage):
 
     def normalize(self):
         if not self.normalized:
-            if self.highMax and self.volumeMax:
-                self.data = normalizeStockData(self.data, self.highMax, self.volumeMax, self.dataOffset)
+            if self.stockPriceNormalizationMax or self.stockVolumeNormalizationMax:
+                self.data = normalizeStockData(self.data, self.stockPriceNormalizationMax, self.stockVolumeNormalizationMax, self.dataOffset)
                 self.normalized = True
             else:
                 raise RuntimeError('Data maxes not available for normalization')
     
     def denormalize(self):
         if self.normalized:
-            if self.highMax and self.volumeMax:
-                self.data = denormalizeStockData(self.data, self.highMax, self.volumeMax, self.dataOffset)
+            if self.stockPriceNormalizationMax or self.stockVolumeNormalizationMax:
+                self.data = denormalizeStockData(self.data, self.stockPriceNormalizationMax, self.stockVolumeNormalizationMax, self.dataOffset)
                 self.normalized = False
             else:
                 raise RuntimeError('Data maxes not available for denormalization')
 
-    def setData(self, data, highMax=None, volumeMax=None, precedingRange=None, followingRange=None):
+    def setData(self, data, normalizationData: NormalizationDataHandler=None, precedingRange=None, followingRange=None):
         self.data = data
-        self.highMax = highMax
-        self.volumeMax = volumeMax
+        if normalizationData:
+            self.stockPriceNormalizationMax = normalizationData.getValue('high', orNone=True)
+            self.stockVolumeNormalizationMax = normalizationData.getValue('volume', orNone=True)
         self.precedingRange = precedingRange
         self.followingRange = followingRange
 

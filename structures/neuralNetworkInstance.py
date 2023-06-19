@@ -20,7 +20,7 @@ from typing import Dict
 from structures.networkStats import NetworkStats
 from structures.EvaluationResultsObj import EvaluationResultsObj
 from constants.exceptions import LocationNotSpecificed
-from constants.enums import AccuracyType, DataFormType, LossAccuracy, SeriesType
+from constants.enums import AccuracyType, ChangeType, DataFormType, LossAccuracy, SeriesType
 from utils.support import asBytes, recdotdict, shortc, shortcdict
 from utils.other import maxQuarters
 from managers.inputVectorFactory import InputVectorFactory
@@ -54,39 +54,38 @@ os.environ["TF_MIN_GPU_MULTIPROCESSOR_COUNT"]= "8" if gconfig.useMainGPU else "5
 
 
 class NeuralNetworkInstance:
-    model: Model = None
-    updated = False
-    defaultInputVectorFactory = True
-    inputVectorFactory: InputVectorFactory = None
-    filepath = None
-    stats: NetworkStats = None
-    id = None
-    useAllSets = False
-    useAllSetsAccumulator = None
-    reEvaluating = False
 
-    def __init__(self, model: tf.keras.Model=None, inputVectorFactory=None, factoryConfig=gconfig, filepath=None, stats=None, useAllSets=False):
+    def __init__(self, id=None, model: tf.keras.Model=None, inputVectorFactory: InputVectorFactory=None, factoryConfig=gconfig, filepath=None, stats: NetworkStats=None):
         self.model = model
         if inputVectorFactory:
             self.inputVectorFactory = inputVectorFactory(factoryConfig)
             self.defaultInputVectorFactory = False
         else:
             self.inputVectorFactory = InputVectorFactory()
+            self.defaultInputVectorFactory = True
         self.config = factoryConfig
         self.filepath = filepath
-        self.stats = stats
         if stats:
             self.id = stats.id
-        self.useAllSets = useAllSets
+            self.stats = stats
+        else:
+            self.id = id
+            if self.config.network.recurrent: 
+                precedingRange = model.input_shape[-1][1] ## last input layer is series one, e.g. [(None, 9), (None, 60, 34)]
+            else: ## sequential
+                precedingRange = model.input_shape[-1]
+            self.stats = NetworkStats(id, precedingRange=precedingRange) 
+        self.useAllSets = None
+        self.useAllSetsAccumulator = None
+        self.reEvaluating = False
 
         self._initializeAccumulatorIfRequired()
 
     @classmethod
     def new(
-        cls, id, optimizer, layers, inputSize,
-        threshold=0, precedingRange=1, followingRange=1, seriesType=SeriesType.DAILY, highMax=0, volumeMax=0, accuracyType=AccuracyType.OVERALL, useAllSets=False,
-        activation='selu',
-        verbose=1
+        cls, id, optimizer, layers, precedingRange=1, activation='selu', verbose=1,
+        ## sequential only
+        inputSize=None
     ):
 
         def _getActivationString(layer):
@@ -217,32 +216,12 @@ class NeuralNetworkInstance:
             print('Input size:', inputSize)
             model.summary()
 
-        ## initialize stats
-        stats = NetworkStats(id, threshold, precedingRange, followingRange, seriesType, accuracyType)
-        stats.setMax('high', highMax)
-        stats.setMax('volume', volumeMax)
-        # stats = {'id': id}        
-        # stats['changeThreshold'] = threshold
-        # stats['precedingRange'] = precedingRange
-        # stats['followingRange'] = followingRange
-        # stats['seriesType'] = SeriesType[seriesType] if type(seriesType) is str else seriesType
-        # stats['highMax']= highMax
-        # stats['volumeMax'] = volumeMax
-        # stats['accuracyType'] = AccuracyType[accuracyType] if type(accuracyType) is str else accuracyType
-
-        # ## base
-        # stats['overallAccuracy'] = 0
-        # stats['negativeAccuracy'] = 0
-        # stats['positiveAccuracy'] = 0
-        # stats['epochs'] = 0
-        # stats = recdotdict(stats)
-
-        return cls(model=model, stats=stats, useAllSets=useAllSets)
+        return cls(id=id, model=model)
 
     @classmethod
-    def fromSave(cls, factoryFile, factoryConfig, modelpath, stats, useAllSets=False):
+    def fromSave(cls, factoryFile, factoryConfig, modelpath, rawDBStats):
         folder = '_dynamicallyLoadedFactories'
-        id = str(stats.id)
+        id = str(rawDBStats.id)
         with open(os.path.join(path, 'managers', folder, id) + '.py', 'wb') as f:
             f.write(asBytes(factoryFile))
         # factory = importlib.import_module('managers.' + folder + '.' + id).InputVectorFactory
@@ -256,25 +235,14 @@ class NeuralNetworkInstance:
                 time.sleep(1)
         if not factory: factory = factoryModule.InputVectorFactory
 
-        return cls(inputVectorFactory=factory, factoryConfig=factoryConfig, filepath=modelpath, stats=NetworkStats.importFrom(stats), useAllSets=useAllSets)
+        return cls(inputVectorFactory=factory, factoryConfig=factoryConfig, filepath=modelpath, stats=NetworkStats.importFrom(rawDBStats))
 
-    def updateStats(self, threshold=0, precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, highMax=0, volumeMax=0, accuracyType=AccuracyType.OVERALL, normalizationInfo=None, **kwargs):
-        if threshold:       self.stats.changeThreshold = threshold
-        if precedingRange:  self.stats.precedingRange = precedingRange
-        if followingRange:  self.stats.followingRange = followingRange
-        if seriesType:      self.stats.seriesType = seriesType
-        if accuracyType:    self.stats.accuracyType = accuracyType
-
-        print('updating norm stats')
-        print(normalizationInfo)
-        if normalizationInfo:
-            print(normalizationInfo.items())
-            for k, v in normalizationInfo.items():
-                print(k, v)
-                self.stats.setMax(k, v)
-        else:
-            if highMax: self.stats.highMax= highMax
-            if volumeMax: self.stats.volumeMax = volumeMax            
+    def updateStats(self, changeValue=None, changeType: ChangeType=None, precedingRange=None, followingRange=None, seriesType: SeriesType=None, accuracyType: AccuracyType=None, normalizationData=None, useAllSets=None, **kwargs):
+        for k,v in locals().items():
+            if k in ['self', 'kwargs']: continue
+            if k is not None:
+                if k == 'useAllSets': self.useAllSets = v
+                else: setattr(self.stats, k, v)     
 
     def save(self, path=None):
         if not self.filepath and not path:

@@ -1,5 +1,6 @@
 from datetime import date
 
+normalizationColumnPrefix = 'highest'
 indicatorsKey = 'indicators'
 ## for backward compatibility only, new ivFactories will not use
 interestColumn = 'interest'

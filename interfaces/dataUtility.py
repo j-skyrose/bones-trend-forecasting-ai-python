@@ -79,12 +79,12 @@ def similarityCalculationAndInsertion(exchange=None, **kwargs):
         verbose=0.5
     )
 
-    normalizationInfo = dm.normalizationInfo
+    normalizationData = dm.normalizationData
     tickerList = dm.symbolList
 
     # for ticker in tqdm.tqdm(tickerList[217:], desc='Tickers'):
     for ticker in tqdm.tqdm(tickerList, desc='Tickers'):
-        _calculateSimiliaritesAndInsertToDB(ticker, props, cf, normalizationInfo, **kwargs)
+        _calculateSimiliaritesAndInsertToDB(ticker, props, cf, normalizationData, **kwargs)
 
 @numba.njit(numba.float64[:](numba.float64[:], numba.i8, numba.float64[:, :]), parallel=True)
 def _calculateSimiliarites(similaritiesSum:List[float], startindex, vectors):
@@ -108,7 +108,7 @@ def _calculateSimiliarites(similaritiesSum:List[float], startindex, vectors):
     
     return similaritiesSum
 
-def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizationInfo, checkDBIntegrity=False, wipeDataOnDBIntegrityFailure=False, correctImproperlyInsertedDates=False, dryrun=False, freshrun=False):
+def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizationData, checkDBIntegrity=False, wipeDataOnDBIntegrityFailure=False, correctImproperlyInsertedDates=False, dryrun=False, freshrun=False):
     dm: DataManager = DataManager(
         skips=SkipsObj(sets=True),
         saveSkips=True,
@@ -116,7 +116,7 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
         maxPageSize=1,
         analysis=True,
         
-        normalizationInfo=normalizationInfo,
+        normalizationData=normalizationData,
         symbolList=[ticker],
         inputVectorFactory=InputVectorFactory(config),
         verbose=0

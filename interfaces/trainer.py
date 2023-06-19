@@ -24,7 +24,7 @@ from managers.inputVectorFactory import InputVectorFactory
 from structures.trainingInstance import TrainingInstance
 from managers.statsManager import StatsManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
-from constants.enums import AccuracyType, LossAccuracy, OperatorDict, SeriesType
+from constants.enums import AccuracyType, ChangeType, LossAccuracy, OperatorDict, SeriesType
 from constants.exceptions import SufficientlyUpdatedDataNotAvailable
 from utils.support import containsAllKeys, shortc, shortcdict
 from constants.values import tseNoCommissionSymbols
@@ -44,7 +44,7 @@ class Trainer:
 
         if network:
             self.network.updateStats(
-                normalizationInfo=self.dm.normalizationInfo,
+                normalizationData=self.dm.normalizationData, useAllSets=useAllSets, seriesType=self.dm.seriesType,
                 **kwargs
             ) 
 
@@ -160,13 +160,18 @@ if __name__ == '__main__':
         arg1 = 'new'
 
     if arg1.lower() == 'new':
-        useAllSets = True
-        # precrange = 202
-        # precrange = 150
-        # setSplitTuple = (0.80,0.20)
-        # explicitValidationSymbolList = []
-        setSplitTuple = (0.99,0)
-        explicitValidationSymbolList = dbm.getSymbols(exchange='TSX', symbol=tseNoCommissionSymbols)[1:2]
+        # useAllSets = True
+        useAllSets = False
+        # precrange = 95
+        precrange = 60
+        folrange = 10
+        changeValue = 0.05
+        changeType = ChangeType.PERCENTAGE
+
+        setSplitTuple = (0.80,0.20)
+        explicitValidationSymbolList = []
+        # setSplitTuple = (0.99,0)
+        # explicitValidationSymbolList = dbm.getSymbols(exchange='TSX', symbol='XQQ')
 
 
         if gconfig.testing.enabled:
@@ -181,6 +186,7 @@ if __name__ == '__main__':
             minimumSetsPerSymbol = 10
 
         ## network
+        inputSize = None
         optimizer = Adam(amsgrad=True)
         if gconfig.network.recurrent:
             staticSize, semiseriesSize, seriesSize = InputVectorFactory().getInputSize()
@@ -212,17 +218,19 @@ if __name__ == '__main__':
 
         t = Trainer(
             network=nnm.createNetworkInstance(
-                optimizer, layers, 
-                None if gconfig.network.recurrent else inputSize, 
-                accuracyType=AccuracyType.NEGATIVE, useAllSets=useAllSets,
-                precedingRange=precrange
+                optimizer, layers, precedingRange=precrange, inputSize=inputSize,
+                # useAllSets=useAllSets
             ),
             precedingRange=precrange, 
             followingRange=folrange,
-            threshold=threshold,
+            changeValue=changeValue,
+            changeType=changeType,
             setCount=setCount,
             setSplitTuple=setSplitTuple,
+            accuracyType=AccuracyType.NEGATIVE,
             minimumSetsPerSymbol=minimumSetsPerSymbol,
+
+            maxGoogleInterestHandlers=0,
 
             useAllSets=useAllSets,
             explicitValidationSymbolList=explicitValidationSymbolList

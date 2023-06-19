@@ -14,7 +14,7 @@ from utils.support import recdotdict
 # TESTING = True
 # REDUCED_SYMBOL_SCOPE = 10
 # TESTING_PREDICTOR = True
-# SEED_RANDOM = 420
+# GET_SYMBOLS_LIMIT = 115
 
 useGPU = True
 useMainGPU = True
@@ -22,11 +22,13 @@ useMainGPU = True
 try:    TESTING
 except: TESTING = False
 try:    REDUCED_SYMBOL_SCOPE
-except: REDUCED_SYMBOL_SCOPE = -1
+except: REDUCED_SYMBOL_SCOPE = 0
 try:    TESTING_PREDICTOR
 except: TESTING_PREDICTOR = False
 try:    SEED_RANDOM
 except: SEED_RANDOM = False
+try:    GET_SYMBOLS_LIMIT
+except: GET_SYMBOLS_LIMIT = 0
 
 try: useGPU
 except NameError: useGPU = False
@@ -218,8 +220,8 @@ config = recdotdict({
         'REDUCED_SYMBOL_SCOPE': REDUCED_SYMBOL_SCOPE,
         'predictor': TESTING_PREDICTOR,
         'exchange': 'NYSE',
-        'stockQueryLimit': 50,
-        'predictorStockQueryLimit': 100
+        'GET_SYMBOLS_LIMIT': GET_SYMBOLS_LIMIT,
+        'predictorStockQueryLimit': 1000
     },
 
     'training': trainingConfig

@@ -7,7 +7,6 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-
 import numpy, re, math, calendar, json, pickle, tqdm
 from tqdm.contrib.concurrent import process_map
 from datetime import date, datetime, timedelta
@@ -15,7 +14,7 @@ from multiprocessing import Pool, cpu_count
 from typing import Callable, Dict, Union
 from enum import Enum
 
-from constants.values import months, foundedSynonyms, indicatorsKey
+from constants.values import months, foundedSynonyms, indicatorsKey, normalizationColumnPrefix
 
 class DotDict(dict):
     def __getattr__(self, item):
@@ -382,6 +381,24 @@ def convertToCamelCase(string, firstCapital=False):
         capitalizeCurrent = char == '_'
     if firstCapital: ret = str(ret[0]).capitalize() + ret[1:]
     return ret
+
+def convertToSnakeCase(string):
+    ret = ''
+    char: str
+    for idx,char in enumerate(string):
+        if idx != 0 and char.isupper(): ret += '_'
+        ret += char.lower()
+    return ret
+
+def isNormalizationColumn(c):
+    return str(c).startswith(normalizationColumnPrefix)
+
+## for SQL queries
+def generateCommaSeparatedQuestionMarkString(val):
+    if hasattr(val, '__len__'): val = len(val)
+    if type(val) != int: raise ValueError('Must be an integer')
+    return ','.join(('?',) * val)
+
 
 if __name__ == '__main__':
     # print(processRawValueToInsertValue(44))

@@ -14,15 +14,18 @@ from datetime import date, timedelta, datetime
 from tqdm import tqdm
 from multiprocessing import current_process
 from decimal import Decimal
+from enum import Enum
 
 from managers.dbCacheManager import DBCacheManager
 from structures.api.googleTrends.request import GoogleAPI
 
 from globalConfig import config as gconfig
 from managers.marketDayManager import MarketDayManager
-from managers._generatedDatabaseAnnotations.databaseRowObjects import AccuracyLastUpdatesRow, CboeVolatilityIndexRow, DataSetsRow, DumpStockSplitsPolygonRow, HistoricalDataRow, HistoricalVectorSimilarityDataRow, NetworkAccuraciesRow, NetworksRow, StagingSymbolInfoRow, SymbolsRow
-from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FinancialReportType, IndicatorType, InterestType, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, AccuracyType, SetType, Direction
-from utils.support import asDate, asISOFormat, asList, convertToCamelCase, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, tqdmLoopHandleWrapper, unixToDatetime
+from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, AccuracyType, SetType, Direction
+from structures.normalizationColumnObj import NormalizationColumnObj
+from structures.normalizationDataHandler import NormalizationDataHandler
+from structures.sqlArgumentObj import SQLArgumentObj
+from utils.support import asDate, asISOFormat, asList, convertToCamelCase, convertToSnakeCase, generateCommaSeparatedQuestionMarkString, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, tqdmLoopHandleWrapper, unixToDatetime
 from utils.other import buildCommaSeparatedTickerPairString, parseCommandLineOptions
 from constants.values import unusableSymbols, apiList, standardExchanges
 
@@ -71,7 +74,7 @@ def _generateDatabaseAnnotationObjectsFile(dbpath=defaultDBPath):
 
 ## generate before import to ensure things are up-to-date for the current execution
 _generateDatabaseAnnotationObjectsFile()
-from managers._generatedDatabaseAnnotations.databaseRowObjects import AccuracyLastUpdatesRow, CboeVolatilityIndexRow, DataSetsRow, DumpStockSplitsPolygonRow, HistoricalDataRow, HistoricalVectorSimilarityDataRow, NetworkAccuraciesRow, NetworksRow, StagingSymbolInfoRow, SymbolsRow
+from managers._generatedDatabaseAnnotations.databaseRowObjects import AccuracyLastUpdatesRow, CboeVolatilityIndexRow, DataSetsRow, DumpStockSplitsPolygonRow, HistoricalDataRow, HistoricalVectorSimilarityDataRow, NetworkAccuraciesRow, NetworksRow, StagingSymbolInfoRow, SymbolsRow, symbolsTableColumns, historicalDataTableColumns
 
 class DatabaseManager(Singleton):
 
@@ -163,61 +166,81 @@ class DatabaseManager(Singleton):
             ret[r['exchange']] = r['exchange']
         return recdotdict(ret)
 
-    ## get data from symbol_list table
-    def getSymbols(self, exchange=None, symbol=None, assetType=None, api=None, googleTopicId:Union[str, SQLHelpers]=None, founded:Union[str, SQLHelpers]=None, sector:Union[str, SQLHelpers]=None, withDetailsMissing=False, **kwargs) -> List[SymbolsRow]:
+    ## get data from symbols table
+    def getSymbols(self,
+                   ## symbols table
+                   exchange=None, symbol=None, name=None, assetType=None, api=None, googleTopicId=None, sector=None, industry=None, founded=None,
+                   ## historical data table
+                   seriesType: SeriesType=None, periodDate=None, open=None, high=None, low=None, close=None, volume=None, artificial=None,
+                   ## other
+                   normalizationData=None, rawStmt=False, **_) -> List[SymbolsRow]:
+        kwargs = {}
+        for k,v in locals().items():
+            k = convertToSnakeCase(k)
+            if (k in symbolsTableColumns + historicalDataTableColumns or k == 'api') and v is not None:
+                kwargs[k] = v
+
         stmt = 'SELECT * FROM symbols s '
         adds = []
         args = []
-        
-        if exchange:
-            exchList = asList(exchange)
-            adds.append(' s.exchange IN ({}) '.format(','.join(['?' for e in exchList])))
-            args.extend(exchList)
-        if symbol:
-            symList = asList(symbol)
-            adds.append(' s.symbol IN ({}) '.format(','.join(['?' for s in symList])))
-            args.extend(symList)
-        if assetType:
-            adds.append('s.asset_type = ?')
-            args.append(assetType)
-        if api:
-            if type(api) is list:
-                apiAdds = []
-                for a in api:
-                    apiAdds.append('s.api_'+a+' = 1')
-                adds.append('(' + ' OR '.join(apiAdds) + ')')
-            else:
-                adds.append('s.api_'+api+' = 1')
-        if googleTopicId is not None:
-            if type(googleTopicId) == SQLHelpers:
-                adds.append(f' s.google_topic_id IS {googleTopicId.value}')
-            else:
-                adds.append(' s.google_topic_id = ? ')
-                args.append(googleTopicId)
-        if founded is not None:
-            if type(founded) == SQLHelpers:
-                adds.append(f' s.founded IS {founded.value}')
-            else:
-                adds.append(' s.founded = ? ')
-                args.append(founded)
-        if sector is not None:
-            if type(sector) == SQLHelpers:
-                adds.append(f' s.sector IS {sector.value}')
-            else:
-                adds.append(' s.sector = ? ')
-                args.append(sector)
-        if withDetailsMissing:
-            adds.append('((s.sector IS NULL AND s.industry IS NULL) OR (s.sector = \'\' and s.industry = \'\'))')
+        includingHistorical = False
+        ## check if any arguments are for the historical data table
+        onlyHistoricalDataTableColumns = list(set(historicalDataTableColumns) - set(symbolsTableColumns))
+        if any(c in onlyHistoricalDataTableColumns for c in kwargs.keys()) or (normalizationData and len(normalizationData.get(NormalizationGroupings.HISTORICAL, orNone=True)) > 0):
+            includingHistorical = True
+            stmt += ' JOIN historical_data h ON s.exchange=h.exchange AND s.symbol=h.symbol '
 
+        ## add all column-keyword args to the query
+        for argKey, argVal in kwargs.items():
+            if argKey == 'api':
+                if type(argVal) is list:
+                    apiAdds = []
+                    for a in argVal:
+                        apiAdds.append(f's.api_{a} = 1')
+                    adds.append(f'( {" OR ".join(apiAdds)} )')
+                else:
+                    adds.append(f's.api_{api} = 1')
+            else:
+                col = 's'
+                if argKey in onlyHistoricalDataTableColumns:
+                    col = 'h'
+                col += f'.{argKey}'
+
+                if type(argVal) == SQLHelpers:
+                    adds.append(f' {col} is {argVal.value} ')
+                elif type(argVal) == SQLArgumentObj:
+                    argVal: SQLArgumentObj
+                    adds.append(f' ? {argVal.modifier.sqlsymbol} {col} ')
+                    args.append(argVal.value)
+                else:
+                    if issubclass(argVal.__class__, Enum): argVal = argVal.name
+                    vlist = asList(argVal)
+                    adds.append(f' {col} in ({",".join(["?" for x in range(len(vlist))])}) ')
+                    args.extend(vlist)
+
+        ## add normalization args to query
+        if normalizationData:
+            nc: NormalizationColumnObj
+            for nc in normalizationData:
+                if nc.normalizationGrouping in [NormalizationGroupings.HISTORICAL, NormalizationGroupings.STOCK]:
+                    adds.append(f' ? {OperatorDict.LESSTHANOREQUAL.sqlsymbol} h.{nc.columnName} ')
+                    args.append(nc.value)
 
         if adds:
             stmt += ' WHERE '
             stmt += ' AND '.join(adds)
+        ## get only distinct symbols if query includes looking at historical table data
+        if includingHistorical:
+            stmt += f' GROUP BY {",".join([f"s.{c}" for c in symbolsTableColumns])} '
 
         if gconfig.testing.enabled and gconfig.testing.GET_SYMBOLS_LIMIT > 0: 
             stmt += ' LIMIT ' + str(gconfig.testing.GET_SYMBOLS_LIMIT)
         elif gconfig.testing.REDUCED_SYMBOL_SCOPE: 
             stmt += ' LIMIT ' + str(gconfig.testing.REDUCED_SYMBOL_SCOPE)            
+
+        ## so query inserted into other queries before execution
+        if rawStmt:
+            return stmt, args
 
         # print('executing',stmt, args)
         return self.dbc.execute(stmt, tuple(args)).fetchall()
@@ -265,9 +288,10 @@ class DatabaseManager(Singleton):
         return self.__purgeUnusableTickers(self.dbc.execute(stmt).fetchall())
 
     ## get raw data from last_updates
-    def getLastUpdatedInfo(self, seriesType, dt=None, dateModifier=OperatorDict.EQUAL, exchange=None, symbol=None, assetTypes=[], **kwargs):
-        stmt = 'SELECT * FROM last_updates lu JOIN symbols s on lu.exchange=s.exchange and lu.symbol=s.symbol WHERE lu.type=? AND lu.api IS NOT NULL'
-        args = [seriesType.function.replace('TIME_SERIES_','')]
+    def getLastUpdatedInfo(self, seriesType, dt=None, dateModifier=OperatorDict.EQUAL, **kwargs):
+        symbolsStmt, symbolsArgs = self.getSymbols(seriesType=seriesType, rawStmt=True, **kwargs)
+        stmt = f'SELECT * FROM last_updates lu JOIN ({symbolsStmt}) sl on lu.exchange=sl.exchange and lu.symbol=sl.symbol WHERE lu.type=? AND lu.api IS NOT NULL'
+        args = symbolsArgs + [seriesType.function.replace('TIME_SERIES_','')]
         if dt:
             dt = asDate(dt)
             stmt += ' AND lu.date' + dateModifier.sqlsymbol + '? '
@@ -278,12 +302,6 @@ class DatabaseManager(Singleton):
                 dt = dt - timedelta(days=(weekday % 4))
 
             args.append(dt.isoformat())
-        if exchange:
-            stmt += self._andXContainsListStatement('lu.exchange', asList(exchange))
-        if symbol:
-            stmt += self._andXContainsListStatement('lu.symbol', asList(symbol))
-        if assetTypes:
-            stmt += self._andXContainsListStatement('s.asset_type', assetTypes)
 
         stmt += ' ORDER BY date ASC'
         if gconfig.testing.predictor: 
@@ -352,9 +370,9 @@ class DatabaseManager(Singleton):
         stmt = 'SELECT * FROM data_sets WHERE network_id = ? AND network_set_id = ?'
         return self.dbc.execute(stmt, (id, setid)).fetchall()
 
-    ## get all neural networks
+    ## get all neural networks including factories and training config
     def getNetworks(self):
-        stmt = 'SELECT n.*, ivf.factory, ivf.config FROM networks n JOIN input_vector_factories ivf on n.factoryId = ivf.id'
+        stmt = 'SELECT n.*, ntc.*, ivf.factory, ivf.config FROM networks n JOIN input_vector_factories ivf ON n.factory_id = ivf.id JOIN network_training_config ntc ON n.id = ntc.id'
         return self.dbc.execute(stmt).fetchall()
 
     ## setup helper for iterating through historical data in chronological order, stock by stock
@@ -369,9 +387,50 @@ class DatabaseManager(Singleton):
             tuple += (symbol, )
         stmt += 'GROUP BY exchange, symbol'
         return self.dbc.execute(stmt, tuple).fetchall()
+    
+    ## gets columns, including ones that are normalization associated, i.e. columns beginning with 'highest' of the form 'highest_<grouping name>_<table column>'
+    def getNetworkTrainingConfigColumns(self):
+        return self.dbc.execute('PRAGMA table_info(network_training_config)').fetchall()
+
+    ## performs imperfect calculation of maxes, using column averages grouped by ticker rather than the raw values across all tickers (allows filtering out of unusable tickers while possibly saving memory/cpu time)
+    def getNormalizationData(self, seriesType: SeriesType=None, standardDeviationCount=2.5, normalizationGrouping: Union[NormalizationGroupings, List[NormalizationGroupings]]=None, **kwargs) -> NormalizationDataHandler:
+        ## determine which data will be collected
+        normalizationGrouping = asList(normalizationGrouping)
+        if normalizationGrouping:
+            ngroups = normalizationGrouping
+        else:
+            ngroups = [NormalizationGroupings.STOCK]
+            if seriesType: ngroups.append(NormalizationGroupings.HISTORICAL)
+            if False: ngroups.append(NormalizationGroupings.FINANCIAL) ## TODO
+
+        normalizationData = NormalizationDataHandler.buildFromDBColumns(self.getNetworkTrainingConfigColumns())
+        ## get averages for each normalization data column
+        for c in normalizationData:
+            stmt = f'SELECT *, avg({c.columnName}) FROM {c.normalizationGrouping.tableName} '
+            args = []
+            if c.normalizationGrouping == NormalizationGroupings.HISTORICAL:
+                stmt += ' WHERE series_type=? GROUP BY exchange, symbol'
+                args.append(seriesType.name)
+            # elif c.normalizationGrouping == NormalizationGroupings.STOCK:
+            #     pass ## nothing to do
+            # elif c.normalizationGrouping == NormalizationGroupings.FINANCIAL:
+            #     pass ## TODO
+            
+            if gconfig.testing.REDUCED_SYMBOL_SCOPE: stmt += f' LIMIT {gconfig.testing.REDUCED_SYMBOL_SCOPE}'
+            data = self.__purgeUnusableTickers(self._queryOrGetCache(stmt, tuple(args), self._getHistoricalDataCount(), 'getsandavg'))
+
+            ## extract row values
+            vals = [r[f'avg({c.columnName})'] for r in data]
+            std = np.std(vals)
+            avg = np.mean(vals)
+            lowerlimit = max(0, avg - std * standardDeviationCount)
+            upperlimit = avg + std * standardDeviationCount
+            c.value = upperlimit
+
+        return normalizationData
 
     ## returns normalizationColumns, normalizationMaxes, symbolList
-    def getNormalizationData(self, seriesType, normalizationInfo=None, exchange=None, excludeExchange=None, sectors=[], excludeSectors=[], assetTypes=[], **kwargs):
+    def getNormalizationData_old(self, seriesType, normalizationInfo=None, exchange=None, excludeExchange=None, sectors=[], excludeSectors=[], assetTypes=[], **kwargs):
         DEBUG = True
         normalizationColumns = ['high', 'volume']
 
@@ -381,7 +440,7 @@ class DatabaseManager(Singleton):
             print('Getting symbols and averages')
             normalizationLists = []
             stmt = ('SELECT exchange, symbol' + ', avg({})' * len(normalizationColumns) + ' FROM historical_data WHERE series_type=? GROUP BY exchange, symbol').format(*normalizationColumns)
-            if gconfig.testing.enabled: stmt += ' LIMIT ' + str(gconfig.testing.stockQueryLimit)
+            if gconfig.testing.enabled and gconfig.testing.GET_SYMBOLS_LIMIT > 0: stmt += ' LIMIT ' + str(gconfig.testing.GET_SYMBOLS_LIMIT)
 
             data = self._queryOrGetCache(stmt, (seriesType.name,), self._getHistoricalDataCount(), 'getsandavg')
 
@@ -457,7 +516,7 @@ class DatabaseManager(Singleton):
         stmt = stmt + stmt2 + stmt3
 
         stmt += ' GROUP BY h.exchange, h.symbol'
-        if gconfig.testing.enabled: stmt += ' LIMIT ' + str(gconfig.testing.stockQueryLimit)
+        if gconfig.testing.enabled and gconfig.testing.GET_SYMBOLS_LIMIT > 0: stmt += ' LIMIT ' + str(gconfig.testing.GET_SYMBOLS_LIMIT)
         elif gconfig.testing.REDUCED_SYMBOL_SCOPE: stmt += ' LIMIT ' + str(gconfig.testing.REDUCED_SYMBOL_SCOPE)
 
         symbolList = self._queryOrGetCache(stmt, tuple, self._getHistoricalDataCount(), 'getnormsymbolist')
@@ -815,18 +874,6 @@ class DatabaseManager(Singleton):
     def pushNeuralNetwork(self, 
         nn ##: NeuralNetworkInstance ## removed to reduce inter-module dependencies on tensorflow, for EC2 collection
     ):
-    #     nnid: int,
-    #     nndefaultInputVectorFactory: bool,
-    #     nninputVectorFactory,
-    #     nnstats
-    # ):
-    #     nn = recdotdict({
-    #         'id': nnid,
-    #         'defaultInputVectorFactory': nndefaultInputVectorFactory,
-    #         'inputVectorFactory': nninputVectorFactory,
-    #         'stats': nnstats
-    #     })
-
         if nn.defaultInputVectorFactory:
             with open(os.path.join(path, 'managers/inputVectorFactory.py'), 'rb') as f:
                 factoryblob = f.read()
@@ -841,27 +888,17 @@ class DatabaseManager(Singleton):
                 stmt = 'INSERT OR IGNORE INTO input_vector_factories(factory, config) VALUES (?,?)'
                 self.dbc.execute(stmt, tpl)
                 factoryId = self.dbc.lastrowid
+            nn.stats.factoryId = factoryId
         else:
             factoryId = nn.stats.factoryId
         
-        stmt = 'INSERT OR REPLACE INTO networks(id, factoryId, accuracyType, overallAccuracy, negativeAccuracy, positiveAccuracy, changeThreshold, precedingRange, followingRange, seriesType, highMax, volumeMax, epochs) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
-        tpl = (nn.id,
-            factoryId,
-            nn.stats.accuracyType.name,
-            # stats.accuracyType.name if type(stats.accuracyType) is not str else stats.accuracyType,
-            nn.stats.overallAccuracy,
-            nn.stats.negativeAccuracy,
-            nn.stats.positiveAccuracy,
-            nn.stats.changeThreshold,
-            nn.stats.precedingRange,
-            nn.stats.followingRange,
-            nn.stats.seriesType.name,
-            # stats.seriesType.name if type(stats.seriesType) is not str else stats.seriesType,
-            nn.stats.highMax,
-            nn.stats.volumeMax,
-            nn.stats.epochs
-        )
-        self.dbc.execute(stmt, tpl)
+        args = list(nn.stats.getNetworksTableData(dbInsertReady=True).values())
+        stmt = f'INSERT OR REPLACE INTO networks VALUES ({generateCommaSeparatedQuestionMarkString(args)})'
+        self.dbc.execute(stmt, tuple(args))
+
+        args = list(nn.stats.getNetworkTrainingConfigTableData(dbInsertReady=True).values())
+        stmt = f'INSERT OR REPLACE INTO network_training_config VALUES ({generateCommaSeparatedQuestionMarkString(args)})'
+        self.dbc.execute(stmt, tuple(args))
 
 
     def insertVIXRow(self, row=None, point=None):

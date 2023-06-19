@@ -9,15 +9,15 @@ sys.path.append(path)
 
 import numpy, re, optparse
 from math import ceil
-from typing import List
+from typing import List, Tuple
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 
 from globalConfig import config as gconfig
 from structures.inputVectorStats import InputVectorStats
-from utils.support import shortc, shortcdict
+from utils.support import isNormalizationColumn, shortc, shortcdict
 from constants.values import stockOffset, canadaExchanges, usExchanges
-from constants.enums import InterestType, MarketType, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType
+from constants.enums import InterestType, MarketType, NormalizationGroupings, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType
 
 
 
@@ -42,21 +42,23 @@ def convertListToCSV(lst, excludeColumns=[]):
     content = '\n'.join(content)
     return header + '\n' + content
 
-def normalizeStockData(data, highMax, volumeMax=None, offset=0):
+def normalizeStockData(data, priceMax=None, volumeMax=None, offset=0):
     for r in data:
-        r.open = (r.open / highMax) - offset
-        r.high = (r.high / highMax) - offset
-        r.low = (r.low / highMax) - offset
-        r.close = (r.close / highMax) - offset
+        if priceMax:
+            r.open = (r.open / priceMax) - offset
+            r.high = (r.high / priceMax) - offset
+            r.low = (r.low / priceMax) - offset
+            r.close = (r.close / priceMax) - offset
         if volumeMax: r.volume = (r.volume / volumeMax) - offset
     return data
 
-def denormalizeStockData(data, highMax, volumeMax=None, offset=0):
+def denormalizeStockData(data, priceMax, volumeMax=None, offset=0):
     for r in data:
-        r.open = (r.open + offset) * highMax
-        r.high = (r.high + offset) * highMax
-        r.low = (r.low + offset) * highMax
-        r.close = (r.close + offset) * highMax
+        if priceMax:
+            r.open = (r.open + offset) * priceMax
+            r.high = (r.high + offset) * priceMax
+            r.low = (r.low + offset) * priceMax
+            r.close = (r.close + offset) * priceMax
         if volumeMax: r.volume = (r.volume + offset) * volumeMax
     return data
 
@@ -180,9 +182,10 @@ def parseCommandLineOptions():
 
     return options, kwargs
 
-## add certain kwargs from the given config, for use in getting symbol list for dataManager init when not normalizing
-def setKWArgsFromConfigForGetSymbols(kwargs, config):
-    if config.feature.googleInterests.enabled: 
+## add certain kwargs from the given config, for use in getting symbol list for dataManager init
+def addAdditionalDefaultKWArgs(kwargs, config):
+    kwargs['seriesType'] = shortcdict(kwargs, 'seriesType', SeriesType.DAILY)
+    if config.feature.googleInterests.enabled:
         kwargs['googleTopicId'] = shortcdict(kwargs, 'googleTopicId', SQLHelpers.NOTNULL)
     if config.feature.companyAge.enabled and config.feature.companyAge.dataRequired:
         kwargs['founded'] = shortcdict(kwargs, 'founded', SQLHelpers.NOTNULL)
@@ -191,8 +194,15 @@ def setKWArgsFromConfigForGetSymbols(kwargs, config):
     
     return kwargs
 
+## splits a raw normalization column into its grouping enum and snake-case column name
+def parseNormalizationColumn(c) -> Tuple[NormalizationGroupings, str]:
+    csplit = c.split('_')
+    if not isNormalizationColumn(csplit[0]): raise ValueError('Not a normalization column')
 
+    normalizationGrouping = NormalizationGroupings[str(csplit[1]).upper()]
+    columnName = '_'.join(csplit[2:])
 
+    return normalizationGrouping, columnName
 
 if __name__ == '__main__':
     # print(getMarketHolidays(2020))
