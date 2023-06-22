@@ -17,7 +17,7 @@ from utils.support import shortcdict
 # w=codecs.getwriter("utf-8")(sys.stdout.buffer)
 
 class Polygon:
-    def __init__(self, url, key):
+    def __init__(self, url, key, **kwargs):
         self.url = url
         self.apiKey = key
 

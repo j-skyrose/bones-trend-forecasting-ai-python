@@ -20,3 +20,11 @@ scripts/sp-export/
 scripts/sp-export.tar
 scripts/sp2Database*
 scripts/*.zip
+
+## stuff ignored by git assuming no changes
+config.ini
+sp2StaticConfig.ini
+sp2SavedState.ini
+## to add:  git update-index --assume-unchanged <file>
+## to undo: git update-index --no-assume-unchanged <file>
+## to list: git ls-files -v | findstr "^h"

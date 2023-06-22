@@ -16,7 +16,7 @@ import json
 
 ## financial modeling prep
 class FMP:
-    def __init__(self, url, key):
+    def __init__(self, url, key, **kwargs):
         self.url = url
         self.apiKey = key
 

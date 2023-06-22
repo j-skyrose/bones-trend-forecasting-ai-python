@@ -15,7 +15,7 @@ from constants.exceptions import APIError, APITimeout
 from utils.support import recdotobj, shortcdict
 
 class NEO:
-    def __init__(self, url):
+    def __init__(self, url, **kwargs):
         self.url = url
 
     def __responseHandler(self, resp: Response, verbose=0):

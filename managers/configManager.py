@@ -7,29 +7,74 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-from utils.support import Singleton
-import configparser
-configFilepath = os.path.join(path, 'config.ini')
+import warnings
+from configobj import ConfigObj
 
-class ConfigManager(Singleton):
-    def __init__(self):
-        self.config = configparser.ConfigParser()
-        self.config.read(configFilepath)
+from constants.values import defaultConfigFileSection
+from utils.support import Singleton, shortc
 
-    def get(self, arg1, arg2=None):
-        if (arg2):
-            return self.config[arg1][arg2]
-        else:
-            return self.config['DEFAULT'][arg1]
+## see below for actual classes
+class _ConfigManager():
+    def __init__(self, configFilepath=None, static: bool=True):
+        if not configFilepath: raise ValueError('Missing config path')
+
+        self.filepath = configFilepath
+        self.static = static
+        self.config = ConfigObj(self.filepath, create_empty=(not self.static))
+
+    def get(self, arg1, arg2=None, defaultValue=None):
+        try:
+            if (arg2):
+                return self.config[arg1][arg2]
+            else:
+                return self.config[defaultConfigFileSection][arg1]
+        except KeyError as e:
+            if arg2 is not None and arg1 == e.args[0]:
+                if self.static: ## savedState auto-creates anything missing
+                    raise KeyError(f'\'{arg1}\' section is missing from the config')
+            
+            autoval = shortc(defaultValue, "")
+            warnings.warn(f'\'{shortc(arg2, arg1)}\' config value missing from \'{arg1 if arg2 else defaultConfigFileSection}\' section, defaulting to \'{autoval}\'')
+            self.set(
+                arg1 if arg2 else defaultConfigFileSection,
+                shortc(arg2, arg1),
+                autoval
+            )
+            return autoval
 
     def set(self, arg1, arg2, arg3=None):
         if arg3 is not None:
             self.config[arg1][arg2] = str(arg3)
         else:
-            self.config['DEFAULT'][arg1] = str(arg2)
+            self.config[defaultConfigFileSection][arg1] = str(arg2)
 
     def save(self):
-        with open(configFilepath, 'w') as cf:
-            self.config.write(cf)
+        self.config.write()
 
-# ci = ConfigManager()
+
+class StaticConfigManager(Singleton, _ConfigManager):
+    filepath = os.path.join(path, 'sp2StaticConfig.ini')
+
+    def __init__(self):
+        _ConfigManager.__init__(self, self.filepath)
+
+class SavedStateManager(Singleton, _ConfigManager):
+    filepath = os.path.join(path, 'sp2SavedState.ini')
+
+    def __init__(self):
+        _ConfigManager.__init__(self, self.filepath, static=False)
+
+
+if __name__ == '__main__':
+    c = StaticConfigManager()
+    p = c.get('primarydatabase')
+    print(p)
+    print(os.path.exists(p))
+    p = c.get('dumpdatabase')
+    print(p)
+    print(os.path.exists(p))
+
+    c2 = SavedStateManager()
+    print(c2.get('fmp', 'remaining'))
+    # c2.set('fmp', 'remaining', 10)
+    c2.save()

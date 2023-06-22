@@ -14,7 +14,7 @@ from constants.enums import FinancialReportType, FinancialStatementType
 from constants.exceptions import APIError, APITimeout
 
 class Alphavantage:
-    def __init__(self, url, key):
+    def __init__(self, url, key, **kwargs):
         self.url = url
         self.apiKey = key
 

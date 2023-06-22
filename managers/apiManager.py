@@ -11,7 +11,7 @@ from structures.api.alphavantage import Alphavantage
 from structures.api.polygon import Polygon
 from structures.api.fmp import FMP
 from structures.api.neo import NEO
-from managers.configManager import ConfigManager
+from managers.configManager import StaticConfigManager, SavedStateManager
 from datetime import date
 import atexit
 import time as timer
@@ -21,23 +21,17 @@ from constants.enums import FinancialReportType, FinancialStatementType, Timespa
 from utils.support import Singleton, asDate, recdotdict, recdotobj, shortc
 
 class APIManager(Singleton):
+
     def __init__(self, currentDate=date.today()):
-        # atexit.register(self.saveConfig)
         self.currentDate = asDate(currentDate)
-        self.config = ConfigManager()
+        self.config = StaticConfigManager()
+        self.savedState = SavedStateManager()
+
         self.apis = {}
-
-        k = 'alphavantage'
-        self.apis[k] = self._buildAPIObj(k, Alphavantage(self.config.get(k, 'url'), self.config.get(k, 'apikey')))
-
-        k = 'polygon'
-        self.apis[k] = self._buildAPIObj(k, Polygon(self.config.get(k, 'url'), self.config.get(k, 'apikey')))
-
-        k = 'fmp'
-        self.apis[k] = self._buildAPIObj(k, FMP(self.config.get(k, 'url'), self.config.get(k, 'apikey')))
-
-        k = 'neo'
-        self.apis[k] = self._buildAPIObj(k, NEO(self.config.get(k, 'url')))
+        self._initializeAPI('alphavantage', Alphavantage)
+        self._initializeAPI('polygon', Polygon)
+        self._initializeAPI('fmp', FMP)
+        self._initializeAPI('neo', NEO, requiresAPIKey=False)
 
         ## update 'remaining' counts
         for a in self.apis.keys():
@@ -45,19 +39,25 @@ class APIManager(Singleton):
 
     def saveConfig(self):
         for api in self.apis.keys():
-            self.config.set(api, 'remaining', self.apis[api].remaining)
-            self.config.set(api, 'updated', self.apis[api].updatedOn)
+            self.savedState.set(api, 'remaining', self.apis[api].remaining)
+            self.savedState.set(api, 'updated', self.apis[api].updatedOn)
+        self.savedState.save()
         self.config.save()
-        print('saved config')
+        print('saved config and state')
 
-    def _buildAPIObj(self, name, api):
-        return recdotdict({
-            'api': api,
-            'limit': int(self.config.get(name, 'limit')),
-            'limitType': self.config.get(name, 'limittype'),
-            'remaining': int(self.config.get(name, 'remaining')),
-            'priority': int(self.config.get(name, 'priority')),
-            'updatedOn': date.fromisoformat(self.config.get(name, 'updated'))
+    def _initializeAPI(self, apiName, apiClass, requiresAPIKey=True):
+        url = self.config.get(apiName, 'url')
+        if not url: raise KeyError(f'URL config value missing for {apiName}')
+        apiKey = self.config.get(apiName, 'apikey')
+        if not apiKey and requiresAPIKey: raise KeyError(f'\'apiKey\' config value missing for {apiName}')
+
+        self.apis[apiName] = recdotdict({
+            'api': apiClass(url, key=apiKey),
+            'limit': int(self.config.get(apiName, 'limit', defaultValue=-1)),
+            'limitType': self.config.get(apiName, 'limittype', defaultValue='NONE'),
+            'priority': int(self.config.get(apiName, 'priority', defaultValue=1)),
+            'remaining': int(self.savedState.get(apiName, 'remaining', defaultValue=-1)),
+            'updatedOn': date.fromisoformat(self.savedState.get(apiName, 'updated', defaultValue='1970-01-01'))
         })
 
 
@@ -80,7 +80,7 @@ class APIManager(Singleton):
             sameDate = self.currentDate.month() == a.updatedOn.month()
 
         if sameDate:
-            if a.remaining == 0:
+            if a.remaining <= 0:
                 if not updateOnly: raise APILimitReached
         else:
             if not updateOnly: a.updatedOn = self.currentDate
