@@ -872,7 +872,8 @@ class DatabaseManager(Singleton):
 
     ## insert or update network table data
     def pushNeuralNetwork(self, 
-        nn ##: NeuralNetworkInstance ## removed to reduce inter-module dependencies on tensorflow, for EC2 collection
+        nn, ##: NeuralNetworkInstance ## removed to reduce inter-module dependencies on tensorflow, for EC2 collection
+        dryrun=False
     ):
         if nn.defaultInputVectorFactory:
             with open(os.path.join(path, 'managers/inputVectorFactory.py'), 'rb') as f:
@@ -886,7 +887,8 @@ class DatabaseManager(Singleton):
                 factoryId = res[0].id
             else:
                 stmt = 'INSERT OR IGNORE INTO input_vector_factories(factory, config) VALUES (?,?)'
-                self.dbc.execute(stmt, tpl)
+                if not dryrun: self.dbc.execute(stmt, tpl)
+                else: print('inserting input vector factory\n', stmt, tpl)
                 factoryId = self.dbc.lastrowid
             nn.stats.factoryId = factoryId
         else:
@@ -894,12 +896,13 @@ class DatabaseManager(Singleton):
         
         args = list(nn.stats.getNetworksTableData(dbInsertReady=True).values())
         stmt = f'INSERT OR REPLACE INTO networks VALUES ({generateCommaSeparatedQuestionMarkString(args)})'
-        self.dbc.execute(stmt, tuple(args))
+        if not dryrun: self.dbc.execute(stmt, tuple(args))
+        else: print('inserting network\n', stmt, args)
 
         args = list(nn.stats.getNetworkTrainingConfigTableData(dbInsertReady=True).values())
         stmt = f'INSERT OR REPLACE INTO network_training_config VALUES ({generateCommaSeparatedQuestionMarkString(args)})'
-        self.dbc.execute(stmt, tuple(args))
-
+        if not dryrun: self.dbc.execute(stmt, tuple(args))
+        else: print('inserting network/training config\n', stmt, args)
 
     def insertVIXRow(self, row=None, point=None):
         stmt = 'INSERT OR REPLACE INTO cboe_volatility_index(date, open, high, low, close, artificial) VALUES (?,?,?,?,?,?)'

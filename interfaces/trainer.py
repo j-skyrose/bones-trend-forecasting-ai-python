@@ -149,8 +149,8 @@ class Trainer:
 
             self.instance.network.printAccuracyStats()
 
-    def saveNetwork(self, withSets=False):
-        nnm.save(self.network)
+    def saveNetwork(self, withSets=False, dryrun=False):
+        nnm.save(self.network, dryrun)
 
 if __name__ == '__main__':
 

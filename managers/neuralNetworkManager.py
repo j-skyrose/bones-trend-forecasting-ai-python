@@ -32,11 +32,17 @@ class NeuralNetworkManager(Singleton):
         r = self.networks[id] = NeuralNetworkInstance.new(id, *args, **kwargs)
         return r
 
-    def save(self, k):
+    def save(self, k, dryrun=False):
         key = k if type(k) == str else k.stats.id
         n = self.networks[key]
-        n.save(os.path.join(self.savePath, key))
-        dbm.pushNeuralNetwork(n)
+        nSavePath = os.path.join(self.savePath, key)
+        if not dryrun: dbm.startBatch()
+        dbm.pushNeuralNetwork(n, dryrun=dryrun)
+        if not dryrun:
+            n.save(nSavePath)
+            dbm.commitBatch()
+        else:
+            print(f'"saving" to {nSavePath}')
         print('done saving network', key)
 
     def get(self, id) -> NeuralNetworkInstance:
