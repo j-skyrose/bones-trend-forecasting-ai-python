@@ -31,6 +31,12 @@ class InterestType(Enum):
     WEEKLY = 'WEEKLY'
     MONTHLY = 'MONTHLY'
 
+class LimitType(Enum):
+    NONE = 'NONE'
+    DAILY = 'DAILY'
+    WEEKLY = 'WEEKLY'
+    MONTHLY = 'MONTHLY'
+
 class APIState(Enum):
     INVALID = -1
     UNKNOWN = 0

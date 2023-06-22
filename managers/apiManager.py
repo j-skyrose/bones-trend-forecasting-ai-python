@@ -17,7 +17,7 @@ import atexit
 import time as timer
 
 from constants.exceptions import APILimitReached, APITimeout, APIError
-from constants.enums import FinancialReportType, FinancialStatementType, TimespanType
+from constants.enums import FinancialReportType, FinancialStatementType, LimitType, TimespanType
 from utils.support import Singleton, asDate, recdotdict, recdotobj, shortc
 
 class APIManager(Singleton):
@@ -54,7 +54,7 @@ class APIManager(Singleton):
         self.apis[apiName] = recdotdict({
             'api': apiClass(url, key=apiKey),
             'limit': int(self.config.get(apiName, 'limit', defaultValue=-1)),
-            'limitType': self.config.get(apiName, 'limittype', defaultValue='NONE'),
+            'limitType': LimitType[self.config.get(apiName, 'limittype', defaultValue='NONE').upper()],
             'priority': int(self.config.get(apiName, 'priority', defaultValue=1)),
             'remaining': int(self.savedState.get(apiName, 'remaining', defaultValue=-1)),
             'updatedOn': date.fromisoformat(self.savedState.get(apiName, 'updated', defaultValue='1970-01-01'))
@@ -68,15 +68,15 @@ class APIManager(Singleton):
 
     def _checkLimits(self, a, seriesType=None, qdate=None, updateOnly=False):
         sameDate = False
-        if a.limitType == 'NONE':
+        if a.limitType == LimitType.NONE:
             if qdate: a.updatedOn = date.fromisoformat(qdate)
             return 999
-        elif a.limitType == 'DAILY':
+        elif a.limitType == LimitType.DAILY:
             sameDate = self.currentDate == a.updatedOn
-        elif a.limitType == 'WEEKLY':
+        elif a.limitType == LimitType.WEEKLY:
             ## todo, if API found for this type
             pass
-        elif a.limitType == 'MONTHLY':
+        elif a.limitType == LimitType.MONTHLY:
             sameDate = self.currentDate.month() == a.updatedOn.month()
 
         if sameDate:
@@ -99,10 +99,10 @@ class APIManager(Singleton):
                 timer.sleep(60)
                 if verbose == 1: print('Retrying...')
         if ret is None:
-            if apih.limitType != 'NONE': apih.remaining = 0
+            if apih.limitType != LimitType.NONE: apih.remaining = 0
             raise APILimitReached
 
-        if apih.limitType != 'NONE' and apih.remaining: apih.remaining -= 1
+        if apih.limitType != LimitType.NONE and apih.remaining: apih.remaining -= 1
 
         return ret
 
