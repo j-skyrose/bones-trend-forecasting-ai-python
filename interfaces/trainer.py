@@ -106,11 +106,13 @@ class Trainer:
                 print('Slice', s+1, '/', maxIterations, end='')
                 if len(iterationTimes) > 0:
                     avgtime = numpy.average(iterationTimes)
+                    timetookminutes, timetookseconds = divmod(sum(iterationTimes), 60)
+                    timeremainingminutes, timeremainingseconds = divmod((maxIterations - s) * avgtime, 60)
                     print(' [{}<{}, {}s/it]'.format(
                         ## time took
-                        '{0:02.0f}:{1:02.0f}'.format(*divmod(sum(iterationTimes), 60)),
+                        '{0:02.0f}:{1:02.0f}:{2:02.0f}'.format(*divmod(timetookminutes, 60), timetookseconds),
                         ## time remaining
-                        '{0:02.0f}:{1:02.0f}'.format(*divmod((maxIterations - s) * avgtime, 60)),
+                        '{0:02.0f}:{1:02.0f}:{2:02.0f}'.format(*divmod(timeremainingminutes, 60), timeremainingseconds),
                         ## rate
                         '{:.2f}'.format(avgtime)
                     ))
