@@ -358,7 +358,7 @@ class Predictor(Singleton):
                                     if c > 0:
                                         postfixstr += ' || '
                                     c += 1
-                                    postfixstr += f'{exchange}:{symbol}; {float(weightedAccuracyLambda(factorTuple)):.3f}%'
+                                    postfixstr += f'{exchange}:{symbol}; {float(weightedAccuracyLambda(factorTuple))*100:.3f}%'
 
                                 tqdmhandle.set_postfix_str(postfixstr)
 
