@@ -351,7 +351,12 @@ def tqdmLoopHandleWrapper(iterable, verbose=0, **kwargs):
     return tqdm.tqdm(iterable, leave=verbose>=1, **kwargs) if verbose > 0 else iterable
 
 ## multicore TQDM progress bar, with verbose optionality
-def tqdmProcessMapHandlerWrapper(fn, iterable, verbose=0, chunksize=1, **kwargs):
+def tqdmProcessMapHandlerWrapper(fn, iterable, verbose=0, chunksize=1, sequentialOverride=False, **kwargs):
+    if sequentialOverride: ## primarily for debugging issues in 'fn'
+        retlist = []
+        for i in tqdmLoopHandleWrapper(iterable, verbose, **kwargs):
+            retlist.append(fn(i))
+        return retlist
     return process_map(fn, iterable, leave=verbose>=1, chunksize=chunksize, **kwargs) if verbose > 0 else list(map(fn, iterable))
 
 ## generates all fib values up to and including the given arg, e.g []
@@ -408,4 +413,7 @@ if __name__ == '__main__':
     # print(processRawValueToInsertValue(True))
     # print(flatten([1,[3,'dave',[6,[0,6,0],6],2],3,{'key':'value'}]))
     # print(getAdjustedSlidingWindowPercentage(5000, 600))
+    print(convertToCamelCase('test', True))
+    print(convertToCamelCase('test_not_camel', False))
+    print(shortcdict(None, 't', 2))
     pass
