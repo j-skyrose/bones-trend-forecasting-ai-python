@@ -167,6 +167,9 @@ def generateRSIs_RelativeStrengthIndex(data, periods=gconfig.defaultIndicatorFor
 
     return rsi
 
+def getRSIExpectedLength(datalength, periodlength=gconfig.defaultIndicatorFormulaConfig.periods[IndicatorType.RSI]):
+    return datalength - periodlength
+
 ## test RSI
 if __name__ == '__main__':
     data = recdotobj([
@@ -189,6 +192,7 @@ if __name__ == '__main__':
         {'close':46.03}
     ])
     rsis = generateRSIs_RelativeStrengthIndex(data)
+    elrsi = getRSIExpectedLength(len(data))
     print('rsis',rsis)
     if rsis != [70.46413502109705, 66.24961855355505, 66.48094183471265]:
         raise ValueError
@@ -224,6 +228,9 @@ def generateCCIs_CommodityChannelIndex(data, periods=gconfig.defaultIndicatorFor
 
     return [_calculateCCI(typicalPrices[i+periods-1], means[i], meanDeviations[i]) for i in range(len(data)-periods+1)]
 
+def getCCIExpectedLength(datalength, periodlength=gconfig.defaultIndicatorFormulaConfig.periods[IndicatorType.CCI]):
+    return datalength - periodlength + 1
+
 ## test CCI
 if __name__ == '__main__':
     data = recdotobj([
@@ -251,6 +258,7 @@ if __name__ == '__main__':
         {'high':24.44,'low':24.21,'close':24.28},
     ])
     ccis = generateCCIs_CommodityChannelIndex(data)
+    elcci = getCCIExpectedLength(len(data))
     print('ccis',ccis)
     if ccis != [102.19852632840085, 30.770139381053642, 6.498977012877848]:
         raise ValueError
@@ -293,6 +301,9 @@ def generateATRs_AverageTrueRange(data, periods=gconfig.defaultIndicatorFormulaC
 
     return atrs
 
+def getATRExpectedLength(datalength, periodlength=gconfig.defaultIndicatorFormulaConfig.periods[IndicatorType.ATR]):
+    return datalength - periodlength + 1
+
 ## test ATR
 if __name__ == '__main__':
     data = recdotobj([
@@ -319,6 +330,7 @@ if __name__ == '__main__':
     # atrs = generateATRs_AverageTrueRange(data, method=CalculationMethod.EMA)
     # print('atrs',atrs)
     atrs = generateATRs_AverageTrueRange(data)
+    elatr = getATRExpectedLength(len(data))
     print('atrs',atrs)
     if atrs != [0.5542857142857146, 0.5932653061224494, 0.5851749271137028, 0.5683767180341527]:
         raise ValueError
@@ -385,6 +397,9 @@ def generateDIs_DirectionalIndicator(data, periods=gconfig.defaultIndicatorFormu
 
     return dis
 
+def getDIExpectedLength(datalength, periodlength=gconfig.defaultIndicatorFormulaConfig.periods[IndicatorType.ADX]):
+    return datalength - periodlength
+
 '''
     Directional Movement Index
         component of ADX
@@ -401,10 +416,15 @@ def generateDXs_DirectionalMovementIndex(data=[], periods=gconfig.defaultIndicat
     pdis = posDIs if posDIs else generateDIs_DirectionalIndicator(data, periods)
     ndis = negDIs if negDIs else generateDIs_DirectionalIndicator(data, periods, positive=False)
 
+    if len(pdis) < len(data)-periods-1: raise ValueError('Insufficient DI data for further calculation, try updating cached technical indicator data')
+
     dxs = [_calculateDX(pdis[i], ndis[i]) for i in range(len(data)-periods)]
     if DEBUGGING: debugMatrix.setToColumn(debugMatrix.getColByKey('DX'), periods, dxs)
 
     return dxs
+
+def getDXExpectedLength(datalength, periodlength=gconfig.defaultIndicatorFormulaConfig.periods[IndicatorType.ADX]):
+    return datalength - periodlength
 
 '''
     Average Directional Index
@@ -423,6 +443,9 @@ def generateADXs_AverageDirectionalIndex(data=[], periods=gconfig.defaultIndicat
     if DEBUGGING: debugMatrix.setToColumn(debugMatrix.getColByKey('ADX'), periods*2-1, adxs)
 
     return adxs
+
+def getADXExpectedLength(datalength, periodlength=gconfig.defaultIndicatorFormulaConfig.periods[IndicatorType.ADX]):
+    return datalength - periodlength*2 + 1
 
 ## test ADX
 if __name__ == '__main__':
@@ -481,8 +504,10 @@ if __name__ == '__main__':
     # print('adxs',adxs)
 
     
-    # dxs = generateDXs_DirectionalMovementIndex(data)
+    dxs = generateDXs_DirectionalMovementIndex(data)
+    eldx = getDXExpectedLength(len(data))
     adxs = generateADXs_AverageDirectionalIndex(data)
+    eladx = getADXExpectedLength(len(data))
     debugMatrix.print(startingRow=1)
 
     # if pdis != [26.488352027610002, 23.911089808879037, 30.356235533224208]:
@@ -510,6 +535,9 @@ def generateEMAs_ExponentialMovingAverage(data, periods=1, smoothing=gconfig.def
     if usingLastEMA: emas = emas[1:] ## trim the EMA passed as an arg
     return emas
 
+def getEMAExpectedLength(datalength, periodlength=1):
+    return datalength - periodlength + 1
+
 '''
     Moving Average Convergence/Divergence (MACD)
     type: (trend-following) momentum indicator
@@ -526,6 +554,9 @@ def generateMACDs_MovingAverageConvergenceDivergence(data) -> List[float]:
 
     macds = [ema12[i] - ema26[i] for i in range(len(data)-26)]
     return macds
+
+def getMACDExpectedLength(datalength):
+    return datalength-26
 
 '''
     Volume Weighted Average Price (VWAP)
@@ -573,6 +604,8 @@ def generateBollingerBands(data, periods=gconfig.defaultIndicatorFormulaConfig.p
     
     return bbs
 
+def getBolligerBandsExpectedLength(datalength, periodlength=gconfig.defaultIndicatorFormulaConfig.periods[IndicatorType.BB]):
+    return datalength - periodlength
 
 ## test bollinger bands
 if __name__ == '__main__':
@@ -656,9 +689,11 @@ def generateSuperTrends(data, atrPeriod=gconfig.defaultIndicatorFormulaConfig.pe
 
     return sts
 
+def getSuperTrendExpectedLength(datalength, periodlength=gconfig.defaultIndicatorFormulaConfig.periods[IndicatorType.ST]):
+    return datalength - periodlength + 1
+
 ## test supertrend
 if __name__ == '__main__':
-    
     data = recdotobj([
         {'high':44.53,'low':43.98,'close':44.52},
 
@@ -762,3 +797,27 @@ if __name__ == '__main__':
     pyplot.plot([st[0] for st in sts])
     pyplot.show()
 
+
+
+def getExpectedLengthForIndicator(indicator: IndicatorType, datalength, periodlength=None):
+    kwargs = { 'datalength': datalength }
+    if periodlength is not None: kwargs['periodlength'] = periodlength
+
+    if indicator.isEMA():
+        return getEMAExpectedLength(**kwargs)
+    elif indicator == IndicatorType.RSI:
+        return getRSIExpectedLength(**kwargs)
+    elif indicator == IndicatorType.CCI:
+        return getCCIExpectedLength(**kwargs)
+    elif indicator == IndicatorType.ATR:
+        return getATRExpectedLength(**kwargs)
+    elif indicator == IndicatorType.DIS:
+        return getDIExpectedLength(**kwargs)
+    elif indicator == IndicatorType.ADX:
+        return getADXExpectedLength(**kwargs)
+    elif indicator == IndicatorType.MACD:
+        return getMACDExpectedLength(**kwargs)
+    elif indicator == IndicatorType.BB:
+        return getBolligerBandsExpectedLength(**kwargs)
+    elif indicator == IndicatorType.ST:
+        return getSuperTrendExpectedLength(**kwargs)

@@ -24,7 +24,7 @@ from structures.skipsObj import SkipsObj
 from utils.other import buildCommaSeparatedTickerPairString, getIndicatorPeriod, getInstancesByClass, parseCommandLineOptions
 from utils.support import asISOFormat, asList, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.types import TickerKeyType
-from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends, unresumableGenerationIndicators
+from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends, getExpectedLengthForIndicator, unresumableGenerationIndicators
 from utils.vectorSimilarity import euclideanSimilarity_jit
 
 dbm: DatabaseManager = DatabaseManager()
@@ -230,10 +230,14 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
     print(f' {"Would insert" if dryrun else "Inserted"} {numpy.count_nonzero(similaritiesSum)-len(dbsums)} new values and {"would update" if dryrun else "updated"} {len(dbsums)} values for', ticker.getTuple())
 
 
+def _verifyTechnicalIndicatorDataIntegrity(stockdata, indicator: IndicatorType, indicatorCount, indicatorPeriod, indicatorMaxDate=None):
+    if indicatorMaxDate and indicatorMaxDate > stockdata[-1].period_date: return False
+    return indicatorCount == getExpectedLengthForIndicator(indicator, len(stockdata), indicatorPeriod)
+
 def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cacheIndicators, indicatorConfig):
     localdbm = DatabaseManager()
     latestIndicators = localdbm.dbc.execute('''
-        SELECT MAX(date) AS date, exchange, symbol, indicator, period, value FROM historical_calculated_technical_indicator_data WHERE date_type=? AND exchange=? AND symbol=? group by exchange, symbol, indicator, period
+        SELECT MAX(date) AS date, COUNT(*) AS count, exchange, symbol, indicator, period, value FROM historical_calculated_technical_indicator_data WHERE date_type=? AND exchange=? AND symbol=? group by exchange, symbol, indicator, period
     ''', (seriesType.name, ticker.exchange, ticker.symbol)).fetchall()
     def getLatestIndicator(i: IndicatorType, period):
         for li in latestIndicators:
@@ -259,63 +263,87 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
         for r in latestIndicators:
             if r.date < stkdata[-1].period_date:
                 notuptodateIndicators.append(IndicatorType[r.indicator])
+        ## check integrity of up-to-date indicators
+        for ik in IndicatorType:
+            if ik in notuptodateIndicators: continue ## will verify integrity after update
+            iperiod = getIndicatorPeriod(ik, indicatorConfig)
+            lindc = getLatestIndicator(ik, iperiod)
+            if not lindc: continue ## likely not configured for caching
+
+            if not _verifyTechnicalIndicatorDataIntegrity(stkdata, ik, lindc.count, iperiod, indicatorMaxDate=lindc.date):
+                print(f'{ik.longForm} integrity check failed for {latestIndicators[0].exchange}:{latestIndicators[0].symbol}; will regenerate')
+                missingIndicators.append(ik)
         if len(missingIndicators) == 0 and len(notuptodateIndicators) == 0: return 0
+
 
     returntpls = []
     i: IndicatorType
     for i in cacheIndicators:
         iperiod = getIndicatorPeriod(i, indicatorConfig)
 
-        ## generate fresh/all data (some indicators use smoothing so their initial values contribute to their latest, meaning they cannot be 'picked up where they left off')
-        if i in missingIndicators or (i in notuptodateIndicators and i in unresumableGenerationIndicators):
-            try:
+        continueFlag = False
+        ## breaks out if there are no issues with generated data
+        for regenLoop in range(2):
+            ## generate fresh/all data (some indicators use smoothing so their initial values contribute to their latest, meaning they cannot be 'picked up where they left off')
+            if regenLoop == 1 or i in missingIndicators or (i in notuptodateIndicators and i in unresumableGenerationIndicators):
+                try:
+                    if i.isEMA():
+                        indcdata = generateEMAs_ExponentialMovingAverage(stkdata, iperiod)
+                    elif i == IndicatorType.RSI:
+                        indcdata = generateRSIs_RelativeStrengthIndex(stkdata, iperiod)
+                    elif i == IndicatorType.CCI:
+                        indcdata = generateCCIs_CommodityChannelIndex(stkdata, iperiod)
+                    elif i == IndicatorType.ATR:
+                        indcdata = generateATRs_AverageTrueRange(stkdata, iperiod)
+                    elif i == IndicatorType.DIS:
+                        indcdata = list(zip(
+                            generateDIs_DirectionalIndicator(stkdata, iperiod),
+                            generateDIs_DirectionalIndicator(stkdata, iperiod, positive=False)
+                        ))
+                    elif i == IndicatorType.ADX:
+                        indcdata = generateADXs_AverageDirectionalIndex(stkdata, iperiod)
+                    elif i == IndicatorType.MACD:
+                        indcdata = generateMACDs_MovingAverageConvergenceDivergence(stkdata)
+                    elif i == IndicatorType.BB:
+                        indcdata = generateBollingerBands(stkdata, iperiod)
+                    elif i == IndicatorType.ST:
+                        indcdata = generateSuperTrends(stkdata, iperiod)
+                except InsufficientDataAvailable:
+                    continueFlag = True
+
+                break
+
+            ## only generate missing values
+            elif i in notuptodateIndicators:
+                latesti = getLatestIndicator(i, iperiod)   
+
+                minDateIndex = 0
+                for j in range(len(stkdata)-1, -1, -1):
+                    if stkdata[j].period_date == latesti.date:
+                        minDateIndex = j
+                        break
+
                 if i.isEMA():
-                    indcdata = generateEMAs_ExponentialMovingAverage(stkdata, iperiod)
-                elif i == IndicatorType.RSI:
-                    indcdata = generateRSIs_RelativeStrengthIndex(stkdata, iperiod)
+                    indcdata = generateEMAs_ExponentialMovingAverage(stkdata[minDateIndex-1:], iperiod, usingLastEMA=latesti.value)
                 elif i == IndicatorType.CCI:
+                    ## TODO: not currently cached
                     indcdata = generateCCIs_CommodityChannelIndex(stkdata, iperiod)
-                elif i == IndicatorType.ATR:
-                    indcdata = generateATRs_AverageTrueRange(stkdata, iperiod)
-                elif i == IndicatorType.DIS:
-                    indcdata = list(zip(
-                        generateDIs_DirectionalIndicator(stkdata, iperiod),
-                        generateDIs_DirectionalIndicator(stkdata, iperiod, positive=False)
-                    ))
-                elif i == IndicatorType.ADX:
-                    indcdata = generateADXs_AverageDirectionalIndex(stkdata, iperiod)
                 elif i == IndicatorType.MACD:
+                    ## TODO: not currently cached
                     indcdata = generateMACDs_MovingAverageConvergenceDivergence(stkdata)
                 elif i == IndicatorType.BB:
-                    indcdata = generateBollingerBands(stkdata, iperiod)
-                elif i == IndicatorType.ST:
-                    indcdata = generateSuperTrends(stkdata, iperiod)
-            except InsufficientDataAvailable:
-                continue
+                    indcdata = generateBollingerBands(stkdata[minDateIndex-iperiod+1:], iperiod)
 
-        ## only generate missing values
-        elif i in notuptodateIndicators:
-            latesti = getLatestIndicator(i, iperiod)   
-
-            minDateIndex = 0
-            for j in range(len(stkdata)-1, -1, -1):
-                if stkdata[j].period_date == latesti.date:
-                    minDateIndex = j
+                if _verifyTechnicalIndicatorDataIntegrity(stkdata, i, len(indcdata), iperiod):
                     break
+                else:
+                    print(f'Integrity check failed for {latestIndicators[0].exchange}:{latestIndicators[0].symbol}; regenerating')
 
-            if i.isEMA():
-                indcdata = generateEMAs_ExponentialMovingAverage(stkdata[minDateIndex-1:], iperiod, usingLastEMA=latesti.value)
-            elif i == IndicatorType.CCI:
-                ## TODO: not currently cached
-                indcdata = generateCCIs_CommodityChannelIndex(stkdata, iperiod)
-            elif i == IndicatorType.MACD:
-                ## TODO: not currently cached
-                indcdata = generateMACDs_MovingAverageConvergenceDivergence(stkdata)
-            elif i == IndicatorType.BB:
-                indcdata = generateBollingerBands(stkdata[minDateIndex-iperiod+1:], iperiod)
-
-        else: ## already up to date
-            continue
+            else: ## already up to date
+                continueFlag = True
+                break
+        
+        if continueFlag: continue
 
         ## convert generated values to DB tuples in proper chronological order
         tpls = []
@@ -356,15 +384,16 @@ def technicalIndicatorDataCalculationAndInsertion(exchange=[], seriesType: Serie
     if doNotCacheADX: cacheIndicators.remove(IndicatorType.ADX)
 
     inserttpls = []
-    for tpls in tqdmProcessMapHandlerWrapper(partial(_multicore_updateTechnicalIndicatorData, seriesType=seriesType, cacheIndicators=cacheIndicators, indicatorConfig=indicatorConfig), tickers, verbose=1, sequentialOverride=sequential, desc='Updating techInd data for tickers'):
+    for tpls in tqdmProcessMapHandlerWrapper(partial(_multicore_updateTechnicalIndicatorData, seriesType=seriesType, cacheIndicators=cacheIndicators, indicatorConfig=indicatorConfig), tickers, verbose=1, sequentialOverride=sequential, desc='Calculating techInd data for tickers'):
         if len(tpls) != 0:
             rowsadded += len(tpls)
             tickersupdated += 1
             inserttpls.extend(tpls)
     
-    dbm.dbc.executemany('''
-        INSERT OR REPLACE INTO historical_calculated_technical_indicator_data VALUES (?,?,?,?,?,?,?)
-    ''', inserttpls)
+    for tplchunk in tqdm.tqdm(numpy.array_split(inserttpls, 10), desc='Inserting data'):
+        dbm.dbc.executemany('''
+            INSERT OR REPLACE INTO historical_calculated_technical_indicator_data VALUES (?,?,?,?,?,?,?)
+        ''', tplchunk)
 
     print('Updated {} tickers'.format(tickersupdated))
     print('Added or replaced {} rows'.format(rowsadded))
