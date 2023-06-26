@@ -9,11 +9,13 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 import tqdm, requests, zipfile, io
+
+from managers.configManager import StaticConfigManager
 from managers.databaseManager import DatabaseManager
 from utils.support import DotDict, Singleton, recdotdict
 
 
-edgarPath = os.path.join(path, 'data/financial_dumps/edgar')
+edgarPath = StaticConfigManager().get('edgardumps', required=True)
 edgarFiles = ['pre', 'sub', 'tag', 'num']
 dbm: DatabaseManager = DatabaseManager()
 
@@ -62,18 +64,18 @@ def loadEDGARFinancialDumps():
                 # c += 1    
 
     print('Inserting new quarters')
-    dbm.dbc.execute('''INSERT OR IGNORE INTO vwtb_edgar_quarters 
+    dbm.dbc.execute(f'''INSERT OR IGNORE INTO vwtb_edgar_quarters 
         SELECT exchange, symbol, period, CASE fp WHEN 'Q1' THEN 1 WHEN 'Q2' THEN 2 WHEN 'Q3' then 3 WHEN 'FY' then 4 END AS quarter, filed 
-        FROM dump_edgar_sub s JOIN dump_edgar_num n ON s.adsh = n.adsh 
+        FROM {dbm.dumpDBAlias}.dump_edgar_sub s JOIN {dbm.dumpDBAlias}.dump_edgar_num n ON s.adsh = n.adsh 
         WHERE exchange IS NOT NULL AND symbol IS NOT NULL AND n.version LIKE \'%us-gaap%\'
         AND exchange||symbol NOT IN ('NYSEARD', 'NYSECIB', 'NASDAQFWP', 'NASDAQGLPG', 'NYSEPTR', 'NYSESSL', 'NYSETLK', 'NYSEYPF')''' ## tickers that have extremely partial reports, or ones that are causing problems for normalization filters
     )
 
     print('Migrating num data to vwtb')
     ## may need some optimizing, could take almost 2 hours to run
-    dbm.dbc.execute('''INSERT OR IGNORE INTO vwtb_edgar_financial_nums
+    dbm.dbc.execute(f'''INSERT OR IGNORE INTO vwtb_edgar_financial_nums
         SELECT DISTINCT s.exchange, s.symbol, n.tag, n.ddate, n.qtrs, n.uom, n.value, n.duplicate 
-            FROM dump_edgar_num n JOIN dump_edgar_sub s, dump_edgar_tag t ON n.adsh = s.adsh AND n.tag = t.tag AND n.version = t.version
+            FROM {dbm.dumpDBAlias}.dump_edgar_num n JOIN {dbm.dumpDBAlias}.dump_edgar_sub s, {dbm.dumpDBAlias}.dump_edgar_tag t ON n.adsh = s.adsh AND n.tag = t.tag AND n.version = t.version
             WHERE n.coreg='' AND t.custom = 0 AND t.abstract = 0 AND t.version LIKE \'%us-gaap%\''''
     )
 
@@ -131,7 +133,7 @@ if __name__ == '__main__':
             break
 
         with zipfile.ZipFile(io.BytesIO(response.content)) as thezip:
-            thezip.extractall(os.path.join(path, 'data/financial_dumps/edgar', yearquarter))
+            thezip.extractall(os.path.join(edgarPath, yearquarter))
         
         print('Downloaded', yearquarter)
 

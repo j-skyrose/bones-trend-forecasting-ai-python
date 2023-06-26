@@ -22,13 +22,15 @@ class _ConfigManager():
         self.static = static
         self.config = ConfigObj(self.filepath, create_empty=(not self.static))
 
-    def get(self, arg1, arg2=None, defaultValue=None):
+    def get(self, arg1, arg2=None, defaultValue=None, required=False):
         try:
             if (arg2):
                 return self.config[arg1][arg2]
             else:
                 return self.config[defaultConfigFileSection][arg1]
         except KeyError as e:
+            if required:
+                raise e
             if arg2 is not None and arg1 == e.args[0]:
                 if self.static: ## savedState auto-creates anything missing
                     raise KeyError(f'\'{arg1}\' section is missing from the config')

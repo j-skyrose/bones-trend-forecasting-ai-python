@@ -46,10 +46,8 @@ class APIManager(Singleton):
         print('saved config and state')
 
     def _initializeAPI(self, apiName, apiClass, requiresAPIKey=True):
-        url = self.config.get(apiName, 'url')
-        if not url: raise KeyError(f'URL config value missing for {apiName}')
-        apiKey = self.config.get(apiName, 'apikey')
-        if not apiKey and requiresAPIKey: raise KeyError(f'\'apiKey\' config value missing for {apiName}')
+        url = self.config.get(apiName, 'url', required=True)
+        apiKey = self.config.get(apiName, 'apikey', required=requiresAPIKey)
 
         self.apis[apiName] = recdotdict({
             'api': apiClass(url, key=apiKey),

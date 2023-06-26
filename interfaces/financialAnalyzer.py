@@ -770,12 +770,12 @@ def analyzeNUMFormulae():
         #     skipqcount -= 1
         #     continue
 
-        companies = dbm.dbc.execute('SELECT DISTINCT s.adsh FROM dump_edgar_sub s JOIN dump_edgar_num n, edgar_sub_balance_status b ON s.adsh=n.adsh and s.adsh=b.adsh WHERE b.status=0 AND fy=? AND fp=? AND exchange IS NOT NULL AND coreg=\'\' AND qtrs=\'0\' AND n.version LIKE \'%gaap%\'', (q[:4], q[4:].upper())).fetchall()
+        companies = dbm.dbc.execute(f'SELECT DISTINCT s.adsh FROM {dbm.dumpDBAlias}.dump_edgar_sub s JOIN {dbm.dumpDBAlias}.dump_edgar_num n, edgar_sub_balance_status b ON s.adsh=n.adsh and s.adsh=b.adsh WHERE b.status=0 AND fy=? AND fp=? AND exchange IS NOT NULL AND coreg=\'\' AND qtrs=\'0\' AND n.version LIKE \'%gaap%\'', (q[:4], q[4:].upper())).fetchall()
         # print(len(companies))
         # print(q)
         # print('keyspread', keyspread)
         for c in tqdm.tqdm(companies, desc='Companies', leave=False):
-            numValues = dbm.dbc.execute('SELECT * FROM dump_edgar_num WHERE adsh=?', (c.adsh,)).fetchall()
+            numValues = dbm.dbc.execute(f'SELECT * FROM {dbm.dumpDBAlias}.dump_edgar_num WHERE adsh=?', (c.adsh,)).fetchall()
             ## map to tag names
             ddatedict = {}
             for n in numValues:
@@ -865,7 +865,7 @@ if __name__ == '__main__':
         # print(list(tagdict.keys()))
 
         ## remove deprecated tags
-        deprecatedtags = dbm.dbc.execute('select distinct tag from dump_edgar_tag where abstract=0 and tlabel like \'%deprecated%\'').fetchall()
+        deprecatedtags = dbm.dbc.execute(f'select distinct tag from {dbm.dumpDBAlias}.dump_edgar_tag where abstract=0 and tlabel like \'%deprecated%\'').fetchall()
         for t in deprecatedtags:
             try:
                 taglist.remove(t.tag)

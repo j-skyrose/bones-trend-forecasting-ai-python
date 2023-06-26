@@ -11,7 +11,7 @@ import numpy
 from calendar import monthrange
 from datetime import date, timedelta
 
-from managers.configManager import ConfigManager
+from managers.configManager import SavedStateManager
 from managers.databaseManager import DatabaseManager
 from structures.dailyDataHandler import DailyDataHandler
 from structures.monthlyGIDataHandler import MonthlyGIDataHandler
@@ -24,7 +24,7 @@ dbm: DatabaseManager = DatabaseManager()
 def processRawGoogleInterests(exchange=None, symbol=None, verbose=1):
     '''pulls daily/weekly/monthly data from google_interests_raw then calculates and inserts overall relative interest for each day that has stock data into google_interests table. Essentially rebuilds all data in google_interests table every execution as backfactor modification may be performed'''
     
-    config = ConfigManager()
+    config = SavedStateManager()
     if config.get('google', 'lastprocessedrowid') == dbm.getMaxRowID():
         print('Already up-to-date')
         return
