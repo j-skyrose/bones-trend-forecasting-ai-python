@@ -8,11 +8,12 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 class SkipsObj:
-    def __init__(self, stocks=False, financials=False, splits=False, technicalIndicators=False, googleInterests=False, instances=False, sets=False):
+    def __init__(self, stocks=False, financials=False, technicalIndicators=False, splits=False, earningsDates=False, googleInterests=False, instances=False, sets=False):
         self.stocks = stocks
         self.financials = financials
-        self.splits = splits
         self.technicalIndicators = technicalIndicators
+        self.splits = splits
+        self.earningsDates = earningsDates
         self.googleInterests = googleInterests
         self.instances = instances
         self.sets = sets

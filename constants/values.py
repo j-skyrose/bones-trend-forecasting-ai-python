@@ -43,6 +43,14 @@ damagedSymbols = [('NYSE', 'SMI'),('NYSE', 'HIVE'),('NASDAQ', 'BKCH'),('NASDAQ',
 
 unusableSymbols = testingSymbols + extremeSymbols + damagedSymbols
 
+## symbol is listed on multiple exchange, with essentially identical historical data. First exchange is primary
+multiExchangeSymbols = {
+    'ALO': ['NYSE', 'NYSE MKT'],
+    'FTNW': ['NYSE', 'NYSE MKT'],
+    # 'FTSI': ['NYSE MKT', 'NYSE']
+    'SDI': ['NYSE', 'NYSE MKT'],
+    'RZB': ['NYSE', 'NASDAQ']
+}
 
 
 months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']

@@ -17,7 +17,7 @@ from constants.enums import DataFormType, FeatureExtraType, IndicatorType, Input
 from constants.values import standardExchanges, minGoogleDate, indicatorsKey
 from utils.support import Singleton, flatten, recdotdict, _isoformatd, shortc, _edgarformatd, shortcdict
 from utils.other import maxQuarters
-from structures.stockDataHandler import StockDataHandler
+from structures.stockEarningsDateHandler import StockEarningsDateHandler
 from managers.statsManager import StatsManager
 
 # from managers.databaseManager import DatabaseManager
@@ -88,7 +88,7 @@ class InputVectorFactory(Singleton):
     def build(self,
               ## time series type data
               stockDataSet=None, vixData=None, financialDataSet=None, googleInterests: Dict[str,float]=None, stockSplits=None,
-              indicators: Dict[IndicatorType, float]=None,
+              indicators: Dict[IndicatorType, float]=None, earningsDateHandler: StockEarningsDateHandler=None,
               ## symbol/static type data
               foundedDate=None, ipoDate=None, sector=None, exchange=None, etfFlag=None,
               ## other
@@ -215,6 +215,27 @@ class InputVectorFactory(Singleton):
                 # seriesmatrix.append([1 if d.period_date in stockSplitDict.keys() else 0 for d in stockDataSet])
                 # seriesmatrix.append([stockSplitDict[d.period_date] if d.period_date in stockSplitDict.keys() else 0 for d in stockDataSet])
                 if collectStats: sm.ktypestocksplitstime += time.time() - startt
+
+            elif k == 'earningsDate':
+                vectorListType = InputVectorDataType.SERIES
+                if collectStats: startt = time.time()
+                vectorAsList = []
+                if earningsDateHandler:
+                    for index,d in enumerate(stockDataSet):
+                        earningsDate = earningsDateHandler.getNextEarningsDate(d.period_date)
+                        if earningsDate:
+                            daydiff = (date.fromisoformat(d.period_date) - date.fromisoformat(earningsDate)).days
+                        
+                        vectorAsList.extend([
+                            1 if earningsDate else 0, ## current earnings date is known; unknown being either missing, or current day is more than 180 days (~2 quarters) away from closest known earnings date
+                            1 if earningsDate and daydiff < 0 else 0, ## value is days before current (i.e. most recent) earnings date
+                            1 if earningsDate and daydiff > 0 else 0, ## value is (up to 7) days after current (i.e. most recent) earnings date
+                            abs(daydiff) if earningsDate else 0 ## distance (in days) from current earnings date
+                        ])
+                else:
+                    vectorAsList = [0,0,0,0]*len(stockDataSet)
+
+                if collectStats: sm.ktypeearningsdatetime += time.time() - startt
 
             elif compositeKey.startswith(indicatorsKey):
                 vectorListType = InputVectorDataType.SERIES

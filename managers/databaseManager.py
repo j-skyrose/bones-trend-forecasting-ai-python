@@ -22,12 +22,12 @@ from structures.api.googleTrends.request import GoogleAPI
 from globalConfig import config as gconfig
 from managers.configManager import StaticConfigManager
 from managers.marketDayManager import MarketDayManager
-from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, AccuracyType, SetType, Direction
+from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, EarningsCollectionAPI, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, AccuracyType, SetType, Direction
 from structures.normalizationColumnObj import NormalizationColumnObj
 from structures.normalizationDataHandler import NormalizationDataHandler
 from structures.sqlArgumentObj import SQLArgumentObj
-from utils.support import asDate, asISOFormat, asList, convertToCamelCase, convertToSnakeCase, generateCommaSeparatedQuestionMarkString, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, tqdmLoopHandleWrapper, unixToDatetime
-from utils.other import buildCommaSeparatedTickerPairString, parseCommandLineOptions
+from utils.support import asDate, asISOFormat, asList, convertToCamelCase, convertToSnakeCase, flatten, generateCommaSeparatedQuestionMarkString, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, tqdmLoopHandleWrapper, unixToDatetime
+from utils.other import buildCommaSeparatedTickerPairString, generateSQLAdditionalStatementAndArguments, parseCommandLineOptions
 from constants.values import unusableSymbols, apiList, standardExchanges
 
 configManager: StaticConfigManager = StaticConfigManager()
@@ -82,7 +82,7 @@ def _generateDatabaseAnnotationObjectsFile(primaryDatabasePath=None, dumpDatabas
 
 ## generate before import to ensure things are up-to-date for the current execution
 _generateDatabaseAnnotationObjectsFile()
-from managers._generatedDatabaseAnnotations.databaseRowObjects import AccuracyLastUpdatesRow, CboeVolatilityIndexRow, DataSetsRow, DumpStockSplitsPolygonRow, HistoricalDataRow, HistoricalVectorSimilarityDataRow, NetworkAccuraciesRow, NetworksRow, StagingSymbolInfoRow, SymbolsRow, symbolsTableColumns, historicalDataTableColumns
+from managers._generatedDatabaseAnnotations.databaseRowObjects import AccuracyLastUpdatesRow, CboeVolatilityIndexRow, DataSetsRow, DumpNasdaqEarningsDatesRow, DumpStockSplitsPolygonRow, HistoricalDataRow, HistoricalVectorSimilarityDataRow, NetworkAccuraciesRow, NetworksRow, StagingSymbolInfoRow, SymbolsRow, symbolsTableColumns, historicalDataTableColumns, dumpNasdaqEarningsDatesTableColumns
 
 class DatabaseManager(Singleton):
 
@@ -168,9 +168,9 @@ class DatabaseManager(Singleton):
         qrts = self.dbc.execute(f'SELECT period FROM {self.dumpDBAlias}.dump_edgar_loaded WHERE type=\'quarter\'').fetchall()
         return [q.period for q in qrts]
 
-    def getAliasesDictionary(self, api):
+    def getAliasesDictionary(self, api=None):
         ret = {}
-        for r in self.dbc.execute('SELECT exchange, alias FROM exchange_aliases WHERE api=?', (api,)).fetchall():
+        for r in self.dbc.execute(f'SELECT exchange, alias FROM exchange_aliases {"WHERE api=?" if api else ""}', (api,) if api else []).fetchall():
             ret[r['alias']] = r['exchange']
             ret[r['exchange']] = r['exchange']
         return recdotdict(ret)
@@ -765,6 +765,68 @@ class DatabaseManager(Singleton):
 
         return self.dbc.execute(stmt, tuple(args)).fetchall()
 
+    def getYahooSymbolInfo(self, symbol):
+        return self.dbc.execute(f'SELECT * FROM {self.dumpDBAlias}.dump_symbol_info_yahoo WHERE symbol=?', (symbol,)).fetchall()
+
+    def getDumpEarningsDates(self, api: EarningsCollectionAPI, exchange=None, symbol=None, **kwargs):
+        wherestmt = ''
+        args = []
+        if api == EarningsCollectionAPI.NASDAQ:
+            table = 'dump_nasdaq_earnings_dates'
+            if symbol:
+                wherestmt = ' WHERE symbol=? '
+                args = [symbol]
+        else:
+            if api == EarningsCollectionAPI.MARKETWATCH:
+                table = 'dump_marketwatch_earnings_dates'
+            elif api == EarningsCollectionAPI.YAHOO:
+                table = 'dump_yahoo_earnings_dates'
+
+            if exchange or symbol:
+                wherestmt = ' WHERE '
+                if exchange:
+                    wherestmt += 'exchange=? '
+                    args.append(exchange)
+                    if symbol:
+                        wherestmt += 'AND symbol=?'
+                        args.append(symbol)
+                else:
+                    wherestmt += 'symbol=?'
+                    args.append(symbol)
+
+        stmt = f'SELECT * FROM {self.dumpDBAlias}.{table} {wherestmt}'
+        return self.dbc.execute(stmt, args).fetchall()
+
+    def getUniqueEarningsCollectionDates(self, api: EarningsCollectionAPI):
+        if api == EarningsCollectionAPI.NASDAQ:
+            table = 'dump_nasdaq_earnings_dates'
+        elif api == EarningsCollectionAPI.MARKETWATCH:
+            table = 'dump_marketwatch_earnings_dates'
+        elif api == EarningsCollectionAPI.YAHOO:
+            table = 'dump_yahoo_earnings_dates'
+        
+        stmt = f'SELECT DISTINCT input_date AS date FROM {self.dumpDBAlias}.{table} ORDER BY date ASC'
+        return [r.date for r in self.dbc.execute(stmt).fetchall()]
+
+    def getLatestEarningsCollectionDate(self, api: EarningsCollectionAPI):
+        ''' returns latest anchor date, i.e. date on which collection was done but the (most recent market) day's data was not updated yet '''
+        wherestmt = 'WHERE surprise_percentage IS NOT NULL'
+        if api == EarningsCollectionAPI.NASDAQ:
+            table = 'dump_nasdaq_earnings_dates'
+        elif api == EarningsCollectionAPI.MARKETWATCH:
+            table = 'dump_marketwatch_earnings_dates'
+        elif api == EarningsCollectionAPI.YAHOO:
+            table = 'dump_yahoo_earnings_dates'
+        
+        stmt = f'SELECT MAX(input_date) AS date FROM {self.dumpDBAlias}.{table} {wherestmt}'
+
+        return self.dbc.execute(stmt).fetchone()['date']
+
+    def getEarningsDate(self, exchange=None, symbol=None, inputDate=None, earningsDate=None):
+        additionalStmt, arguments = generateSQLAdditionalStatementAndArguments(**locals())
+        stmt = 'SELECT * FROM earnings_dates'
+        return self.dbc.execute(stmt + additionalStmt, arguments).fetchall()
+
 
     ## end gets ####################################################################################################################################################################
     ####################################################################################################################################################################
@@ -1264,6 +1326,31 @@ class DatabaseManager(Singleton):
         if upsert:
             stmt = 'UPDATE google_interests SET relative_interest=? WHERE exchange=? AND symbol=? AND date=?'
             self.dbc.execute(stmt, tuple([val] + args))
+
+    def insertEarningsDateDump(self, api: EarningsCollectionAPI, **kwargs):
+        if api == EarningsCollectionAPI.NASDAQ:
+            table = 'dump_nasdaq_earnings_dates'
+            cccols = dumpNasdaqEarningsDatesCamelCaseTableColumns
+        elif api == EarningsCollectionAPI.MARKETWATCH:
+            table = 'dump_marketwatch_earnings_dates'
+            cccols = dumpMarketwatchEarningsDatesCamelCaseTableColumns
+        elif api == EarningsCollectionAPI.YAHOO:
+            table = 'dump_yahoo_earnings_dates'
+            cccols = dumpYahooEarningsDatesCamelCaseTableColumns
+
+        proccessedkwargs = {}
+        for k,v in kwargs.items():
+            if v is not None and v != 'N/A':
+                if k not in cccols: raise ValueError(f'"{k}" argument not in {table} columns')
+                proccessedkwargs[k] = v.isoformat() if type(v) == date else v
+
+        stmt = f'INSERT INTO {self.dumpDBAlias}.{table} VALUES ({ generateCommaSeparatedQuestionMarkString(len(cccols)) })'
+        args = [shortcdict(proccessedkwargs, argName) for argName in cccols]
+
+        self.dbc.execute(stmt, args)
+
+    def insertEarningsDate(self, exchange, symbol, inputDate, earningsDate):
+        self.dbc.execute(f'INSERT INTO earnings_dates VALUES ({generateCommaSeparatedQuestionMarkString(4)})', (exchange, symbol, inputDate, earningsDate))
 
     ## end sets ####################################################################################################################################################################
     ####################################################################################################################################################################
@@ -2367,7 +2454,148 @@ if __name__ == '__main__':
     if opts.function:
         getattr(d, opts.function)(**kwargs)
     else:
+
+        d.getEarningsDate(symbol='test', inputDate=SQLHelpers.NOTNULL, earningsDate=['2023-01-01', '2022-09-09'])
+        exit()
+
+        # updatedrows = 0
+        # for col in stagingEarningsDatesSnakeCaseTableColumns:
+        #     stmt = f'UPDATE {d.dumpDBAlias}.staging_earnings_dates SET {col}=null WHERE ({col}=\'\' OR {col}=\'N/A\')'
+        #     d.dbc.execute(stmt)
+        #     updatedrows += d.dbc.rowcount
+        # print(updatedrows)
+
+        ## graph earnings dates
+        # edata = d.dbc.execute(f'SELECT * FROM {d.dumpDBAlias}.staging_earnings_dates').fetchall()
+        edata = flatten([d.getDumpEarningsDates(eapi, symbol='AA') for eapi in EarningsCollectionAPI])
+        uniquetickerdates = set()
+        for e in tqdm(edata, desc='Creating tuples'):
+            uniquetickerdates.add((shortcdict(e, 'exchange', 'NASDAQ'), e.symbol, e.earnings_date))
+        
+        daybuckets = [0 for x in range(365)]
+        leapyeardaybuckets = [0 for x in range(366)]
+        for _,_,edate in tqdm(uniquetickerdates, desc='Converting to days'):
+            dt = date.fromisoformat(edate)
+            yday = dt.timetuple().tm_yday -1
+            if calendar.isleap(dt.year): leapyeardaybuckets[yday] += 1
+            else: daybuckets[yday] += 1
+        
+        zerocountdts = []
+        for i in tqdm(range(len(leapyeardaybuckets)), desc='Checking'):
+            if leapyeardaybuckets[i] == 0:
+                offset = 0
+                if i >= 31+28:
+                    offset=1
+                if daybuckets[i-offset] == 0:
+                    zerocountdts.append(i)
+
+        # print(zerocountdts)
+
+
+        import matplotlib.pyplot as plt
+        fig = plt.figure()
+        ax = fig.add_axes([0,0,1,1])
+        ax.bar([i for i in range(1,len(leapyeardaybuckets)+1)], [daybuckets[i + (0 if i < 31+28 else -1)] + leapyeardaybuckets[i] for i in range(len(leapyeardaybuckets))])
+        plt.show()
+
+        exit()
+
         pass
+        # nd = d.getLatestNasdaqEarningsCollectionDate()
+        # d._generateDatabaseAnnotationObjectsFile()
+        # t = d.getNetworks()
+        # res = d.getHistoricalStartEndDates(exchange='NASDAQ')
+        # print(res)
+
+        ############
+        # checking uniqueness of symbols retrieved for earnings date data dumps
+        ## appears marketwatch symbols are covered by nasdaq and yahoo APIs, only a few OTCBB symbols are not but none of the 4 stock data APIs can get them
+        ## nasdaq is mostly covered by yahoo, only ~375 symbols are unique
+        nasdaqtablesymbols = [r.symbol for r in d.dbc.execute('select distinct symbol from dump_nasdaq_earnings_dates').fetchall()]
+        marketwatchtablesymbols = [r.symbol for r in d.dbc.execute('select distinct symbol from dump_marketwatch_earnings_dates').fetchall()]
+        yahootablesymbols = [r.symbol for r in d.dbc.execute('select distinct symbol from dump_yahoo_earnings_dates').fetchall()]
+
+        print('nasdaq vs marketwatch uniques')
+        nasdaquniques = []
+        marketwatchuniques =[]
+        for s in nasdaqtablesymbols:
+            if s not in marketwatchtablesymbols:
+                nasdaquniques.append(s)
+        for s in marketwatchtablesymbols:
+            if s not in nasdaqtablesymbols:
+                marketwatchuniques.append(s)
+        print('nasdaquniques:', len(nasdaquniques))
+        print('marketwatchunqies:', len(marketwatchuniques))
+        print('shared:', len(nasdaqtablesymbols) + len(marketwatchtablesymbols) - len(nasdaquniques) - len(marketwatchuniques))
+        print()
+
+        print('nasdaq vs yahoo uniques')
+        y = Yahoo()
+        exchaliasdict = d.getAliasesDictionary()
+        nasdaquniques = []
+        yahoouniques =[]
+        for s in nasdaqtablesymbols:
+            if s not in yahootablesymbols:
+                nasdaquniques.append(s)
+        for s in yahootablesymbols:
+            if s not in nasdaqtablesymbols:
+                yahoouniques.append(s)
+
+        print('nasdaquniques:', len(nasdaquniques))
+        print('yahoounqies:', len(yahoouniques))
+        print('shared:', len(nasdaqtablesymbols) + len(yahootablesymbols) - len(nasdaquniques) - len(yahoouniques))
+        print('nasdaquniques', nasdaquniques)
+
+        for u in [sobj['symbol'] for sobj in nasdaquniques]:
+            tickers = d.getSymbols(symbol=u)
+            for ti in tickers:
+                for k,v in ti.items():
+                    if k.startswith('api') and v == 1:
+                        print(ti)
+                        break
+        print()
+
+        print('marketwatch vs yahoo uniques')
+        marketwatchuniques = []
+        yahoouniques =[]
+        for s in marketwatchtablesymbols:
+            if s not in yahootablesymbols:
+                marketwatchuniques.append(s)
+        for s in yahootablesymbols:
+            if s not in marketwatchtablesymbols:
+                yahoouniques.append(s)
+        print('marketwatchuniques:', len(marketwatchuniques))
+        print('yahoounqies:', len(yahoouniques))
+        print('shared:', len(marketwatchtablesymbols) + len(yahootablesymbols) - len(marketwatchuniques) - len(yahoouniques))
+        print()
+
+
+        print('marketwatch vs nasdaq+yahoo uniques')
+        marketwatchuniques = []
+        nasdaqyahoouniques =[]
+        for s in marketwatchtablesymbols:
+            if s not in yahootablesymbols and s not in nasdaqtablesymbols:
+                marketwatchuniques.append(s)
+        for s in yahootablesymbols + nasdaqtablesymbols:
+            if s not in marketwatchtablesymbols:
+                nasdaqyahoouniques.append(s)
+        print('marketwatchuniques:', len(marketwatchuniques))
+        print('nasdaqyahoounqies:', len(nasdaqyahoouniques))
+        print('shared:', len(marketwatchtablesymbols) + len(yahootablesymbols) + len(nasdaqtablesymbols) - len(marketwatchuniques) - len(nasdaqyahoouniques))
+        print('marketwatchuniques', marketwatchuniques)
+
+        for mwu in [sobj['symbol'] for sobj in marketwatchuniques]:
+            tickers = d.getSymbols(symbol=mwu)
+            for ti in tickers:
+                for k,v in ti.items():
+                    if k.startswith('api') and v == 1:
+                        print(ti)
+                        break
+
+        print('|')        
+
+        exit()
+        ###########
         # res = d.dbc.execute('select * from symbols where exchange=? and (api_polygon=1 or api_fmp=1 or api_alphavantage=1 or api_neo=1)', ('NYSE ARCA',)).fetchall()
         # res = d.dbc.execute('select * from symbols where (api_polygon=1 or api_fmp=1 or api_alphavantage=1 or api_neo=1) and exchange in (select distinct exchange from historical_data)').fetchall()
         # for r in res:

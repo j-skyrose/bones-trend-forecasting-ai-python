@@ -8,6 +8,7 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 import numpy, re, optparse
+from enum import Enum
 from math import ceil
 from typing import List, Tuple
 from calendar import monthrange
@@ -15,7 +16,8 @@ from datetime import date, datetime, timedelta
 
 from globalConfig import config as gconfig
 from structures.inputVectorStats import InputVectorStats
-from utils.support import isNormalizationColumn, shortc, shortcdict
+from structures.sqlArgumentObj import SQLArgumentObj
+from utils.support import asList, convertToSnakeCase, isNormalizationColumn, shortc, shortcdict
 from constants.values import stockOffset, canadaExchanges, usExchanges
 from constants.enums import InterestType, MarketType, NormalizationGroupings, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType
 
@@ -203,6 +205,51 @@ def parseNormalizationColumn(c) -> Tuple[NormalizationGroupings, str]:
     columnName = '_'.join(csplit[2:])
 
     return normalizationGrouping, columnName
+
+
+## converts arguments (passed to a DBM SQL GET function) into the appropriate WHERE statement
+def generateSQLAdditionalStatementAndArguments(**kwargs):
+    processedkwargs = {}
+    for k,v in kwargs.items():
+        k = convertToSnakeCase(k)
+        if k not in ['self', 'kwargs'] and v is not None:
+            processedkwargs[k] = v
+
+    additions = []
+    args = []
+
+    ## add all column-keyword args to the query
+    for argKey, argVal in processedkwargs.items():
+        # if argKey == 'api':
+        #     if type(argVal) is list:
+        #         apiAdds = []
+        #         for a in argVal:
+        #             apiAdds.append(f's.api_{a} = 1')
+        #         additions.append(f'( {" OR ".join(apiAdds)} )')
+        #     else:
+        #         additions.append(f's.api_{api} = 1')
+        # else:
+            # col = 's'
+            # if argKey in onlyHistoricalDataSnakeCaseTableColumns:
+            #     col = 'h'
+            # col += f'.{argKey}'
+
+        if type(argVal) == SQLHelpers:
+            additions.append(f' {argKey} is {argVal.value} ')
+        elif type(argVal) == SQLArgumentObj:
+            argVal: SQLArgumentObj
+            additions.append(f' ? {argVal.modifier.sqlsymbol} {argKey} ')
+            args.append(argVal.value)
+        else:
+            if issubclass(argVal.__class__, Enum): argVal = argVal.name
+            vlist = asList(argVal)
+            additions.append(f' {argKey} in ({",".join(["?" for x in range(len(vlist))])}) ')
+            args.extend(vlist)
+
+    if additions:
+        return f" WHERE {' AND '.join(additions)}", args
+    else:
+        return '', []
 
 if __name__ == '__main__':
     # print(getMarketHolidays(2020))

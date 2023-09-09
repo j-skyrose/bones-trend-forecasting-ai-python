@@ -104,7 +104,7 @@ def shortc(val, e):
     return val if val != '' and val != None and listCond else e
     # except:
 
-def shortcdict(dict, key, e, shortcValue=True):
+def shortcdict(dict, key, e=None, shortcValue=True):
     try:
         if shortcValue: return shortc(dict[key], e)
         else: return dict[key]
@@ -147,6 +147,10 @@ def unixToDatetime(u):
     if u > 9999999999: u /= 1000
     return datetime.utcfromtimestamp(u)
 def datetimeToUnix(d): return calendar.timegm(d.timetuple()) 
+
+def toUSAFormat(dt, separator='-'):
+    dt = asDate(dt)
+    return f'{str(dt.month).zfill(2)}{separator}{str(dt.day).zfill(2)}{separator}{dt.year}'
 
 def asISOFormat(dt: Union[date, datetime, str]):
     if type(dt) == date:
@@ -330,17 +334,19 @@ def containsAllKeys(dict, *args, throwSomeError=None, throwAllError=None):
 
 
 
+## search/find/get/lambda-based method of generic retrieval from list of objects
 class ReturnType(Enum):
     INDEX = 'INDEX'
     VALUE = 'VALUE'
 
-def getIndex(iterable, matchFunction: Callable[[Dict], bool]):
-    return _getFromListWithCustomMatchFunction(iterable, matchFunction, ReturnType.INDEX)
+def getIndex(iterable, matchArg: Callable[[Dict], bool]):
+    return _getFromListWithCustomMatchFunction(iterable, matchArg, ReturnType.INDEX)
 
-def getItem(iterable, matchFunction: Callable[[Dict], bool]):
-    return _getFromListWithCustomMatchFunction(iterable, matchFunction, ReturnType.VALUE)
+def getItem(iterable, matchArg: Callable[[Dict], bool]):
+    return _getFromListWithCustomMatchFunction(iterable, matchArg, ReturnType.VALUE)
 
-def _getFromListWithCustomMatchFunction(iterable, matchFunction, returnType: ReturnType):
+def _getFromListWithCustomMatchFunction(iterable, matchArg, returnType: ReturnType):
+    matchFunction = (lambda x: x == matchArg) if type(matchArg) != Callable else matchArg
     for i, val in enumerate(iterable):
         if matchFunction(val):
             if returnType == ReturnType.INDEX: return i
@@ -404,6 +410,28 @@ def generateCommaSeparatedQuestionMarkString(val):
     if type(val) != int: raise ValueError('Must be an integer')
     return ','.join(('?',) * val)
 
+## adds item to container at given key if it exists, otherwise adds a container with the item at that key
+def addItemToContainerAtDictKey(dct, key, item, pushFunctionName='append', containerType=list):
+    try: getattr(dct[key], pushFunctionName)(item)
+    except KeyError:
+        dct[key] = containerType([item])
+
+## filter iterable into multiple lists based on some condition(s); separate, split
+def partition(iterable, predicates):
+    predicates = asList(predicates)
+    output = [[] for _ in range(len(predicates)+1)]
+    
+    for item in iterable:
+        metSomePredicate = False
+        for indx, predicate in enumerate(predicates):
+            if predicate(item):
+                output[indx].append(item)
+                metSomePredicate = True
+                break
+        if not metSomePredicate:
+            output[-1].append(item)
+            
+    return output
 
 if __name__ == '__main__':
     # print(processRawValueToInsertValue(44))

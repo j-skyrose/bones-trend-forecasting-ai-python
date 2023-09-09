@@ -7,13 +7,13 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import tqdm, numpy, numba
+import tqdm, numpy, numba, calendar, sqlite3
 from datetime import date, timedelta
 from functools import partial
 from typing import Dict, List
 
 from globalConfig import config as gconfig
-from constants.enums import FeatureExtraType, IndicatorType, OutputClass, SeriesType
+from constants.enums import EarningsCollectionAPI, FeatureExtraType, IndicatorType, OutputClass, SeriesType
 from constants.exceptions import InsufficientDataAvailable
 from constants.values import indicatorsKey, unusableSymbols
 from managers.databaseManager import DatabaseManager
@@ -22,7 +22,7 @@ from managers.inputVectorFactory import InputVectorFactory
 from managers.marketDayManager import MarketDayManager
 from structures.skipsObj import SkipsObj
 from utils.other import buildCommaSeparatedTickerPairString, getIndicatorPeriod, getInstancesByClass, parseCommandLineOptions
-from utils.support import asISOFormat, asList, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
+from utils.support import addItemToContainerAtDictKey, asDate, asISOFormat, asList, flatten, getIndex, partition, recdotdict, shortc, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.types import TickerKeyType
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends, getExpectedLengthForIndicator, unresumableGenerationIndicators
 from utils.vectorSimilarity import euclideanSimilarity_jit
@@ -552,6 +552,354 @@ def historicalGapCalculationAndInsertion(exchange=None, symbol=None, seriesType=
                         if c > 4:
                             break
 
+
+def _getAdjustedDate(masterDate, operandDate, yearOnly=False, modifierOnly=False):
+    if yearOnly and modifierOnly: raise ValueError("'xxxOnly' args are mutually exclusive")
+    masterDate = asDate(masterDate)
+    operandDate = asDate(operandDate)
+    modifiers = [-1,0,1]
+    ## prevent error when operandDate is a leap year
+    opDay = 28 if calendar.isleap(operandDate.year) and operandDate.month == 2 and operandDate.day == 29 else operandDate.day
+    diffs = [abs(masterDate - date(masterDate.year + mod, operandDate.month, opDay)) for mod in modifiers]
+    modifier = modifiers[diffs.index(min(diffs))]
+    if modifierOnly:
+        return modifier
+    elif yearOnly:
+        return masterDate.year + modifier
+    else:
+        return date(masterDate.year + modifier, operandDate.month, opDay)
+def _dateDifference(dt1, dt2, excludeYear=False):
+    dt1 = asDate(dt1)
+    dt2 = asDate(dt2)
+    if excludeYear:
+        dt2 = _getAdjustedDate(dt1, dt2)
+    return abs((dt1 - dt2).days)
+def _dateWithinDiffParition(iterable, masterIterable, diff=30):
+    met = []
+    notmet = []
+    for otr in iterable:
+        datediffs = []
+        for mr in masterIterable:
+            datediffs.append(_dateDifference(mr.earnings_date, otr.earnings_date))
+        if all(dd > diff for dd in datediffs): notmet.append(otr)
+        else: met.append(otr)
+    return met, notmet
+def _removeAbnormalFiscalQuarterRows(rows):
+    ## fiscal quarter may not directly match with earnings date; data error, ignore for now e.g. ABEO
+    rows[:] = [r for r in rows if not hasattr(r, 'fiscal_quarter_ending') or _dateDifference(r.earnings_date, r.fiscal_quarter_ending) < 160]
+    ## if error due to fiscal_quarter_ending == '2000', data should be corrected probably to '2008-03-01'
+def _getAverageDate(iterable, key=None, excludeYear=True):
+    dtList = [asDate(d) for d in (iterable if not key else [getattr(x, key) for x in iterable])]
+    if excludeYear:
+        dtList[:] = [dtList[0]] + [_getAdjustedDate(dtList[0], dt) for dt in dtList[1:]]
+    return date.fromordinal(int(numpy.average([ dt.toordinal() for dt in dtList ]))) 
+
+def earningsDateCalculationAndInsertion(simple=True):
+    DEBUG = False
+    ## exclude until more data is available, or there is a better way to narrow these down to actual dates
+    excludeTickers=['AIM','AMN','BRTX',
+              'CSR',
+              'GEN','GHI','JEF','RGP','TAL','VAL'] ## excessive earnings dates per year (>7)
+
+    # exchange='NASDAQ'
+    exchange=None
+    nasdaqSymbols = [x.symbol for x in dbm.dbc.execute('select distinct symbol from dump_nasdaq_earnings_dates').fetchall() if x.symbol not in excludeTickers]
+    marketwatchSymbols = [x.symbol for x in dbm.dbc.execute('select distinct symbol from dump_marketwatch_earnings_dates').fetchall() if x.symbol not in excludeTickers]
+    yahooSymbols = [x.symbol for x in dbm.dbc.execute('select distinct symbol from dump_yahoo_earnings_dates').fetchall() if x.symbol not in excludeTickers]
+    ntickers = set(nasdaqSymbols + marketwatchSymbols + yahooSymbols)
+    # ntickers = ['OILSF']
+    # ntickers = ['WBD'] ## 2008 - 5, 2009 - 6, 2010 - 7
+    # ntickers = ['VRME'] ## 2021 - 5; 2 removed
+    ## remove abnormal fiscal quarter ending rows ... 2023-08-30 = 0
+    # def abnormalCond(r): not hasattr(r, 'fiscal_quarter_ending') or dateDifference(r.earnings_date, r.fiscal_quarter_ending) < 160
+    # abnormalNasdaqFiscalQuarterEndingRows, rawNasdaqDBData = partition(rawNasdaqDBData, lambda r: abnormalCond(r))
+    # abnormalMarketwatchFiscalQuarterEndingRows, rawMarketwatchDBData = partition(rawMarketwatchDBData, lambda r: abnormalCond(r))
+    # print(f'Found {len(abnormalNasdaqFiscalQuarterEndingRows) + len(abnormalMarketwatchFiscalQuarterEndingRows)} abnormal fiscal quater ending records')
+
+    ## build up average earnings date by fiscal quarter ending
+    # fqeDaysFollowingBuckets = { q: [] for q in range(1, 13) }
+    # for r in rawNasdaqDBData + rawMarketwatchDBData:
+    #     fqeDaysFollowingBuckets[int(r.fiscal_quarter_ending[5:7])].append((date.fromisoformat(r.earnings_date) - date.fromisoformat(r.fiscal_quarter_ending)).days)
+    # ## NOTE: fiscal_quarter_ending basically only indicates year and month, actual day could be any, e.g. COST ending on 7th/12th/28th
+    # def withAdjustedYear(edate, bucket):
+    #     dtdt = date.fromisoformat(edate)
+    #     year = '2000'
+    #     if dtdt.month < 3 and any(qdate.month > 10 for qdate in [date.fromisoformat(q.earnings_date) for q in bucket]):
+    #         year = '2001'
+    #     return year + edate[4:]
+    
+    fqeAverageDaysFollowing = {1: 67, 2: 64, 3: 66, 4: 65, 5: 67, 6: 64, 7: 61, 8: 68, 9: 63, 10: 63, 11: 65, 12: 79} ## cache
+    # fqeAverageDaysFollowing = { q: int(numpy.average(fqeDaysFollowingBuckets[q])) for q in fqeDaysFollowingBuckets.keys() }
+    # print(fqeAverageDaysFollowing)
+
+    dbm.dbc.execute('DELETE FROM earnings_dates') ## clear table as processing may change some old data
+    totalRowsInserted = 0
+    for symbol in tqdm.tqdm(ntickers):
+        dbdata = [recdotdict({"api": eapi, "earnings_date": r.earnings_date, "input_date": r.input_date, **r}) for eapi in EarningsCollectionAPI for r in dbm.getDumpEarningsDates(eapi, exchange=exchange, symbol=symbol)]
+        _removeAbnormalFiscalQuarterRows(dbdata)
+        historicalRows, upcomingRows = partition(dbdata, lambda r: r.earnings_date < r.input_date)
+
+        ####################################################################################
+        #region - remove redundant, bad, unclear historical data
+        fqeRows, otherRows = partition(historicalRows, lambda r: hasattr(r, 'fiscal_quarter_ending') and r.fiscal_quarter_ending is not None)
+        #region - ensure uniqueness of fqe rows; considered to have higher certainty
+        fqeBuckets = {}
+        for r in fqeRows:
+            addItemToContainerAtDictKey(fqeBuckets, r.fiscal_quarter_ending[:7], r)
+        for fqe, fqeBucket in fqeBuckets.items():
+            if len(fqeBucket) < 2: continue
+            if simple:
+                if all(r.earnings_date == fqeBucket[0].earnings_date for r in fqeBucket):
+                    fqeBucket[:] = [fqeBucket[0]]
+                    continue
+            nasdaqRows, nonNasdaqRows = partition(fqeBucket, lambda r: r.api == EarningsCollectionAPI.NASDAQ)
+            if len(nasdaqRows) == 0:
+                raise ValueError()
+            elif len(nasdaqRows) == 1:
+                fqeBucket[:] = nasdaqRows
+                continue
+            elif len(nasdaqRows) > 1:
+                if simple:
+                    nasdaqRows.sort(key=lambda x: shortc(x.number_of_estimates, 0))
+                    fqeBucket[:] = [nasdaqRows[-1]]
+                    continue
+                raise ValueError()
+            if len(nonNasdaqRows) > 0:
+                raise ValueError('Has non-Nasdaq rows to deal with')
+            ## TODO: proper advanced determination, e.g. combining values, averaging, etc.
+            raise ValueError()
+            if not simple:
+
+                ## most recent/accurate row should have most data for specific keys compared to others
+                xkeys = ['eps', 'surprise_percentage', 'eps_forecast']
+                hasX_rows = []
+                for xkey in xkeys:
+                    for r in fqeBucket:
+                        if r[xkey] is not None:
+                            hasX_rows.append(r)
+                    if len(hasX_rows) == 0:
+                        hasX_rows = []
+                    elif len(hasX_rows) == 1:
+                        break
+                    elif len(hasX_rows) > 1:
+                        fqeBucket = hasX_rows
+                        hasX_rows = []
+                ## highest number of estimates should be most recent/accurate
+                if len(hasX_rows) > 1:
+                    if not all(hasattr(r, 'number_of_estimates') for r in hasX_rows):
+                        raise ValueError()
+                    fqeBucket.sort(key=lambda x: x.number_of_estimates)
+                    for r in fqeBucket[:-1]:
+                        fqeBucket.remove(r)
+        #endregion
+        interimData = flatten(list(fqeBuckets.values()))
+        #region - ensure uniqueness of other rows that are not duplicates of interim rows; lower certainty
+        dups, nonDups = _dateWithinDiffParition(otherRows, interimData, 30)
+        nonDups.sort(key=lambda x: x.earnings_date)
+
+        #region - attempt to condense rows that may be duplicates of the same event, date diff < 7 days
+        dateGroupings = []
+        for r in nonDups:
+            datediffs = [_dateDifference(r.earnings_date, _getAverageDate(grp, key='earnings_date')) for grp in dateGroupings]
+            closestIndex = 0
+            closestdd = sys.maxsize
+            for indx,dd in enumerate(datediffs):
+                if dd < 7 and dd < closestdd:
+                    closestdd = dd
+                    closestIndex = indx
+            if closestdd == sys.maxsize: ## not close to anything
+                dateGroupings.append([r])
+            else:
+                dateGroupings[closestIndex].append(r)
+        ## ignore solo groups
+        dateGroupings[:] = [dgrp for dgrp in dateGroupings if len(dgrp) > 1]
+        
+        for dgrp in dateGroupings:
+            if len(dgrp) > 1:
+                if simple:
+                    for r in dgrp[:-1]:
+                        nonDups.remove(r)
+                else:
+                    pass
+                    ## TODO: eps_forecast, eps, surprise_percentage, event_name
+        #endregion
+
+        yearBuckets = {}
+        for r in interimData + nonDups:
+            addItemToContainerAtDictKey(yearBuckets, r.earnings_date[:4], r)
+
+        #region - determine average typical earnings dates, for use in fixing aberrant years, and condensing upcoming data
+        ## assume four earnings per year is normal, determine the typical dates
+        method1 = False
+        if method1:
+            ## tries to use any API row, no priority
+            typicalQrDateBuckets = [[] for _ in range(4)]
+            for yrBucket in yearBuckets.values():
+                if len(yrBucket) != 4: continue
+                for r in yrBucket:
+                    inserted = False
+                    for qindx in range(len(typicalQrDateBuckets)):
+                        dt = date.fromisoformat(r.earnings_date)
+                        if len(typicalQrDateBuckets[qindx]) > 0:
+                            if _dateDifference(dt, typicalQrDateBuckets[qindx][0], excludeYear=True) < 30:
+                                typicalQrDateBuckets[qindx].append(dt)
+                                inserted = True
+                                break
+                        else:
+                            typicalQrDateBuckets[qindx].append(dt)
+                            inserted = True
+                            break
+                    if not inserted: raise ValueError(f'Not able to fit into typical quarter earnings date bucket\n{r}')
+        else:
+            ## method2: use NASDAQ prefentially, match remaining to them
+            typicalQrDateBuckets = [[] for _ in range(12)]
+            typicalQrDateBucketsFQE = [[] for _ in range(len(typicalQrDateBuckets))]
+            for nasdaqOnly in [True, False]:
+                for yrBucket in yearBuckets.values():
+                    if len(yrBucket) > 4: continue
+                    yrNasdaqRows, yrOtherRows = partition(yrBucket, lambda r: r.api == EarningsCollectionAPI.NASDAQ)
+                    for r in yrNasdaqRows if nasdaqOnly else yrOtherRows:
+                        inserted = False
+                        for qindx in range(len(typicalQrDateBuckets)):
+                            dt = date.fromisoformat(r.earnings_date)
+                            if len(typicalQrDateBuckets[qindx]) > 0:
+                                avgTypicalDt = _getAverageDate(typicalQrDateBuckets[qindx])
+                                if (nasdaqOnly and r.fiscal_quarter_ending[5:] == typicalQrDateBucketsFQE[qindx][0][5:] and _dateDifference(dt, avgTypicalDt, excludeYear=True) < 60) \
+                                or _dateDifference(dt, avgTypicalDt, excludeYear=True) < 30:
+                                        typicalQrDateBuckets[qindx].append(dt)
+                                        if nasdaqOnly: typicalQrDateBucketsFQE[qindx].append(r.fiscal_quarter_ending)
+                                        inserted = True
+                                        break
+                            elif not nasdaqOnly or r.fiscal_quarter_ending is not None:
+                                typicalQrDateBuckets[qindx].append(dt)
+                                if nasdaqOnly: typicalQrDateBucketsFQE[qindx].append(r.fiscal_quarter_ending)
+                                inserted = True
+                                break
+                        if not inserted:
+                            if r.eps is not None: ## i.e. is more than just a date -> higher chance it's not some random data artifact/error
+                                raise ValueError(f'Not able to fit into typical quarter earnings date bucket\n{r}')
+
+        ## adjust years so everything is together
+        for bucket in typicalQrDateBuckets:
+            if len(bucket) == 0: continue
+            for indx in range(1, len(bucket)):
+                bucket[indx] = _getAdjustedDate(bucket[0], bucket[indx])
+        
+        avgTypicalQrDates = [
+            _getAverageDate(bucket)
+            for bucket in typicalQrDateBuckets if len(bucket) > 0
+        ]
+        #endregion
+
+        #region - aberrant year determination and fixing
+        ## some years may have abnormal numbers of earnings dates, need to check if they are valid or determine which ones are most likely to be
+        aberrantYears = []
+        for yr in yearBuckets.keys():
+            # if len(yearBuckets[yr]) > 7: ##TODO: >4
+            if len(yearBuckets[yr]) > 4:
+                # raise ValueError()
+                if DEBUG: print(f'{exchange}:{symbol}:{yr} - {len(yearBuckets[yr])}')
+                aberrantYears.append(yr)
+                pass
+        if len(aberrantYears) > 0:
+            interimYearBuckets = {}
+            nonDupsYearBuckets = {}
+            for r in interimData:
+                addItemToContainerAtDictKey(interimYearBuckets, r.earnings_date[:4], r)
+            for r in nonDups:
+                addItemToContainerAtDictKey(nonDupsYearBuckets, r.earnings_date[:4], r)
+
+            ## now try to match aberrant year rows to typical dates
+            for yrBucket in nonDupsYearBuckets.values():
+                if len(yrBucket) == 4: continue
+                matchedBuckets = [[] for _ in range(len(avgTypicalQrDates))]
+                ## assign to buckets based on proximity to average typical earnings dates, drop any not sufficiently close
+                for r in yrBucket:
+                    if hasattr(r, 'fiscal_quarter_ending') and r.fiscal_quarter_ending is not None: continue
+                    matched = False
+                    for indx,avgTypicalQrDate in enumerate(avgTypicalQrDates):
+                        if _dateDifference(r.earnings_date, avgTypicalQrDate, excludeYear=True) < 30:
+                            matched = True
+                            matchedBuckets[indx].append(r)
+                            break
+                    if not matched:
+                        if not simple and r.eps is not None:
+                            raise ValueError(f'Would remove row with EPS data\n{r}')
+                        # yrBucket.remove(r)
+                        nonDups.remove(r)
+                        if DEBUG: print(r)
+                for mbucket in matchedBuckets:
+                    if len(mbucket) > 1:
+                        pass
+            
+            pass
+        #endregion
+        #endregion
+        interimData.extend(nonDups)
+        #endregion
+
+        ####################################################################################
+        #region - condense upcoming data
+        
+        ## sort to buckets based on average earnings date
+        upcomingQrBuckets = [[] for _ in range(len(avgTypicalQrDates))]
+        for r in upcomingRows:
+            for qbindx in range(len(upcomingQrBuckets)):
+                if len(upcomingQrBuckets[qbindx]) > 0:
+                    if _dateDifference(r.earnings_date, upcomingQrBuckets[qbindx][0].earnings_date) < 30:
+                        upcomingQrBuckets[qbindx].append(r)
+                        break
+                else:
+                    upcomingQrBuckets[qbindx].append(r)
+                    break
+        ## condense redundant upcoming data
+        for qrBucket in upcomingQrBuckets:
+            qrBucket.sort(key=lambda x: x.earnings_date + x.input_date)
+            lastrow = None
+            for r in qrBucket[:]:
+                if not lastrow: 
+                    lastrow = r
+                    continue
+                if lastrow.earnings_date == r.earnings_date:
+                    if simple:
+                        qrBucket.remove(r)
+                        if DEBUG: print('condensing', r)
+                    else:
+                        ## TODO: any change to forecast may be lost by simple removal
+                        pass
+                else:
+                    lastrow = r
+        ## remove incorrect upcoming data for known earnings dates
+        for qrBucket in upcomingQrBuckets:
+            for r in qrBucket:
+                realEarningsDate = None
+                for idr in interimData:
+                    if r.earnings_date == idr.earnings_date:
+                        realEarningsDate = r.earnings_date
+                        break
+                if realEarningsDate:
+                    if simple:
+                        for r in qrBucket[getIndex(qrBucket, lambda x: x.earnings_date == realEarningsDate):]:
+                            qrBucket.remove(r)
+                            if DEBUG: print('removing', r)
+                    else:
+                        ## TODO: any change to forecast may be lost by simple removal
+                        pass
+
+        #endregion
+        interimData.extend(flatten(upcomingQrBuckets))
+        
+        interimData.sort(key=lambda x: x.earnings_date)
+        for r in interimData:
+            exchange = 'NASDAQ' if r.api == EarningsCollectionAPI.NASDAQ else r.exchange
+            try: 
+                dbm.insertEarningsDate(exchange, r.symbol, r.input_date, r.earnings_date)
+                totalRowsInserted += 1
+            except sqlite3.IntegrityError: pass
+        
+        continue
+
+    print(f'Inserted {totalRowsInserted} rows')
 
 if __name__ == '__main__':
     opts, kwargs = parseCommandLineOptions()

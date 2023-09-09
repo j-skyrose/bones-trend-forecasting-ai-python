@@ -7,24 +7,25 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import tqdm, queue, atexit, traceback, math, requests, csv, codecs, copy
+import tqdm, queue, atexit, traceback, math, requests, csv, codecs, copy, sqlite3
 import time as timer
 from random import random
 from datetime import date, datetime, timedelta
 from threading import Thread
 from contextlib import closing
+from types import NoneType
 from typing import List
-from sqlite3 import IntegrityError
 
 from managers.databaseManager import DatabaseManager
 from managers.apiManager import APIManager
 from managers.marketDayManager import MarketDayManager
 from structures.api.google import Google
+from structures.api.nasdaq import Nasdaq
 
 from constants.exceptions import APILimitReached, APIError, APITimeout
 from utils.other import parseCommandLineOptions
-from utils.support import asDate, asDatetime, recdotdict, shortcdict
-from constants.enums import APIState, FinancialReportType, FinancialStatementType, InterestType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
+from utils.support import asDate, asDatetime, getIndex, recdotdict, shortcdict, tqdmLoopHandleWrapper
+from constants.enums import APIState, EarningsCollectionAPI, FinancialReportType, FinancialStatementType, InterestType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
 from constants.values import tseNoCommissionSymbols, minGoogleDate
 
 dbm: DatabaseManager = DatabaseManager()
@@ -510,13 +511,176 @@ class Collector:
                     try: 
                         dbm.insertStockSplit(exchange, s.ticker, s.execution_date, s.split_from, s.split_to)
                         insertcount += 1
-                    except IntegrityError:
+                    except sqlite3.IntegrityError:
                         print('IntegrityError', exchange, s.ticker, s.execution_date)
                         pass
                 dbm.commitBatch()
 
         print('inserted {} splits'.format(insertcount))
 
+    def startEarningsDateCollection(self, api: EarningsCollectionAPI=None, dryrun=False, verbose=1, **kwargs):
+        collectorHandleKey = 'collector'
+        currentCollectDateKey = 'startDate'
+        previousCollectDateKey = 'previousDate'
+        rawDataKey = 'rawData'
+        backCollectionRawDataKey = 'bcRawData'
+        parsedDataKey = 'parsedData'
+        collectionConfig = recdotdict({})
+
+        ## determine APIs which will be collecting
+        if api:
+            try: collectionConfig[api if type(api) is EarningsCollectionAPI else EarningsCollectionAPI[api.upper()]] = {}
+            except KeyError: raise ValueError(f'Earnings date retrieval not supported by {api} API at the moment')
+        else:
+            # for a in [EarningsCollectionAPI.NASDAQ, EarningsCollectionAPI.YAHOO]: ## MARKETWATCH covered by these two
+            for a in EarningsCollectionAPI:
+                collectionConfig[a] = {}
+
+        ## initialize API collector handles
+        for api in collectionConfig.keys():
+            if api == EarningsCollectionAPI.NASDAQ:
+                collectionConfig[api][collectorHandleKey] = Nasdaq()
+            elif api == EarningsCollectionAPI.MARKETWATCH:
+                collectionConfig[api][collectorHandleKey] = MarketWatch()
+            elif api == EarningsCollectionAPI.YAHOO:
+                collectionConfig[api][collectorHandleKey] = Yahoo()
+
+        ## initialize data keys
+        for api in collectionConfig.keys():
+            collectionConfig[api][rawDataKey] = {}
+            collectionConfig[api][parsedDataKey] = []
+
+        ## determine start date(s)
+        minDate = self.currentDate
+        for api in collectionConfig.keys():
+            apiCurrentCollectDate = dbm.getLatestEarningsCollectionDate(api)
+            if not apiCurrentCollectDate:
+                ## manually determined minimum date based on historical data table
+                apiCurrentCollectDate = date(1999, 11, 1) - timedelta(days=1)
+            else:
+                apiCurrentCollectDate = date.fromisoformat(apiCurrentCollectDate)
+                ## also get previous collect date for back-collection
+                previousCollectDates = dbm.getUniqueEarningsCollectionDates(api)
+                indx = getIndex(previousCollectDates, apiCurrentCollectDate)
+                previousCollectDate = previousCollectDates[indx-1] if indx else None
+
+                if api == EarningsCollectionAPI.MARKETWATCH: ## adjust back to start of week as collection will only be done on Mondays (since full week returned)
+                    apiCurrentCollectDate -= timedelta(days=apiCurrentCollectDate.weekday())
+                    if indx: previousCollectDate -= timedelta(days=previousCollectDate.weekday())
+            collectionConfig[api][currentCollectDateKey] = apiCurrentCollectDate
+            collectionConfig[api][previousCollectDateKey] = previousCollectDate
+            if apiCurrentCollectDate < minDate:
+                minDate = apiCurrentCollectDate
+        
+        endDate = self.currentDate + timedelta(days=90)
+
+        ## MarketWatch: 2015/7/13 gives 403 error, 7/14 does not
+        # minDate = date(2023,9,30) - timedelta(days=2) ## debugging
+        # endDate = date(2008,1,31)
+        # endDate = self.currentDate + timedelta(days=1)
+        # endDate = minDate + timedelta(days=11)
+
+        ## determine dates and tickers for back-collection
+        ## TODO
+        
+        ## collect for all days from last anchor date to ~3 months out, inclusive
+        for cdate in tqdmLoopHandleWrapper([minDate + timedelta(days=d) for d in range((endDate - minDate).days + 1)], verbose=verbose, desc='Collecting data'):
+            for api in collectionConfig.keys():
+                if api == EarningsCollectionAPI.MARKETWATCH and cdate.weekday() != 0: continue ## MarketWatch returns all days until end of week
+                if collectionConfig[api][currentCollectDateKey] > cdate: continue ## skip re-collection of data
+                rawdata = collectionConfig[api][collectorHandleKey].getEarningsDates(cdate, week=True)
+                collectionConfig[api][rawDataKey][cdate] = rawdata
+
+        ## parse all data into keyword arg objects for later DB insertion
+        parseLoopTuples = []
+        for a in collectionConfig.keys():
+            for k,v in collectionConfig[a][rawDataKey].items():
+                parseLoopTuples.append((a,k,v))
+        for api,cdate,data in tqdmLoopHandleWrapper(parseLoopTuples, verbose=verbose, desc='Parsing data and constructing args'):
+            for d in data:
+                datapointKWArgs = {
+                    'inputDate': self.currentDate,
+                    'earningsDate': cdate if api == EarningsCollectionAPI.NASDAQ else d['date']
+                }
+                if api != EarningsCollectionAPI.NASDAQ:
+                    datapointKWArgs['exchange'] = getYahooExchangeForSymbol(shortcdict(d, 'ticker', shortcdict(d, 'symbol')), shortcdict(d, 'companyshortname', shortcdict(d, 'name')))
+
+                for k,v in d.items():
+                    ## ignore keys
+                    if k in ['date']: continue
+
+                    ## adjust key to DB column (in camel case)
+                    key = k
+                    if k == 'lastYearRptDt': key = 'lastYearReportDate'
+                    elif k in ['surprise', 'epssurprisepct', 'surprise_percentage']: key = 'surprisePercentage'
+                    elif k == 'noOfEsts': key = 'numberOfEstimates'
+                    elif k == 'ticker': key = 'symbol'
+                    elif k == 'companyshortname': key = 'name'
+                    elif k == 'epsestimate': key = 'epsForecast'
+                    elif k == 'epsactual': key = 'eps'
+                    elif k == 'fiscal quarter': key = 'fiscalQuarterEnding'
+                    elif k == 'eventname': key = 'eventName'
+                    elif k == 'startdatetime': key = 'startDateTime'
+                    elif k == 'startdatetimetype': key = 'startDateTimeType'
+                    elif k == 'lastYearEPS': key = 'lastYearEps'
+
+                    ## parse and adjust value
+                    val = v
+                    if k in ['lastYearEPS', 'marketCap', 'epsForecast', 'eps']:
+                        val = v.replace('$','').replace(',','')
+                        if '(' in val:
+                            val = val.replace('(','').replace(')','')
+                            val = float(val) * -1
+                        elif val not in ['', 'N/A']:
+                            val = float(val)
+                    elif k == 'lastYearRptDt' and v != 'N/A':
+                        val = datetime.strptime(v, "%m/%d/%Y").date()
+                    elif k == 'fiscalQuarterEnding':
+                        try:
+                            val = datetime.strptime(v, '%b/%Y').date()
+                        except ValueError as e: ## v is '/2000'-type
+                            print('got value error for fiscalQuarterEnding', v, e)
+                            if v.count('/') == 1:
+                                vsplit = v.split('/')
+                                if vsplit[0] == '':
+                                    val = vsplit[1]
+                            else:
+                                val = v
+                    elif k == 'fiscal quarter':
+                        val = datetime.strptime(v, '%m/%d/%Y').date()
+                    elif k == 'surprise_percentage' and v != 'N/A' and api == EarningsCollectionAPI.MARKETWATCH:
+                        val = float(v.split('(')[1].split('%')[0].replace(',',''))
+
+                    ## no need to have multiple types of empty/blank/N/A values, use null instead 
+                    if type(val) == str and val.lower() in ['', 'n/a']:
+                        val = None
+                    
+                    datapointKWArgs[key] = val
+                
+                ## market watch surprise sign can be incorrect if forecasted eps is negative (e.g. forecast: -0.49, actual: -0.53, surprise: +8.7%)
+                if api == EarningsCollectionAPI.MARKETWATCH and type(datapointKWArgs['eps']) not in [str, NoneType] and type(datapointKWArgs['epsForecast']) not in [str, NoneType] and type(datapointKWArgs['surprisePercentage']) not in [str, NoneType]:
+                    if (datapointKWArgs['eps'] < datapointKWArgs['epsForecast'] and datapointKWArgs['surprisePercentage'] > 0) or (datapointKWArgs['eps'] > datapointKWArgs['epsForecast'] and datapointKWArgs['surprisePercentage'] < 0):
+                        datapointKWArgs['surprisePercentage'] *= -1
+
+                collectionConfig[api][parsedDataKey].append(datapointKWArgs)
+
+        ## insert data
+        insertcount = 0
+        uniquedates = set()
+        insertLoopTuples = []
+        for a in collectionConfig.keys():
+            for d in collectionConfig[a][parsedDataKey]:
+                insertLoopTuples.append((a,d))
+        for api,dkwargs in tqdmLoopHandleWrapper(insertLoopTuples, verbose=verbose, desc='Inserting data'):
+            try:
+                if not dryrun: dbm.insertEarningsDateDump(api, **dkwargs)
+                insertcount += 1
+                uniquedates.add(dkwargs['earningsDate'])
+            except sqlite3.IntegrityError:
+                pass
+
+        print(f'got data for {len(uniquedates)} days')
+        print(f'inserted {insertcount} earnings dates')
 
     ## collect google interests and insert to DB
     ## measures up-to-date-ness by comparing latest GI and stock data dates, if not then it will collect data up til maxdate rather than til the latest stock data date
@@ -796,6 +960,8 @@ if __name__ == '__main__':
             c.collectVIX()
         elif opts.type == 'splits':
             c.startSplitsCollection(opts.api, **kwargs)
+        elif opts.type == 'earningsdate':
+            c.startEarningsDateCollection(opts.api, **kwargs)
         else:
             c.startAPICollection(opts.api, **kwargs)
     elif opts.function:

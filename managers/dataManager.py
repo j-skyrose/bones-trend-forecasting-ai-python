@@ -32,6 +32,7 @@ from structures.financialDataHandler import FinancialDataHandler
 from structures.stockDataHandler import StockDataHandler
 from structures.dataPointInstance import DataPointInstance
 from structures.normalizationDataHandler import NormalizationDataHandler
+from structures.stockEarningsDateHandler import StockEarningsDateHandler
 from structures.stockSplitsHandler import StockSplitsHandler
 from structures.googleInterestsHandler import GoogleInterestsHandler
 from structures.api.googleTrends.request import GoogleAPI
@@ -54,6 +55,9 @@ def multicore_getStockSplitsTickerTuples(ticker):
 def multicore_getGoogleInterestsTickerTuples(ticker, queryLimit):
     return (ticker, DatabaseManager().getGoogleInterests(ticker.exchange, ticker.symbol, queryLimit=queryLimit))
 
+def multicore_getEarningsDateTickerTuples(ticker):
+    return (ticker, DatabaseManager().getEarningsDate(ticker.exchange, ticker.symbol))
+
 ## each session should only rely on one (precedingRange, followingRange) combination due to the way the handlers are setup
 ## not sure how new exchange/symbol handler setups would work with normalization info, if not initialized when datamanager is created
 
@@ -63,6 +67,7 @@ class DataManager():
     explicitValidationStockDataHandlers: Dict[TickerKeyType, StockDataHandler] = {}
     financialDataHandlers: Dict[TickerKeyType, FinancialDataHandler] = {}
     stockSplitsHandlers: Dict[TickerKeyType, StockSplitsHandler] = {}
+    earningsDateHandlers: Dict[TickerKeyType, StockEarningsDateHandler] = {}
     googleInterestsHandlers: Dict[TickerKeyType, GoogleInterestsHandler] = {}
     stockDataInstances: Dict[TickerDateKeyType, DataPointInstance] = {}
     explicitValidationStockDataInstances: Dict[TickerDateKeyType, DataPointInstance] = {}
@@ -244,8 +249,11 @@ class DataManager():
             if verbose>=1: print('Stock data handler initialization time:', time.time() - startt2, 'seconds')
 
             if not self.initializeStockDataHandlersOnly:
-                if not skips.splits: self.initializeStockSplitsHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh, verbose=verbose)
                 if not skips.technicalIndicators: self.initializeTechnicalIndicators(verbose) ## needs to be done before any instance selection as the viable index pool may get reduced
+
+                if not skips.splits: self.initializeStockSplitsHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh, verbose=verbose)
+                if not skips.earningsDates: self.initializeEarningsDateHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh, verbose=verbose)
+
                 if not self.maxGoogleInterestHandlers and not skips.googleInterests:
                     self.initializeGoogleInterestsHandlers(symbolList, self.explicitValidationSymbolList, queryLimit=self.queryLimit, refresh=refresh, verbose=verbose)
 
@@ -457,6 +465,9 @@ class DataManager():
         try: splitsset = self.stockSplitsHandlers[stockDataSet.getTickerTuple()].getForRange(precset[0].period_date, precset[-1].period_date)
         except KeyError: splitsset = []
 
+        try: earningsDateHandler = self.earningsDateHandlers[stockDataSet.getTickerTuple()]
+        except KeyError: earningsDateHandler = None
+
         try: googleinterests = self.googleInterestsHandlers[stockDataSet.getTickerTuple()].getPrecedingRange(anchordate.isoformat(), self.precedingRange)
         except KeyError: googleinterests = []
 
@@ -474,6 +485,7 @@ class DataManager():
             financialDataSet=precfinset,
             googleInterests=googleinterests,
             stockSplits=splitsset,
+            earningsDateHandler=earningsDateHandler,
             indicators=precedingIndicators,
             foundedDate=symbolData.founded,
             ipoDate='todo',
@@ -864,13 +876,41 @@ class DataManager():
                 key = TickerKeyType(s.exchange, s.symbol)
                 self.googleInterestsHandlers[key] = GoogleInterestsHandler(*key.getTuple(), dbm.getGoogleInterests(s.exchange, s.symbol, queryLimit=queryLimit))
 
+    def initializeEarningsDateHandlers(self, symbolList, explicitValidationSymbolList=[], refresh=False, verbose=None):
+        verbose = shortc(verbose, self.verbose)
+
+        ## purge old data
+        if refresh:
+            if not self.explicitValidationSymbolList:
+                self.earningsDateHandlers.clear()
+                symbolList += explicitValidationSymbolList
+            else:
+                ## preserve handlers tied to explicit validation list
+                for k in self.earningsDateHandlers.keys():
+                    if k in self.explicitValidationSymbolList: continue
+                    else: del self.earningsDateHandlers[k]
+
+        ## purge unusable symbols
+        symbolList[:] = [s for s in symbolList if (s.exchange, s.symbol) not in unusableSymbols]                    
+
+        if gconfig.multicore:
+            for ticker, edata in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getEarningsDateTickerTuples), symbolList, verbose, desc='Getting earnings date data'), verbose, desc='Creating earnings date handlers'):
+                key = TickerKeyType(ticker.exchange, ticker.symbol)
+                self.earningsDateHandlers[key] = StockEarningsDateHandler(*key.getTuple(), dbData=edata)
+                    
+        else:
+            for s in tqdmLoopHandleWrapper(symbolList, verbose, desc='Creating earnings date handlers'):
+                key = TickerKeyType(s.exchange, s.symbol)
+                self.earningsDateHandlers[key] = StockEarningsDateHandler(*key.getTuple(), dbData=dbm.getEarningsDate(s.exchange, s.symbol))
+        if verbose >= 1: print('Initialized earnings date handlers of which', len([1 for v in self.earningsDateHandlers.values() if len(v.data) > 0]), '/', len(self.earningsDateHandlers), 'have no data')
 
     def initializeWindow(self, windowIndex):
         self.normalized = False
         windowData = self.windows[windowIndex]
         self.initializeStockDataHandlers(windowData, refresh=True)
-        self.initializeStockSplitsHandlers(windowData, refresh=True)
         self.initializeTechnicalIndicators()
+        self.initializeStockSplitsHandlers(windowData, refresh=True)
+        self.initializeEarningsDateHandlers(windowData, refresh=True)
         self.initializeGoogleInterestsHandlers(windowData, refresh=True)
         self.initializeStockDataInstances(refresh=True)
         self.setupSets(selectAll=True)
