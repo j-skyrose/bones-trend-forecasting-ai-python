@@ -4,7 +4,7 @@
 
 ## project stuff
 data/
-caches/db/
+caches/
 managers/_dynamicallyLoadedFactories/
 
 ## testing stuff

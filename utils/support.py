@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import numpy, re, math, calendar, json, pickle, tqdm
+import numpy, re, math, calendar, json, pickle, tqdm, zlib, hashlib, base64
 from tqdm.contrib.concurrent import process_map
 from datetime import date, datetime, timedelta
 from multiprocessing import Pool, cpu_count
@@ -40,7 +40,7 @@ class recdotdict(dict):
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
-    def __init__(self, dct):
+    def __init__(self, dct={}):
             for key, value in dct.items():
                 if hasattr(value, 'keys'):
                     value = recdotdict(value)
@@ -410,6 +410,13 @@ def generateCommaSeparatedQuestionMarkString(val):
     if type(val) != int: raise ValueError('Must be an integer')
     return ','.join(('?',) * val)
 
+## replaces '?'s with the actual argument values
+def combineSQLStatementAndArguments(stmt, args=[]):
+    if args:
+        for a in args:
+            stmt = stmt.replace('?', a, 1)
+    return stmt
+
 ## adds item to container at given key if it exists, otherwise adds a container with the item at that key
 def addItemToContainerAtDictKey(dct, key, item, pushFunctionName='append', containerType=list):
     try: getattr(dct[key], pushFunctionName)(item)
@@ -432,6 +439,14 @@ def partition(iterable, predicates):
             output[-1].append(item)
             
     return output
+
+## generates hash that can be safely used, particularly in file names
+def urlSafeHash(string):
+    return base64.urlsafe_b64encode(hashlib.md5(string.encode()).digest()).decode('utf-8').replace('=','')
+
+## compresses an object to bytes
+def compressObj(obj):
+    return zlib.compress((obj if type(obj) == str else json.dumps(obj)).encode())
 
 if __name__ == '__main__':
     # print(processRawValueToInsertValue(44))

@@ -1,23 +1,26 @@
-import zlib, base64, hashlib, json
+import os, sys
+path = os.path.dirname(os.path.abspath(__file__))
+while ".vscode" not in os.listdir(path):
+    if path == os.path.dirname(path):
+        raise FileNotFoundError("Could not find project root")
+    path = os.path.dirname(path)
+sys.path.append(path)
+## done boilerplate "package"
 
-def urlsafeHash(string):
-    return base64.urlsafe_b64encode(hashlib.md5(string.encode()).digest()).decode('utf-8').replace('=','')
-
-def compressValidationObj(vobj):
-    return zlib.compress((vobj if type(vobj) == str else json.dumps(vobj)).encode())
+from utils.support import compressObj, urlSafeHash
 
 class DBCacheInstance:
-    def __init__(self, filetag, queryStatement, validationObj, returnValue):
-        self.filetag = filetag
+    def __init__(self, fileTag, queryStatement, cacheStamp, value):
+        self.filetag = fileTag
         self.queryStatement = queryStatement
-        self.validationZip = compressValidationObj(validationObj)
-        self.returnValue = returnValue
+        self.stampZip = compressObj(cacheStamp)
+        self.value = value
 
-    def test(self, q, v):
-        return q == self.queryStatement and self.validationZip == compressValidationObj(v)
+    def test(self, q, st):
+        return q == self.queryStatement and self.stampZip == compressObj(st)
 
-    def getQueryHash(self):
-        return urlsafeHash(self.queryStatement)
+    def getUniqueHash(self):
+        return urlSafeHash(self.queryStatement)
 
 
 if __name__ == '__main__':

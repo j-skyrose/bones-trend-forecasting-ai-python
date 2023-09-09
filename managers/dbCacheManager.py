@@ -8,29 +8,39 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 import pickle
-from utils.support import Singleton
+from typing import Dict
+
+from managers.base.cacheManagerBase import CacheManagerBase
 from structures.dbCacheInstance import DBCacheInstance
+from utils.support import combineSQLStatementAndArguments
 
-class DBCacheManager(Singleton):
-    def __init__(self, cachePath=os.path.join(path, 'caches\\db')):
-        self.cachePath = cachePath
-        self.caches = []
+class DBCacheManager(CacheManagerBase):
+    def __init__(self, folder='db', **kwargs):
+        super().__init__(folder=folder, readMode='rb', readFunction=lambda x: pickle.load(x), **kwargs)
+        self.caches: Dict[str, DBCacheInstance]
 
-        for root, dirs, files in os.walk(self.cachePath):
-            for file in files:
-                with open(os.path.join(self.cachePath, file), 'rb') as f:
-                    self.caches.append(pickle.load(f))
+    def add(self, fileTag: str, queryStatement: str, cacheStamp, value, queryArgs=[]):
+        '''
+            fileTag: str
+                prefix string to help classify each cache object file when written to disk
+            queryStatement: str
+                SQL query string, with or without in-line arguments; used to distinguish queries from each other
+            cacheStamp: str, int, date
+                used to identify if cache is out of date; should be string-ish comparable
+            value: any
+                return object
+        '''
 
-    def addInstance(self, filetag, queryStatement, validationObj, returnValue):
-        dc = DBCacheInstance(filetag, queryStatement, validationObj, returnValue)
-        self.caches.append(dc)
-        with open(os.path.join(self.cachePath, dc.filetag + '=' + dc.getQueryHash() + '.pkl'), 'wb') as f:
-            pickle.dump(dc, f, protocol=4)
+        ci = DBCacheInstance(fileTag, combineSQLStatementAndArguments(queryStatement, queryArgs), cacheStamp, value)
+        fdestpath = os.path.join(self.cachePath, ci.filetag + '=' + ci.getUniqueHash() + '.pkl')
+        self._add(fdestpath, ci)
+        with open(fdestpath, 'wb') as f:
+            pickle.dump(ci, f, protocol=4)
 
-    def getCache(self, query, validation):
-        for c in self.caches:
-            if c.test(query, validation):
-                return c.returnValue
+    def get(self, queryStatement, stamp, queryArgs=[]):
+        for c in self.caches.values():
+            if c.test(combineSQLStatementAndArguments(queryStatement, queryArgs), stamp):
+                return c.value
         return None
 
         

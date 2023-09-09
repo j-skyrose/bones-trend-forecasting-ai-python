@@ -127,14 +127,14 @@ class DatabaseManager(Singleton):
 
     def _queryOrGetCache(self, query, qarg, validationObj, tag):
         print('qorc', query)
-        cache = self.cacheManager.getCache(query, validationObj)
+        cache = self.cacheManager.get(query, validationObj)
         if cache: 
             print('got cache')
             data = cache
         else: 
             print('no cache, executing')
             data = self.dbc.execute(query, qarg).fetchall()
-            self.cacheManager.addInstance(tag, query, validationObj, data)
+            self.cacheManager.add(tag, query, validationObj, data)
         return data
 
     def _convertVIXDataPoint(self, data: List):
