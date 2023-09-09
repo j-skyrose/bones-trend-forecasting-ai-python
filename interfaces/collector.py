@@ -85,21 +85,23 @@ class Collector:
         print('Got', len(self.apiErrors), 'API errors')
         print(len(apiErrorErrors), '/', len(self.apiErrors), 'had errors while trying to update API field:', apiErrorErrors)
 
-    def __loopCollectByDate(self, api):
+    def _loopCollectByDate(self, api, dryrun=False):
         batchByDate = {}
         startingPastDaysCount = self.apiManager.apis[api].priority * 365
-        lastUpdatedPastDaysCount = math.floor( (self.currentDate - self.apiManager.apis[api].updatedOn).total_seconds() / (60 * 60 * 24) )
+
+        ## API cannot (403 error) retrieve same-day data, even if after market close, so need to adjust back for retrieval and DB last_updates
+        backAdjustedCurrentDate = self.currentDate - timedelta(days=1)
+        lastUpdatedPastDaysCount = math.floor( (backAdjustedCurrentDate - self.apiManager.apis[api].updatedOn).total_seconds() / (60 * 60 * 24) )
         if DEBUG: print('max days', startingPastDaysCount, 'last updated delta', lastUpdatedPastDaysCount)
 
-        if self.currentDate.weekday() < 5: print('WARNING: running too early on weekdays may result in incomplete data\nOpt to run after ~6pm')
         for c in range(min(startingPastDaysCount, lastUpdatedPastDaysCount)-1, -1, -1):
-        # for c in range(1):
             try:
-                d = (self.currentDate - timedelta(days=c)).isoformat()
-                # res = self.apiManager.apis[api].api.query(d)
-                res = self.apiManager.query(api, qdate=d, verbose=1)
-                if len(res) > 0:
-                    batchByDate[d] = res
+                d = (backAdjustedCurrentDate - timedelta(days=c)).isoformat()
+                if not dryrun:
+                    res = self.apiManager.query(api, qdate=d, verbose=1)
+                    if len(res) > 0:
+                        batchByDate[d] = res
+                else: print(f'querying {api} for {d}')
             except APIError:
                 print('api error',sys.exc_info()[0])
                 print(traceback.format_exc())
@@ -124,9 +126,10 @@ class Collector:
                 self.apiErrors.append(('-',s))
                 continue
 
-            dbm.insertData(exchangeQuery[0].exchange, s, SeriesType.DAILY, api, batchBySymbol[s], currentDate=self.currentDate)
+            dbm.insertData(exchangeQuery[0].exchange, s, SeriesType.DAILY, api, batchBySymbol[s], currentDate=backAdjustedCurrentDate)
             dbm.commit()
             counter += 1
+        if dryrun: print(f'last updated set to {backAdjustedCurrentDate}')
 
         print('Updated', api, 'data for', counter, 'symbols')
 
@@ -189,7 +192,7 @@ class Collector:
                     raise e
             # break # do one at a time
 
-    def startAPICollection(self, api, seriesType: SeriesType=SeriesType.DAILY, **kwargs):
+    def startAPICollection(self, api, seriesType: SeriesType=SeriesType.DAILY, dryrun=False, **kwargs):
         typeAPIs = ['alphavantage'] #self.apiManager.getAPIList(sort=True)
         nonTypeAPIs = ['polygon']
 
@@ -209,7 +212,7 @@ class Collector:
 
                     self.__mixedSymbolDateTimespanCollect(api, tickerlist)
                 else:
-                    self.__loopCollectByDate(api)
+                    self._loopCollectByDate(api, dryrun=dryrun)
                 
             else:
                 ## gather symbols for this collection run
