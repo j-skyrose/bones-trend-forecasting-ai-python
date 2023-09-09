@@ -48,7 +48,7 @@ def _generateDatabaseAnnotationObjectsFile(primaryDatabasePath=None, dumpDatabas
 
     def __generateArgTypeString(cname, t):
         if t in ['TEXT', 'STRING']: return ': str'
-        elif t in ['', 'NUMERIC', 'INTEGER'] and cname in ['artificial', 'migrated', 'fmp_isetf', 'duplicate', 'wksi', 'prevrpt', 'detail', 'custom', 'abstract']: return ': bool'
+        elif t in ['', 'NUMERIC', 'INTEGER'] and cname in ['artificial', 'migrated', 'fmp_isetf', 'duplicate', 'wksi', 'prevrpt', 'detail', 'custom', 'abstract', 'tradeable', 'crypto_tradeable']: return ': bool'
         elif t in ['REAL', 'BIGDOUBLE', 'NUMERIC']: return ': float'
         elif t in ['NUM', 'NUMBER', 'INTEGER', 'INT', 'BIGINT']: return ': int'
         elif t in ['BYTE', 'BLOB']: return ': bytes'
@@ -60,6 +60,10 @@ def _generateDatabaseAnnotationObjectsFile(primaryDatabasePath=None, dumpDatabas
         for t in tables:
             columns = dbc.execute(f'PRAGMA {dbalias}.table_info({t})').fetchall()
 
+
+            commaSeparatedSnakeCaseColumnNames = ', '.join([f"'{c['name']}'" for c in columns])
+            commaSeparatedCamelCaseColumnNames = ', '.join([f"'{convertToCamelCase(c['name'])}'" for c in columns])
+
             initargsList = []
             initfuncString = ''
             for c in columns:
@@ -67,9 +71,9 @@ def _generateDatabaseAnnotationObjectsFile(primaryDatabasePath=None, dumpDatabas
                 initargsList.append(f"{cname}Value{__generateArgTypeString(c['name'], c['type'])}")
                 initfuncString += f'\t\tself.{cname} = {cname}Value\n'
 
-            commaSeparatedColumnNames = ', '.join([f"'{c['name']}'" for c in columns])
             filestring += f'## TABLE: {t} ######################################\n'
-            filestring += f'{convertToCamelCase(t)}TableColumns = [{commaSeparatedColumnNames}]\n'
+            filestring += f'{convertToCamelCase(t)}SnakeCaseTableColumns = [{commaSeparatedSnakeCaseColumnNames}]\n'
+            filestring += f'{convertToCamelCase(t)}CamelCaseTableColumns = [{commaSeparatedCamelCaseColumnNames}]\n'
             filestring += f'class {convertToCamelCase(t, firstCapital=True)}Row():\n'
             filestring += f"\tdef __init__(self, {', '.join(initargsList)}):\n"
             filestring += initfuncString
@@ -82,7 +86,7 @@ def _generateDatabaseAnnotationObjectsFile(primaryDatabasePath=None, dumpDatabas
 
 ## generate before import to ensure things are up-to-date for the current execution
 _generateDatabaseAnnotationObjectsFile()
-from managers._generatedDatabaseAnnotations.databaseRowObjects import AccuracyLastUpdatesRow, CboeVolatilityIndexRow, DataSetsRow, DumpNasdaqEarningsDatesRow, DumpStockSplitsPolygonRow, HistoricalDataRow, HistoricalVectorSimilarityDataRow, NetworkAccuraciesRow, NetworksRow, StagingSymbolInfoRow, SymbolsRow, symbolsTableColumns, historicalDataTableColumns, dumpNasdaqEarningsDatesTableColumns
+from managers._generatedDatabaseAnnotations.databaseRowObjects import AccuracyLastUpdatesRow, CboeVolatilityIndexRow, DumpStockSplitsPolygonRow, HistoricalDataRow, HistoricalVectorSimilarityDataRow, NetworkAccuraciesRow, NetworksRow, StagingSymbolInfoRow, SymbolsRow, symbolsSnakeCaseTableColumns, historicalDataSnakeCaseTableColumns, dumpNasdaqEarningsDatesCamelCaseTableColumns, dumpMarketwatchEarningsDatesCamelCaseTableColumns, dumpYahooEarningsDatesCamelCaseTableColumns, stagingEarningsDatesSnakeCaseTableColumns
 
 class DatabaseManager(Singleton):
 
@@ -186,7 +190,7 @@ class DatabaseManager(Singleton):
         kwargs = {}
         for k,v in locals().items():
             k = convertToSnakeCase(k)
-            if (k in symbolsTableColumns + historicalDataTableColumns or k == 'api') and v is not None:
+            if (k in symbolsSnakeCaseTableColumns + historicalDataSnakeCaseTableColumns or k == 'api') and v is not None:
                 kwargs[k] = v
 
         stmt = 'SELECT * FROM symbols s '
@@ -194,8 +198,8 @@ class DatabaseManager(Singleton):
         args = []
         includingHistorical = False
         ## check if any arguments are for the historical data table
-        onlyHistoricalDataTableColumns = list(set(historicalDataTableColumns) - set(symbolsTableColumns))
-        if any(c in onlyHistoricalDataTableColumns for c in kwargs.keys()) or (normalizationData and len(normalizationData.get(NormalizationGroupings.HISTORICAL, orNone=True)) > 0):
+        onlyHistoricalDataSnakeCaseTableColumns = list(set(historicalDataSnakeCaseTableColumns) - set(symbolsSnakeCaseTableColumns))
+        if any(c in onlyHistoricalDataSnakeCaseTableColumns for c in kwargs.keys()) or (normalizationData and len(normalizationData.get(NormalizationGroupings.HISTORICAL, orNone=True)) > 0):
             includingHistorical = True
             stmt += ' JOIN historical_data h ON s.exchange=h.exchange AND s.symbol=h.symbol '
 
@@ -211,7 +215,7 @@ class DatabaseManager(Singleton):
                     adds.append(f's.api_{api} = 1')
             else:
                 col = 's'
-                if argKey in onlyHistoricalDataTableColumns:
+                if argKey in onlyHistoricalDataSnakeCaseTableColumns:
                     col = 'h'
                 col += f'.{argKey}'
 
@@ -240,7 +244,7 @@ class DatabaseManager(Singleton):
             stmt += ' AND '.join(adds)
         ## get only distinct symbols if query includes looking at historical table data
         if includingHistorical:
-            stmt += f' GROUP BY {",".join([f"s.{c}" for c in symbolsTableColumns])} '
+            stmt += f' GROUP BY {",".join([f"s.{c}" for c in symbolsSnakeCaseTableColumns])} '
 
         if gconfig.testing.enabled and gconfig.testing.GET_SYMBOLS_LIMIT > 0: 
             stmt += ' LIMIT ' + str(gconfig.testing.GET_SYMBOLS_LIMIT)
@@ -375,7 +379,7 @@ class DatabaseManager(Singleton):
         return data
 
     ## get saved data set for network
-    def getDataSet(self, id, setid) -> List[DataSetsRow]:
+    def getDataSet(self, id, setid) -> List:
         stmt = 'SELECT * FROM data_sets WHERE network_id = ? AND network_set_id = ?'
         return self.dbc.execute(stmt, (id, setid)).fetchall()
 
