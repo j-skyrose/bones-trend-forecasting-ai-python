@@ -451,29 +451,30 @@ class DataManager():
 
         return tickerWindows
 
-    def buildInputVector(self, stockDataSet: StockDataHandler, stockDataIndex, symbolData):
+    def buildInputVector(self, stockDataHandler: StockDataHandler, stockDataIndex):
+        symbolData = stockDataHandler.symbolData
         startt = time.time()
-        precset = stockDataSet.getPrecedingSet(stockDataIndex)
+        precset = stockDataHandler.getPrecedingSet(stockDataIndex)
         self.getprecstocktime += time.time() - startt
 
         startt = time.time()
-        precedingIndicators: Dict = stockDataSet.getPrecedingIndicators(stockDataIndex)
+        precedingIndicators: Dict = stockDataHandler.getPrecedingIndicators(stockDataIndex)
         self.getprecindctime += time.time() - startt
 
-        anchordate = date.fromisoformat(stockDataSet.data[stockDataIndex].period_date)
+        anchordate = date.fromisoformat(stockDataHandler.data[stockDataIndex].period_date)
 
-        try: splitsset = self.stockSplitsHandlers[stockDataSet.getTickerTuple()].getForRange(precset[0].period_date, precset[-1].period_date)
+        try: splitsset = self.stockSplitsHandlers[stockDataHandler.getTickerTuple()].getForRange(precset[0].period_date, precset[-1].period_date)
         except KeyError: splitsset = []
 
-        try: earningsDateHandler = self.earningsDateHandlers[stockDataSet.getTickerTuple()]
+        try: earningsDateHandler = self.earningsDateHandlers[stockDataHandler.getTickerTuple()]
         except KeyError: earningsDateHandler = None
 
-        try: googleinterests = self.googleInterestsHandlers[stockDataSet.getTickerTuple()].getPrecedingRange(anchordate.isoformat(), self.precedingRange)
+        try: googleinterests = self.googleInterestsHandlers[stockDataHandler.getTickerTuple()].getPrecedingRange(anchordate.isoformat(), self.precedingRange)
         except KeyError: googleinterests = []
 
         if gconfig.feature.financials.enabled:
             startt = time.time()
-            precfinset = self.financialDataHandlers[stockDataSet.getTickerTuple()].getPrecedingReports(anchordate, self.precedingRange)
+            precfinset = self.financialDataHandlers[stockDataHandler.getTickerTuple()].getPrecedingReports(anchordate, self.precedingRange)
             self.getprecfintime += time.time() - startt
         else:
             precfinset = []

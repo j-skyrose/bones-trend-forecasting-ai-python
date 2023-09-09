@@ -20,11 +20,7 @@ class DataPointInstance(GetMemoryUsage):
         self.outputClass = outputClass
 
     def getInputVector(self):
-        # if self.handler.symbolData.asset_type != 'ETF' and self.handler.symbolData.asset_type != 'ETP':
-        #     print('f')
-        #     pass
-        #     pass
-        return self.buildInputVectorFunc(self.stockDataHandler, self.index, self.stockDataHandler.symbolData)
+        return self.buildInputVectorFunc(self.stockDataHandler, self.index)
 
     def getOutputVector(self):
         return 0 if self.outputClass == OutputClass.NEGATIVE else 1
