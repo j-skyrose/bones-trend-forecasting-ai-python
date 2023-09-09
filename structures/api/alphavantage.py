@@ -107,7 +107,7 @@ class Alphavantage:
                 'high': data[d]['2. high'],
                 'low': data[d]['3. low'],
                 'close': data[d]['4. close'],
-                'volume': data[d]['6. volume']
+                'volume': data[d]['5. volume']
             }
 
         print(len(data.keys()),'data points retrieved')

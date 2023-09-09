@@ -51,7 +51,7 @@ class Collector:
     def __updateSymbolsAPIField(self, api, exchange, symbol, val):
         dbm.dbc.execute('UPDATE symbols SET api_'+api+'=? WHERE exchange=? AND symbol=?',(val, exchange, symbol))
 
-    def __loopCollectBySymbol(self, api, symbols, seriesType):
+    def _loopCollectBySymbol(self, api, symbols, seriesType):
         updatedCount = 0
         apiErrorErrors = []
         try:
@@ -59,10 +59,7 @@ class Collector:
                 try:
                     dbm.insertData(
                         sp.exchange, sp.symbol, seriesType, api, 
-                        self.apiManager.query(api, sp.symbol, 
-                                              ## av made DAILY a premium API, but DAILY_ADJUSTED provides same info and more
-                                              SeriesType.DAILY_ADJUSTED if api == 'alphavantage' and seriesType == SeriesType.DAILY else seriesType, 
-                                              exchange=sp.exchange)
+                        self.apiManager.query(api, sp.symbol, seriesType, exchange=sp.exchange)
                     )
                     self.__updateSymbolsAPIField(api, sp.exchange, sp.symbol, 1)
                     dbm.commit()
@@ -240,7 +237,7 @@ class Collector:
                         # if len(symbols) == self.apiManager.apis[api]['remaining']: break
 
                     print('symbol list size', len(symbols))
-                    self.__loopCollectBySymbol(api, symbols, seriesType)
+                    self._loopCollectBySymbol(api, symbols, seriesType)
 
                 elif api == 'neo':
                     for r in lastUpdatedList:
@@ -309,7 +306,7 @@ class Collector:
                 # if len(symbols) > 500: break
 
             print('symbol list size', len(symbols))
-            self.__loopCollectBySymbol(api, symbols, seriesType)
+            self._loopCollectBySymbol(api, symbols, seriesType)
 
         except (KeyboardInterrupt, APIError):
             print('keyboard interrupt')
