@@ -155,13 +155,19 @@ class DatabaseManager(Singleton):
     def __purgeUnusableTickers(self, data, raw=False, **kwargs):
         if raw: return data
         return [d for d in data if (d.exchange, d.symbol) not in unusableSymbols]
+    
+    def _getDBAliasForTable(self, tablename):
+        return self.dumpDBAlias if 'dump_' in tablename or tablename == 'google_interests_raw' or 'staging_' in tablename else 'main'
 
     ####################################################################################################################################################################
     ## gets ####################################################################################################################################################################
 
+    def getTableString(self, table) -> str:
+        return f'{self._getDBAliasForTable(table)}.{table}'
+    
     def getMaxRowID(self, table='google_interests_raw') -> int:
-        dbalias = self.dumpDBAlias if 'dump_' in table or table == 'google_interests_raw' or 'staging_' in table else 'main'
-        return self.dbc.execute(f'SELECT MAX(rowid) FROM {dbalias}.{table}').fetchone()['MAX(rowid)']
+        return self.dbc.execute(f'SELECT MAX(rowid) FROM {self.getTableString(table)}').fetchone()['MAX(rowid)']
+
 
     def getLoadedQuarters(self):
         # stmt = 'SELECT DISTINCT fy, fp FROM dump_edgar_sub'
@@ -169,7 +175,7 @@ class DatabaseManager(Singleton):
         # return [q.fy.lower() + q.fp.lower() for q in qrts]
         # return []
 
-        qrts = self.dbc.execute(f'SELECT period FROM {self.dumpDBAlias}.dump_edgar_loaded WHERE type=\'quarter\'').fetchall()
+        qrts = self.dbc.execute(f'SELECT period FROM {self.getTableString("dump_edgar_loaded")} WHERE type=\'quarter\'').fetchall()
         return [q.period for q in qrts]
 
     def getAliasesDictionary(self, api=None):
@@ -260,7 +266,7 @@ class DatabaseManager(Singleton):
 
     ## assumes you are looking for rows that have details missing
     def getSymbolsTempInfo(self, api):
-        stmt = f'SELECT * FROM {self.dumpDBAlias}.staging_symbol_info ts JOIN symbols s ON ts.exchange=s.exchange AND ts.symbol=s.symbol'
+        stmt = f'SELECT * FROM {self.getTableString("staging_symbol_info")} ts JOIN symbols s ON ts.exchange=s.exchange AND ts.symbol=s.symbol'
         stmt += ' WHERE api_' +api+ '=1'
 
         ## new may 18
@@ -278,14 +284,14 @@ class DatabaseManager(Singleton):
 
     def getStagedSymbolRows(self) -> List[StagingSymbolInfoRow]:
         # return self.dbc.execute('SELECT * FROM staging_symbol_info WHERE exchange=?', ('NYSE',)).fetchall()
-        return self.dbc.execute(f'SELECT * FROM {self.dumpDBAlias}.staging_symbol_info').fetchall()
+        return self.dbc.execute(f'SELECT * FROM {self.getTableString("staging_symbol_info")}').fetchall()
 
     ## get symbols of which financials retrieval has not already been attempted
     def getSymbols_forFinancialStaging(self, api, ftype: FinancialReportType=None) -> List[SymbolsRow]:
         # stmt = 'SELECT s.exchange, s.symbol FROM symbols s LEFT JOIN staging_financials sf ON s.exchange = sf.exchange AND s.symbol = sf.symbol WHERE sf.exchange IS NULL AND sf.symbol IS NULL AND s.api_' + api + ' = 1'
         # if ftype:
         #     stmt += ' AND sf.period = \'' + ftype.name + '\''
-        substmt = f'SELECT * FROM {self.dumpDBAlias}.staging_financials WHERE exchange = symbols.exchange AND symbol = symbols.symbol AND ' + api + ' IS NOT NULL'
+        substmt = f'SELECT * FROM {self.getTableString("staging_financials")} WHERE exchange = symbols.exchange AND symbol = symbols.symbol AND ' + api + ' IS NOT NULL'
         if ftype: substmt += ' AND period = \'' + ftype.name + '\''
         stmt = 'SELECT * FROM symbols WHERE NOT EXISTS (' + substmt + ') AND api_' + api + ' = 1'
         return self.dbc.execute(stmt).fetchall()
@@ -656,7 +662,7 @@ class DatabaseManager(Singleton):
     
     def getStockSplits(self, exchange=None, symbol=None) -> List[DumpStockSplitsPolygonRow]:
         # stmt = 'SELECT * FROM stock_splits'
-        stmt = f'SELECT * FROM {self.dumpDBAlias}.dump_stock_splits_polygon'
+        stmt = f'SELECT * FROM {self.getTableString("dump_stock_splits_polygon")}'
         args = []
         exchange = asList(shortc(exchange, []))
         if exchange:
@@ -670,7 +676,7 @@ class DatabaseManager(Singleton):
     def getGoogleInterests(self, exchange=None, symbol=None, gtopicid=None, itype:InterestType=InterestType.DAILY, stream=None, artificial=None, dt=None, raw=False, queryLimit=None):
         stmt = ''
         args = []
-        gitable = f'{self.dumpDBAlias if raw else "main"}.google_interests{"_raw" if raw else ""}'
+        gitable = self.getTableString(f'google_interests{"_raw" if raw else ""}')
         if gtopicid:
             stmt = f'SELECT * FROM {gitable} gi JOIN symbols s ON gi.exchange=s.exchange AND gi.symbol=s.symbol WHERE gi.google_topic_id=? '
             args.append(gtopicid)
@@ -700,7 +706,7 @@ class DatabaseManager(Singleton):
         return self.dbc.execute(stmt, tuple(args)).fetchall()
 
     def getMaxGoogleInterestStream(self, exchange=None, symbol=None, gtopicid=None, itype:InterestType=InterestType.DAILY) -> int:
-        stmt = f'SELECT MAX(stream) AS maxstream FROM {self.dumpDBAlias}.google_interests_raw gi '
+        stmt = f'SELECT MAX(stream) AS maxstream FROM {self.getTableString("google_interests_raw")} gi '
         args = []
         if gtopicid:
             stmt = ' JOIN symbols s ON gi.exchange=s.exchange AND gi.symbol=s.symbol WHERE gi.google_topic_id=? '
@@ -770,7 +776,7 @@ class DatabaseManager(Singleton):
         return self.dbc.execute(stmt, tuple(args)).fetchall()
 
     def getYahooSymbolInfo(self, symbol):
-        return self.dbc.execute(f'SELECT * FROM {self.dumpDBAlias}.dump_symbol_info_yahoo WHERE symbol=?', (symbol,)).fetchall()
+        return self.dbc.execute(f'SELECT * FROM {self.getTableString("dump_symbol_info_yahoo")} WHERE symbol=?', (symbol,)).fetchall()
 
     def getDumpEarningsDates(self, api: EarningsCollectionAPI, exchange=None, symbol=None, **kwargs):
         wherestmt = ''
@@ -798,7 +804,7 @@ class DatabaseManager(Singleton):
                     wherestmt += 'symbol=?'
                     args.append(symbol)
 
-        stmt = f'SELECT * FROM {self.dumpDBAlias}.{table} {wherestmt}'
+        stmt = f'SELECT * FROM {self.getTableString(table)} {wherestmt}'
         return self.dbc.execute(stmt, args).fetchall()
 
     def getUniqueEarningsCollectionDates(self, api: EarningsCollectionAPI):
@@ -809,7 +815,7 @@ class DatabaseManager(Singleton):
         elif api == EarningsCollectionAPI.YAHOO:
             table = 'dump_yahoo_earnings_dates'
         
-        stmt = f'SELECT DISTINCT input_date AS date FROM {self.dumpDBAlias}.{table} ORDER BY date ASC'
+        stmt = f'SELECT DISTINCT input_date AS date FROM {self.getTableString(table)} ORDER BY date ASC'
         return [r.date for r in self.dbc.execute(stmt).fetchall()]
 
     def getLatestEarningsCollectionDate(self, api: EarningsCollectionAPI):
@@ -822,7 +828,7 @@ class DatabaseManager(Singleton):
         elif api == EarningsCollectionAPI.YAHOO:
             table = 'dump_yahoo_earnings_dates'
         
-        stmt = f'SELECT MAX(input_date) AS date FROM {self.dumpDBAlias}.{table} {wherestmt}'
+        stmt = f'SELECT MAX(input_date) AS date FROM {self.getTableString(table)} {wherestmt}'
 
         return self.dbc.execute(stmt).fetchone()['date']
 
@@ -996,7 +1002,7 @@ class DatabaseManager(Singleton):
     ## for updating symbol details like sector, industry, founded
     ## updateDetails is expected to be a dict with keys corresponding to the column names
     def updateSymbolTempInfo(self, updateDetails, infoPrefix, exchange=None, symbol=None):
-        stmt = f'UPDATE {self.dumpDBAlias}.staging_symbol_info SET '
+        stmt = f'UPDATE {self.getTableString("staging_symbol_info")} SET '
         args = []
 
 
@@ -1036,7 +1042,7 @@ class DatabaseManager(Singleton):
         self.dbc.execute(stmt, tuple(args))
 
     def insertFinancials_staging_empty(self, api, exchange, symbol, ftype: FinancialReportType):
-        stmt = f'INSERT INTO {self.dumpDBAlias}.staging_financials({api}, exchange, symbol, period, calendarDate) VALUES (?,?,?,?,?) ON CONFLICT(exchange, symbol, period, calendarDate) DO UPDATE SET {api} = 0'
+        stmt = f'INSERT INTO {self.getTableString("staging_financials")}({api}, exchange, symbol, period, calendarDate) VALUES (?,?,?,?,?) ON CONFLICT(exchange, symbol, period, calendarDate) DO UPDATE SET {api} = 0'
         self.dbc.execute(stmt, (0, exchange, symbol, ftype.name, '1970-01-01'))
 
     def insertFinancials_staging_old(self, api, exchange, data: List[dict], period=None, symbol=None):
@@ -1052,7 +1058,7 @@ class DatabaseManager(Singleton):
             # stmt = 'INSERT INTO staging_financials(exchange,' + api + ','
 
             # tpl = [exchange, True]
-            columnnames = [r[0] for r in self.dbc.execute(f'SELECT * FROM {self.dumpDBAlias}.staging_financials').description]
+            columnnames = [r[0] for r in self.dbc.execute(f'SELECT * FROM {self.getTableString("staging_financials")}').description]
 
             insertstmt_columnnames = []
             insertstmt_pkcolumnnames = ['exchange']
@@ -1084,7 +1090,7 @@ class DatabaseManager(Singleton):
                 
                 ## confirm columns are present in staging table
                 if coln not in columnnames:
-                    self.dbc.execute(f'ALTER TABLE {self.dumpDBAlias}.staging_financials ADD COLUMN {coln} TEXT')
+                    self.dbc.execute(f'ALTER TABLE {self.getTableString("staging_financials")} ADD COLUMN {coln} TEXT')
                 ## construct statement
                 # stmt += coln + ','
 
@@ -1103,7 +1109,7 @@ class DatabaseManager(Singleton):
             final_overall_tpl = tpl + final_pktpl
 
             columnsstr = ','.join(insertstmt_columnnames) + ',' + ','.join(final_insertstmt_pkcolumnnames)
-            stmt = f'INSERT INTO {self.dumpDBAlias}.staging_financials({columnsstr}) VALUES ({ generateCommaSeparatedQuestionMarkString(final_overall_tpl) })'
+            stmt = f'INSERT INTO {self.getTableString("staging_financials")}({columnsstr}) VALUES ({ generateCommaSeparatedQuestionMarkString(final_overall_tpl) })'
             stmt += ' ON CONFLICT(' + ','.join(insertstmt_pkcolumnnames) + ') DO UPDATE SET ' + api + ' = 1, ' + ','.join([ k + ' = ' + (str(v) if type(v) == int else ('\'' + v + '\'')) for k,v in zip(insertstmt_columnnames, tpl) ])
 
             # try:
@@ -1145,8 +1151,7 @@ class DatabaseManager(Singleton):
        
     ## dump table should have the following columns: PRIMARY_KEY(s), API(s)
     def __insertAPIDumpData(self, table, pkObj: dict, data, api, columnNameRemapping={}, pkcolumnValueRemapping={}):
-        table = f'{self.dumpDBAlias}.{table}'
-        columnNames = [r[0] for r in self.dbc.execute(f'SELECT * FROM {table}').description]
+        columnNames = [r[0] for r in self.dbc.execute(f'SELECT * FROM {self.getTableString(table)}').description]
 
         if type(data) is not List:
             data = [data]
@@ -1184,7 +1189,7 @@ class DatabaseManager(Singleton):
 
                 ## confirm columns are present in staging table
                 if coln not in columnNames:
-                    self.dbc.execute(f'ALTER TABLE {self.dumpDBAlias}.{table} ADD COLUMN {coln} TEXT')
+                    self.dbc.execute(f'ALTER TABLE {self.getTableString(table)} ADD COLUMN {coln} TEXT')
                
 
             final_insertstmt_pkcolumnnames = [api] + insertstmt_pkcolumnNames
@@ -1193,7 +1198,7 @@ class DatabaseManager(Singleton):
 
 
             columnsstr = ','.join(insertstmt_columnNames) + ',' + ','.join(final_insertstmt_pkcolumnnames)
-            stmt = f'INSERT INTO {table}({columnsstr}) VALUES ({ generateCommaSeparatedQuestionMarkString(final_overall_tpl) }'
+            stmt = f'INSERT INTO {self.getTableString(table)}({columnsstr}) VALUES ({ generateCommaSeparatedQuestionMarkString(final_overall_tpl) }'
             stmt += f' ON CONFLICT({ ",".join(insertstmt_pkcolumnNames) }) DO UPDATE SET {api} = 1, { ",".join([ f"{k} = {processRawValueToInsertValue(v)}" for k,v in zip(insertstmt_columnNames, tpl) ]) }'
 
             try:
@@ -1206,11 +1211,11 @@ class DatabaseManager(Singleton):
         if len(sub) == 0:
             return
 
-        sub_stmt = f'INSERT INTO {self.dumpDBAlias}.dump_edgar_sub VALUES ({ generateCommaSeparatedQuestionMarkString(len(sub[0].keys())+2) })'
-        tag_stmt = f'INSERT INTO {self.dumpDBAlias}.dump_edgar_tag VALUES ({ generateCommaSeparatedQuestionMarkString(tag[0].keys()) })'
-        num_stmt = f'INSERT INTO {self.dumpDBAlias}.dump_edgar_num VALUES ({ generateCommaSeparatedQuestionMarkString(len(num[0].keys())+1) })'
+        sub_stmt = f'INSERT INTO {self.getTableString("dump_edgar_sub")} VALUES ({ generateCommaSeparatedQuestionMarkString(len(sub[0].keys())+2) })'
+        tag_stmt = f'INSERT INTO {self.getTableString("dump_edgar_tag")} VALUES ({ generateCommaSeparatedQuestionMarkString(tag[0].keys()) })'
+        num_stmt = f'INSERT INTO {self.getTableString("dump_edgar_num")} VALUES ({ generateCommaSeparatedQuestionMarkString(len(num[0].keys())+1) })'
         if pre:
-            pre_stmt = f'INSERT INTO {self.dumpDBAlias}.dump_edgar_pre VALUES ({ generateCommaSeparatedQuestionMarkString(pre[0].keys()) })'
+            pre_stmt = f'INSERT INTO {self.getTableString("dump_edgar_pre")} VALUES ({ generateCommaSeparatedQuestionMarkString(pre[0].keys()) })'
             pass
 
         print('Inserting data...')
@@ -1220,7 +1225,7 @@ class DatabaseManager(Singleton):
             notfound = 0
             for s in tqdm(sub, desc='Submissions'):
                 try:
-                    ticker = self.dbc.execute(f'SELECT * FROM {self.dumpDBAlias}.dump_symbol_info WHERE polygon_cik IN (?,?)', (s.cik, s.cik.rjust(10, '0'))).fetchall()[0]
+                    ticker = self.dbc.execute(f'SELECT * FROM {self.getTableString("dump_symbol_info")} WHERE polygon_cik IN (?,?)', (s.cik, s.cik.rjust(10, '0'))).fetchall()[0]
                 except IndexError as e:
                     notfound += 1
                     ticker = recdotdict({ 'exchange': None, 'symbol': None })
@@ -1263,7 +1268,7 @@ class DatabaseManager(Singleton):
             #     for n in duplicatekey_diffnums:
             #         print(n)
 
-            self.dbc.execute(f'INSERT INTO {self.dumpDBAlias}.dump_edgar_loaded VALUES (?,?)', (ptype, period))
+            self.dbc.execute(f'INSERT INTO {self.getTableString("dump_edgar_loaded")} VALUES (?,?)', (ptype, period))
 
             self.commitBatch()
             
@@ -1316,11 +1321,11 @@ class DatabaseManager(Singleton):
         self.dbc.execute(stmt, tpl)
 
     def insertRawGoogleInterest(self, exchange, symbol, itype:InterestType, date, value, stream=0, artificial=False, upsert=False):
-        stmt = f'INSERT{" OR IGNORE" if upsert else ""} INTO {self.dumpDBAlias}.google_interests_raw VALUES (?,?,?,?,?,?,?)'
+        stmt = f'INSERT{" OR IGNORE" if upsert else ""} INTO {self.getTableString("google_interests_raw")} VALUES (?,?,?,?,?,?,?)'
         lst = [exchange, symbol, asISOFormat(date), itype.name, stream]
         self.dbc.execute(stmt, lst + [value, artificial])
         if upsert:
-            stmt = f'UPDATE {self.dumpDBAlias}.google_interests_raw SET relative_interest=? WHERE exchange=? AND symbol=? AND date=? AND type=? AND stream=?'
+            stmt = f'UPDATE {self.getTableString("google_interests_raw")} SET relative_interest=? WHERE exchange=? AND symbol=? AND date=? AND type=? AND stream=?'
             self.dbc.execute(stmt, [value] + lst)
 
     def insertCalculatedGoogleInterest(self, exchange, symbol, dt, val, upsert=True):
@@ -1348,7 +1353,7 @@ class DatabaseManager(Singleton):
                 if k not in cccols: raise ValueError(f'"{k}" argument not in {table} columns')
                 proccessedkwargs[k] = v.isoformat() if type(v) == date else v
 
-        stmt = f'INSERT INTO {self.dumpDBAlias}.{table} VALUES ({ generateCommaSeparatedQuestionMarkString(len(cccols)) })'
+        stmt = f'INSERT INTO {self.getTableString(table)} VALUES ({ generateCommaSeparatedQuestionMarkString(len(cccols)) })'
         args = [shortcdict(proccessedkwargs, argName) for argName in cccols]
 
         self.dbc.execute(stmt, args)
@@ -1475,7 +1480,7 @@ class DatabaseManager(Singleton):
         return tpls
 
     def _condenseSectorTuples(self):
-        stmt = f'SELECT * FROM {self.dumpDBAlias}.staging_symbol_info WHERE fmp_sector IS NOT NULL AND polygon_sector IS NOT NULL AND alphavantage_sector IS NOT NULL AND migrated=0'
+        stmt = f'SELECT * FROM {self.getTableString("staging_symbol_info")} WHERE fmp_sector IS NOT NULL AND polygon_sector IS NOT NULL AND alphavantage_sector IS NOT NULL AND migrated=0'
         symbolList = self.dbc.execute(stmt).fetchall()
         sectorList = self.getSectors()
 
@@ -1574,11 +1579,11 @@ class DatabaseManager(Singleton):
     def staging_condenseFounded(self):
         tpls = self._condenseFoundedTuples()
 
-        self.dbc.executemany(f'UPDATE {self.dumpDBAlias}.staging_symbol_info SET founded=? WHERE exchange=? AND symbol=?', tpls)
+        self.dbc.executemany(f'UPDATE {self.getTableString("staging_symbol_info")} SET founded=? WHERE exchange=? AND symbol=?', tpls)
 
     def staging_condenseSector(self):
         tpls = self._condenseSectorTuples()
-        self.dbc.executemany(f'UPDATE {self.dumpDBAlias}.staging_symbol_info SET sector=? WHERE exchange=? AND symbol=?', tpls)
+        self.dbc.executemany(f'UPDATE {self.getTableString("staging_symbol_info")} SET sector=? WHERE exchange=? AND symbol=?', tpls)
 
 
     def symbols_pullStagedSector(self):
@@ -1990,7 +1995,7 @@ class DatabaseManager(Singleton):
     ## determines tickers that have stock splits that are less than a certain period apart, possibly indicating a problem with one of them
     def checkForDumpStockSplitsTooClose(self,period:timedelta=timedelta(days=90), onlyTickersWithData=True,  verbose=1):
         substmt = 'JOIN (SELECT DISTINCT exchange AS hexchange,symbol AS hsymbol FROM historical_data) ON exchange=hexchange AND symbol=hsymbol' if onlyTickersWithData else ''
-        stmt = f'SELECT * FROM {self.dumpDBAlias}.dump_stock_splits_polygon {substmt} WHERE exchange <> "UNKNOWN" AND split_from <> split_to ORDER BY symbol, date'
+        stmt = f'SELECT * FROM {self.getTableString("dump_stock_splits_polygon")} {substmt} WHERE exchange <> "UNKNOWN" AND split_from <> split_to ORDER BY symbol, date'
         res = self.dbc.execute(stmt)
         cursym = ''
         lastdate = ''
@@ -2368,7 +2373,7 @@ class DatabaseManager(Singleton):
         ''', (interestType.name,) if interestType else ()).fetchall()
         for g in tqdm(gidata, desc='Inserting data') if verbose > 0 else gidata:
             if dryrun:  print('Inserting values', list(g.values()))
-            else:       destination_cursor.execute(f'INSERT OR IGNORE INTO {self.dumpDBAlias}.google_interests_raw VALUES ({ generateCommaSeparatedQuestionMarkString(gidata[0]) })', list(g.values()))
+            else:       destination_cursor.execute(f'INSERT OR IGNORE INTO {self.getTableString("google_interests_raw")} VALUES ({ generateCommaSeparatedQuestionMarkString(gidata[0]) })', list(g.values()))
         if verbose>=1: print(f'Inserted {len(gidata)} data points')
 
         self.commit()
@@ -2381,16 +2386,16 @@ class DatabaseManager(Singleton):
 
 
 
-def printSectorColumnInfos(d: DatabaseManager):
+def printSectorColumnInfos(dbm: DatabaseManager):
     ## compare sectors from temp table
-    stmt = 'SELECT DISTINCT {}_sector FROM ' + d.dumpDBAlias + '.staging_symbol_info ORDER BY 1'
+    stmt = 'SELECT DISTINCT {}_sector' + f' FROM {dbm.getTableString("staging_symbol_info")} ORDER BY 1'
     # ds_fmp = [d['fmp_sector'] for d in d.dbc.execute(stmt.format('fmp')).fetchall()]
     # ds_polygon = [d['polygon_sector'] for d in d.dbc.execute(stmt.format('polygon')).fetchall()]
     # ds_alphavantage = [d['alphavantage_sector'] for d in d.dbc.execute(stmt.format('alphavantage')).fetchall()]
     # dss = [ds_fmp, ds_polygon, ds_alphavantage]
     dss = []
     for a in apiList:
-        dss.append([d[a + '_sector'] for d in d.dbc.execute(stmt.format(a)).fetchall()])
+        dss.append([d[a + '_sector'] for d in dbm.dbc.execute(stmt.format(a)).fetchall()])
 
 
     for l in dss:
@@ -2404,12 +2409,12 @@ def printSectorColumnInfos(d: DatabaseManager):
             pass
 
     ## get counts
-    stmt = 'SELECT count(*) as count FROM ' + d.dumpDBAlias + '.staging_symbol_info WHERE {}_sector=?'
+    stmt = f'SELECT count(*) as count FROM {dbm.getTableString("staging_symbol_info")} WHERE ' + '{}_sector=?'
     counts = []
     for ac in range(len(apiList)):
         dcl = []
         for dc in dss[ac]:
-            dcl.append(d.dbc.execute(stmt.format(apiList[ac]), (dc,)).fetchone()['count'])
+            dcl.append(dbm.dbc.execute(stmt.format(apiList[ac]), (dc,)).fetchone()['count'])
         counts.append(dcl)
 
 
@@ -2464,13 +2469,13 @@ if __name__ == '__main__':
 
         # updatedrows = 0
         # for col in stagingEarningsDatesSnakeCaseTableColumns:
-        #     stmt = f'UPDATE {d.dumpDBAlias}.staging_earnings_dates SET {col}=null WHERE ({col}=\'\' OR {col}=\'N/A\')'
+        #     stmt = f'UPDATE {self.getTableString("staging_earnings_dates")} SET {col}=null WHERE ({col}=\'\' OR {col}=\'N/A\')'
         #     d.dbc.execute(stmt)
         #     updatedrows += d.dbc.rowcount
         # print(updatedrows)
 
         ## graph earnings dates
-        # edata = d.dbc.execute(f'SELECT * FROM {d.dumpDBAlias}.staging_earnings_dates').fetchall()
+        # edata = d.dbc.execute(f'SELECT * FROM {self.getTableString("staging_earnings_dates")}').fetchall()
         edata = flatten([d.getDumpEarningsDates(eapi, symbol='AA') for eapi in EarningsCollectionAPI])
         uniquetickerdates = set()
         for e in tqdm(edata, desc='Creating tuples'):

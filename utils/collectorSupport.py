@@ -65,7 +65,7 @@ def getYahooExchangeForSymbolWithDetails(symbol, companyName, verbose=1) -> Tupl
                         raise ValueError(f'"{k}" argument not in table columns')
                 proccessedkwargs[k] = v
         args = [shortcdict(proccessedkwargs, argName) for argName in dumpSymbolInfoYahooCamelCaseTableColumns]
-        dbm.dbc.execute(f'INSERT INTO {dbm.dumpDBAlias}.dump_symbol_info_yahoo VALUES ({generateCommaSeparatedQuestionMarkString(dumpSymbolInfoYahooCamelCaseTableColumns)})', args)
+        dbm.dbc.execute(f'INSERT INTO {dbm.getTableString("dump_symbol_info_yahoo")} VALUES ({generateCommaSeparatedQuestionMarkString(dumpSymbolInfoYahooCamelCaseTableColumns)})', args)
 
     elif len(yahooSymbol) > 1:
         raise ValueError(f'too many DB results for {symbol}')
@@ -245,7 +245,7 @@ def transferYahooEarningsDateDumpTableToStaging(symbolList=[], dryrun=False, ver
         notfound = []
         checkpoint = False
         for indx,s in enumerate(tqdmLoopHandleWrapper(yahootablesymbols, verbose, desc='Migrating data')):
-            # anyrow = dbm.dbc.execute(f'''select * from {dbm.dumpDBAlias}.staging_earnings_dates where symbol=?''', (s,)).fetchone()
+            # anyrow = dbm.dbc.execute(f'''select * from {dbm.getTableString("staging_earnings_dates")} where symbol=?''', (s,)).fetchone()
             # if anyrow: continue
 
             # if s in brokensymbols: continue
@@ -254,7 +254,7 @@ def transferYahooEarningsDateDumpTableToStaging(symbolList=[], dryrun=False, ver
             # elif not checkpoint: continue
             if verbose > 1: print(f'----- {indx}/{len(yahootablesymbols)}: {s} --------------------------------------------')
 
-            data = dbm.dbc.execute(f'select * from {dbm.dumpDBAlias}.dump_yahoo_earnings_dates WHERE symbol=?', (s,)).fetchall()
+            data = dbm.dbc.execute(f'select * from {dbm.getTableString("dump_yahoo_earnings_dates")} WHERE symbol=?', (s,)).fetchall()
             totalexceptionslength = len(e0nx) + len(e1n1) + len(e1nx)
 
             try:
@@ -265,7 +265,7 @@ def transferYahooEarningsDateDumpTableToStaging(symbolList=[], dryrun=False, ver
                 else:
                     continue
 
-            existingRows = dbm.dbc.execute(f'''select * from {dbm.dumpDBAlias}.staging_earnings_dates where exchange=? and symbol=?''', (exchange, s)).fetchall()
+            existingRows = dbm.dbc.execute(f'''select * from {dbm.getTableString("staging_earnings_dates")} where exchange=? and symbol=?''', (exchange, s)).fetchall()
 
             for r in data:
                 ## check if row should be new
@@ -277,7 +277,7 @@ def transferYahooEarningsDateDumpTableToStaging(symbolList=[], dryrun=False, ver
                     if verbose > 1 and not existingRow and exchange == 'NASDAQ': print('inserting new NASDAQ row:', s, r.input_date, r.earnings_date)
                     if dryrun: continue
                     try:
-                        dbm.dbc.execute(f'''insert into {dbm.dumpDBAlias}.staging_earnings_dates(
+                        dbm.dbc.execute(f'''insert into {dbm.getTableString("staging_earnings_dates")}(
                                     exchange, symbol, input_date, earnings_date,yahoo_name,yahoo_event_name,yahoo_eps_forecast,yahoo_eps,yahoo_surprise_percentage,yahoo_start_date_time,yahoo_start_date_time_type,yahoo_time_zone_short_name,yahoo_gmt_offset_milli_seconds 
                                     ) VALUES ({generateCommaSeparatedQuestionMarkString(13)})''', (exchange, *list(r.values())))
                     except sqlite3.IntegrityError:
@@ -288,7 +288,7 @@ def transferYahooEarningsDateDumpTableToStaging(symbolList=[], dryrun=False, ver
                     if dryrun:
                         if verbose > 1: print('updating NASDAQ row(s) with yahoo data')
                         break
-                    dbm.dbc.execute(f'''update {dbm.dumpDBAlias}.staging_earnings_dates SET 
+                    dbm.dbc.execute(f'''update {dbm.getTableString("staging_earnings_dates")} SET 
                                 yahoo_event_name=?, yahoo_name=?,yahoo_eps_forecast=?,yahoo_eps=?,yahoo_surprise_percentage=?,yahoo_start_date_time=?,yahoo_start_date_time_type=?,yahoo_time_zone_short_name=?,yahoo_gmt_offset_milli_seconds =?
                                 WHERE exchange=? AND symbol=? AND input_date=? AND earnings_date=?
                                 ''', (r.event_name,r.name,r.eps_forecast,r.earnings_per_share,r.surprise_percentage,r.start_date_time,r.start_date_time_type,r.time_zone_short_name,r.gmt_offset_milli_seconds,   'NASDAQ', r.symbol, r.input_date, r.earnings_date))
@@ -310,7 +310,7 @@ if __name__ == '__main__':
     # for s in exceptionsymbols:
     #     print(f'-----{s} --------------------------------------------')
     #     try:
-    #         # anyrow = dbm.dbc.execute(f'''select * from {dbm.dumpDBAlias}.dump_yahoo_earnings_dates where symbol=?''', (s,)).fetchone()
+    #         # anyrow = dbm.dbc.execute(f'''select * from {dbm.getTableString("dump_yahoo_earnings_dates")} where symbol=?''', (s,)).fetchone()
     #         # exchange = getYahooExchangeForSymbol(s, shortcdict(anyrow, 'name'), 2)
     #         # print('exchange:', exchange)
     #         histdata = dbm.dbc.execute('select * from historical_data where symbol=?', (s,)).fetchall()
@@ -318,7 +318,7 @@ if __name__ == '__main__':
     #         lastupd = dbm.dbc.execute('select * from last_updates where symbol=? and api is not null', (s,)).fetchall()
     #         lastupdtickers = dbm.dbc.execute('select distinct exchange,symbol from last_updates where symbol=? ', (s,)).fetchall()
     #         syms = dbm.getSymbols(symbol=s)
-    #         ysym = dbm.dbc.execute(f'''select * from {dbm.dumpDBAlias}.dump_symbol_info_yahoo where symbol=?''', (s,)).fetchall()
+    #         ysym = dbm.dbc.execute(f'''select * from {dbm.getTableString("dump_symbol_info_yahoo")} where symbol=?''', (s,)).fetchall()
 
     #         if len(histdata) > 0:
     #             print('has hist data')
