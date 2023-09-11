@@ -919,9 +919,11 @@ def earningsDateCalculationAndInsertion(simple=True, verbose=1):
             if verbose > 1: print(f'prepared to insert {len(interimData)} for {"NASDAQ" if interimData[0].api == EarningsCollectionAPI.NASDAQ else interimData[0].exchange}:{symbol}')
             countSnapshot = int(totalRowsInserted)
             for r in interimData:
-                exchange = 'NASDAQ' if r.api == EarningsCollectionAPI.NASDAQ else r.exchange
                 try: 
-                    dbm.insertEarningsDate(exchange, r.symbol, r.input_date, r.earnings_date)
+                    dbm.insertEarningsDate(
+                        'NASDAQ' if r.api == EarningsCollectionAPI.NASDAQ else r.exchange, 
+                        r.symbol, r.input_date, r.earnings_date
+                    )
                     totalRowsInserted += 1
                 except sqlite3.IntegrityError: pass
             if verbose > 1: print(f'inserted {totalRowsInserted - countSnapshot} rows')
