@@ -594,7 +594,7 @@ def _getAverageDate(iterable, key=None, excludeYear=True):
         dtList[:] = [dtList[0]] + [_getAdjustedDate(dtList[0], dt) for dt in dtList[1:]]
     return date.fromordinal(int(numpy.average([ dt.toordinal() for dt in dtList ]))) 
 
-def earningsDateCalculationAndInsertion(simple=True):
+def earningsDateCalculationAndInsertion(simple=True, verbose=1):
     DEBUG = False
     ## exclude until more data is available, or there is a better way to narrow these down to actual dates
     excludeTickers=['AIM','AMN','BRTX',
@@ -634,14 +634,23 @@ def earningsDateCalculationAndInsertion(simple=True):
 
     dbm.dbc.execute('DELETE FROM earnings_dates') ## clear table as processing may change some old data
     totalRowsInserted = 0
-    for symbol in tqdm.tqdm(ntickers):
+    for symbol in tqdmLoopHandleWrapper(ntickers, verbose=verbose):
+        if verbose > 1: print(f'Starting {symbol}')
         dbdata = [recdotdict({"api": eapi, "earnings_date": r.earnings_date, "input_date": r.input_date, **r}) for eapi in EarningsCollectionAPI for r in dbm.getDumpEarningsDates(eapi, exchange=exchange, symbol=symbol)]
+        if verbose > 1: 
+            print(f'{len(dbdata)} rows queried from database')
+            snapshotDBCount = len(dbdata)
+            if snapshotDBCount == 0: continue
         _removeAbnormalFiscalQuarterRows(dbdata)
+        if verbose > 1:
+            removedCount = snapshotDBCount - len(dbdata)
+            if removedCount: print(f'Removed {removedCount} abnormal fiscal quarter ending rows')
         historicalRows, upcomingRows = partition(dbdata, lambda r: r.earnings_date < r.input_date)
 
         ####################################################################################
         #region - remove redundant, bad, unclear historical data
         fqeRows, otherRows = partition(historicalRows, lambda r: hasattr(r, 'fiscal_quarter_ending') and r.fiscal_quarter_ending is not None)
+        if verbose > 1: snapshotFQERowCount = len(fqeRows)
         #region - ensure uniqueness of fqe rows; considered to have higher certainty
         fqeBuckets = {}
         for r in fqeRows:
@@ -693,11 +702,18 @@ def earningsDateCalculationAndInsertion(simple=True):
                         fqeBucket.remove(r)
         #endregion
         interimData = flatten(list(fqeBuckets.values()))
+        if verbose > 1:
+            removedCount = snapshotFQERowCount - len(interimData)
+            if removedCount: print(f'Removed {removedCount} rows during FQE uniqueness section')
         #region - ensure uniqueness of other rows that are not duplicates of interim rows; lower certainty
         dups, nonDups = _dateWithinDiffParition(otherRows, interimData, 30)
+        if verbose > 1:
+            removedCount = len(dups)
+            if removedCount: print(f'Removed {removedCount} duplicate rows')
         nonDups.sort(key=lambda x: x.earnings_date)
 
         #region - attempt to condense rows that may be duplicates of the same event, date diff < 7 days
+        if verbose > 1: snapshotNonDupsCount = len(nonDups)
         dateGroupings = []
         for r in nonDups:
             datediffs = [_dateDifference(r.earnings_date, _getAverageDate(grp, key='earnings_date')) for grp in dateGroupings]
@@ -722,6 +738,9 @@ def earningsDateCalculationAndInsertion(simple=True):
                 else:
                     pass
                     ## TODO: eps_forecast, eps, surprise_percentage, event_name
+        if verbose > 1:
+            removedCount = snapshotNonDupsCount - len(nonDups)
+            if removedCount: print(f'Removed {removedCount} rows during non-duplicate condensation')
         #endregion
 
         yearBuckets = {}
@@ -792,6 +811,7 @@ def earningsDateCalculationAndInsertion(simple=True):
         #endregion
 
         #region - aberrant year determination and fixing
+        if verbose > 1: snapshotNonDupsCount = len(nonDups)
         ## some years may have abnormal numbers of earnings dates, need to check if they are valid or determine which ones are most likely to be
         aberrantYears = []
         for yr in yearBuckets.keys():
@@ -832,7 +852,9 @@ def earningsDateCalculationAndInsertion(simple=True):
                     if len(mbucket) > 1:
                         pass
             
-            pass
+            if verbose > 1:
+                removedCount = snapshotNonDupsCount - len(nonDups)
+                if removedCount: print(f'Removed {removedCount} rows from aberrant years')
         #endregion
         #endregion
         interimData.extend(nonDups)
@@ -885,17 +907,25 @@ def earningsDateCalculationAndInsertion(simple=True):
                     else:
                         ## TODO: any change to forecast may be lost by simple removal
                         pass
-
+        flattenedQrBuckets = flatten(upcomingQrBuckets)
+        if verbose > 1:
+            removedCount = len(upcomingRows) - len(flattenedQrBuckets)
+            if removedCount: print(f'Removed {removedCount} rows during upcoming data condensation')
         #endregion
-        interimData.extend(flatten(upcomingQrBuckets))
+        interimData.extend(flattenedQrBuckets)
         
-        interimData.sort(key=lambda x: x.earnings_date)
-        for r in interimData:
-            exchange = 'NASDAQ' if r.api == EarningsCollectionAPI.NASDAQ else r.exchange
-            try: 
-                dbm.insertEarningsDate(exchange, r.symbol, r.input_date, r.earnings_date)
-                totalRowsInserted += 1
-            except sqlite3.IntegrityError: pass
+        if len(interimData) > 0: 
+            interimData.sort(key=lambda x: x.earnings_date)
+            if verbose > 1: print(f'prepared to insert {len(interimData)} for {"NASDAQ" if interimData[0].api == EarningsCollectionAPI.NASDAQ else interimData[0].exchange}:{symbol}')
+            countSnapshot = int(totalRowsInserted)
+            for r in interimData:
+                exchange = 'NASDAQ' if r.api == EarningsCollectionAPI.NASDAQ else r.exchange
+                try: 
+                    dbm.insertEarningsDate(exchange, r.symbol, r.input_date, r.earnings_date)
+                    totalRowsInserted += 1
+                except sqlite3.IntegrityError: pass
+            if verbose > 1: print(f'inserted {totalRowsInserted - countSnapshot} rows')
+        elif verbose > 1: print('No data to insert')
         
         continue
 
