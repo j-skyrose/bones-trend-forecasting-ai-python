@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 
 from utils.support import convertToCamelCase, isNormalizationColumn, recdotdict
 from constants.enums import ChangeType, SeriesType, AccuracyType
-from managers._generatedDatabaseAnnotations.databaseRowObjects import networksTableColumns, networkTrainingConfigTableColumns
+from managers._generatedDatabaseAnnotations.databaseRowObjects import networksSnakeCaseTableColumns, networksCamelCaseTableColumns, networkTrainingConfigSnakeCaseTableColumns, networkTrainingConfigCamelCaseTableColumns
 from structures.normalizationColumnObj import NormalizationColumnObj
 from structures.normalizationDataHandler import NormalizationDataHandler
 
@@ -73,24 +73,23 @@ class NetworkStats:
 
         super(NetworkStats, self).__setattr__(name, value)
 
-    def _getTableData(self, columns, camelCase, dbInsertReady) -> Dict:
+    def _getTableData(self, sccolumns, cccolumns, camelCase, dbInsertReady) -> Dict:
         retdict = recdotdict({})
-        for c in columns:
-            ccc = convertToCamelCase(c)
-            if isNormalizationColumn(c):
-                val = self.normalizationData.getValue(c, orNone=True)
-            elif hasattr(self, ccc):
-                val = self[ccc].name if dbInsertReady and issubclass(self[ccc].__class__, Enum) else self[ccc]
+        for sc, cc in zip(sccolumns, cccolumns):
+            if isNormalizationColumn(sc):
+                val = self.normalizationData.getValue(sc, orNone=True)
+            elif hasattr(self, cc):
+                val = self[cc].name if dbInsertReady and issubclass(self[cc].__class__, Enum) else self[cc]
             else:
                 val = None
-            retdict[ccc if camelCase else c] = val
+            retdict[cc if camelCase else sc] = val
         return retdict
 
     def getNetworksTableData(self, camelCase=False, dbInsertReady=False):
-        return self._getTableData(networksTableColumns, camelCase, dbInsertReady)
+        return self._getTableData(networksSnakeCaseTableColumns, networksCamelCaseTableColumns, camelCase, dbInsertReady)
     
     def getNetworkTrainingConfigTableData(self, camelCase=False, dbInsertReady=False):
-        return self._getTableData(networkTrainingConfigTableColumns, camelCase, dbInsertReady)
+        return self._getTableData(networkTrainingConfigSnakeCaseTableColumns, networkTrainingConfigCamelCaseTableColumns, camelCase, dbInsertReady)
 
 if __name__ == '__main__':
     ## testing
