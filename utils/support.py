@@ -424,11 +424,11 @@ def addItemToContainerAtDictKey(dct, key, item, pushFunctionName='append', conta
         dct[key] = containerType([item])
 
 ## filter iterable into multiple lists based on some condition(s); separate, split
-def partition(iterable, predicates):
+def partition(iterable, predicates, verbose=0):
     predicates = asList(predicates)
     output = [[] for _ in range(len(predicates)+1)]
     
-    for item in iterable:
+    for item in tqdmLoopHandleWrapper(iterable, verbose=verbose, desc='Partitioning'):
         metSomePredicate = False
         for indx, predicate in enumerate(predicates):
             if predicate(item):
