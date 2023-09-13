@@ -231,6 +231,7 @@ if __name__ == '__main__':
             setSplitTuple=setSplitTuple,
             accuracyType=AccuracyType.NEGATIVE,
             minimumSetsPerSymbol=minimumSetsPerSymbol,
+            requireEarningsDates=True,
 
             maxGoogleInterestHandlers=0,
 

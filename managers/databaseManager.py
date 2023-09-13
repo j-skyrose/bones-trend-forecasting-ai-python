@@ -192,7 +192,7 @@ class DatabaseManager(Singleton):
                    ## historical data table
                    seriesType: SeriesType=None, periodDate=None, open=None, high=None, low=None, close=None, volume=None, artificial=None,
                    ## other
-                   normalizationData=None, rawStmt=False, **_) -> List[SymbolsRow]:
+                   requireEarningsDates=None, normalizationData=None, rawStmt=False, **_) -> List[SymbolsRow]:
         kwargs = {}
         for k,v in locals().items():
             k = convertToSnakeCase(k)
@@ -245,9 +245,14 @@ class DatabaseManager(Singleton):
                     adds.append(f' ? {OperatorDict.LESSTHANOREQUAL.sqlsymbol} h.{nc.columnName} ')
                     args.append(nc.value)
 
+        if requireEarningsDates:
+            adds.append('s.exchange||s.symbol IN (SELECT DISTINCT exchange||symbol FROM earnings_dates)')
+
+        ## construct WHERE portion
         if adds:
             stmt += ' WHERE '
             stmt += ' AND '.join(adds)
+
         ## get only distinct symbols if query includes looking at historical table data
         if includingHistorical:
             stmt += f' GROUP BY {",".join([f"s.{c}" for c in symbolsSnakeCaseTableColumns])} '
