@@ -18,7 +18,7 @@ from argparse import ArgumentError
 
 from globalConfig import config as gconfig
 from constants.enums import DataFormType, Direction, NormalizationGroupings, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetType, DataManagerType, IndicatorType
-from utils.support import asList, generateFibonacciSequence, getAdjustedSlidingWindowPercentage, recdotdict, recdotlist, shortc, multicore_poolIMap, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
+from utils.support import asList, generateFibonacciSequence, getAdjustedSlidingWindowPercentage, partition, recdotlist, shortc, multicore_poolIMap, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.other import getInstancesByClass, getMaxIndicatorPeriod, maxQuarters, getIndicatorPeriod, addAdditionalDefaultKWArgs
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
 from constants.values import unusableSymbols, indicatorsKey
@@ -630,7 +630,9 @@ class DataManager():
                     totalInstanceReduction += len(removedDates)
 
                     ## remove indexes from available selections
-                    availableIndexes[oupclass][:] = [i for i in availableIndexes[oupclass] if h.data[i].period_date not in removedDates]
+                    newIndexes, removedIndexes = partition(availableIndexes[oupclass], lambda i: h.data[i].period_date not in removedDates)
+                    availableIndexes[oupclass][:] = newIndexes
+                    h.addPrunedIndex(removedIndexes)
                     
                     if verbose>=2: printInstanceCounts(before=False)
 
@@ -940,10 +942,10 @@ class DataManager():
                 self.selectedInstances = self.selectedInstances[:self.setCount]
 
             ## determine window size for iterating through all sets            
-            psints, nsints = getInstancesByClass(self.selectedInstances)
-            if verbose>=2: print('Class split ratio:', len(psints) / len(self.selectedInstances))
+            positiveSelectedInstances, negativeSelectedInstances = getInstancesByClass(self.selectedInstances)
+            if verbose>=2: print('Class split ratio:', len(positiveSelectedInstances) / len(self.selectedInstances))
             if not selectAll:
-                if len(psints) / len(self.selectedInstances) < gconfig.sets.minimumClassSplitRatio: raise ValueError('Positive to negative set ratio below minimum threshold')
+                if len(positiveSelectedInstances) / len(self.selectedInstances) < gconfig.sets.minimumClassSplitRatio: raise ValueError('Positive to negative set ratio below minimum threshold')
                 self.setsSlidingWindowPercentage = getAdjustedSlidingWindowPercentage(len(self.selectedInstances), setCount) 
                 if verbose>=2: print('Adjusted sets window size from', setCount, 'to', int(len(self.selectedInstances)*self.setsSlidingWindowPercentage))
 
@@ -976,28 +978,28 @@ class DataManager():
                     print(len(self.unselectedInstances), 'instances available for remaining selection')
 
             ## check balance
-            psints, nsints = getInstancesByClass(self.selectedInstances)
-            puints, nuints = getInstancesByClass(self.unselectedInstances)
+            positiveSelectedInstances, negativeSelectedInstances = getInstancesByClass(self.selectedInstances)
+            positiveUnselectedInstances, negativeUnselectedInstances = getInstancesByClass(self.unselectedInstances)
             if verbose>=2: print('sel rem', len(self.selectedInstances), setCount, len(self.selectedInstances) < setCount)
             # select remaining
             if len(self.selectedInstances) < setCount:
-                pusamplesize = int(min(len(puints), setCount * gconfig.sets.positiveSplitRatio - len(psints)) if setCount / 2 - len(psints) > 0 else len(puints))
-                nusamplesize = int(min(len(nuints), setCount - len(self.selectedInstances)) if setCount - len(self.selectedInstances) > 0 else len(nuints))
+                positiveUnselectedSampleSize = min(max(math.ceil(setCount * gconfig.sets.positiveSplitRatio) - len(positiveSelectedInstances), 0), len(positiveUnselectedInstances))
+                negativeUnselectedSampleSize = min(max(math.ceil(setCount * (1-gconfig.sets.positiveSplitRatio)) - len(negativeSelectedInstances), 0), len(negativeUnselectedInstances))
                 if verbose>=2: 
-                    print('Positive selected instances', len(psints))
-                    print('Negative selected instances', len(nsints))
-                    print('Available positive instances', len(puints))
-                    print('Available negative instances', len(nuints))
-                    print('Positive sample size', pusamplesize)
-                    print('Negative sample size', nusamplesize)
+                    print('Positive selected instances', len(positiveSelectedInstances))
+                    print('Negative selected instances', len(negativeSelectedInstances))
+                    print('Available positive instances', len(positiveUnselectedInstances))
+                    print('Available negative instances', len(negativeUnselectedInstances))
+                    print('Positive sample size', positiveUnselectedSampleSize)
+                    print('Negative sample size', negativeUnselectedSampleSize)
 
-                self.selectedInstances.extend(random.sample(puints, pusamplesize))
-                self.selectedInstances.extend(random.sample(nuints, nusamplesize))
+                self.selectedInstances.extend(random.sample(positiveUnselectedInstances, positiveUnselectedSampleSize))
+                self.selectedInstances.extend(random.sample(negativeUnselectedInstances, negativeUnselectedSampleSize))
             else:
                 print('Warning: setCount too low for minimum sets per symbol')
             if verbose>=2:
-                psints, nsints = getInstancesByClass(self.selectedInstances)
-                print('All instances selected\nFinal balance:', len(psints), '/', len(nsints))
+                positiveSelectedInstances, negativeSelectedInstances = getInstancesByClass(self.selectedInstances)
+                print('All instances selected\nFinal balance:', len(positiveSelectedInstances), '/', len(negativeSelectedInstances))
 
             if len(self.selectedInstances) < setCount: raise IndexError('Not enough sets available: %d vs %d' % (len(self.selectedInstances), setCount))
             ## instance selection done

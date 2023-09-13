@@ -15,7 +15,7 @@ from constants.values import stockOffset
 from constants.enums import IndicatorType, SeriesType
 from structures.normalizationDataHandler import NormalizationDataHandler
 from utils.types import TickerKeyType
-from utils.support import GetMemoryUsage, recdotdict, recdotobj, shortc
+from utils.support import GetMemoryUsage, asList, recdotdict, recdotobj, shortc
 from utils.other import normalizeStockData, denormalizeStockData, getIndicatorPeriod
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends
 
@@ -53,6 +53,7 @@ class StockDataHandler(GetMemoryUsage):
         lowerLimit = precedingRange + self.maxIndicatorPeriod
         followingRange = shortc(followingRange, self.followingRange)
 
+        self.prunedIndexes = []
         self.selections = [x for x in range(len(self.data)) if lowerLimit <= x and x < len(self.data) - followingRange]
         return self.selections
 
@@ -82,13 +83,17 @@ class StockDataHandler(GetMemoryUsage):
 
         if self.shouldNormalize:
             self.normalize()
-        if self.precedingRange and self.followingRange:
+        if self.precedingRange is not None and self.followingRange is not None:
             self.determineSelections(self.precedingRange, self.followingRange)
         else:
+            self.prunedIndexes = []
             self.selections = []
 
+    def addPrunedIndex(self, indxArg):
+        self.prunedIndexes.extend(asList(indxArg))
+
     def getAvailableSelections(self):
-        return self.selections
+        return [s for s in self.selections if s not in self.prunedIndexes]
 
     def getPrecedingSet(self, index):
         return self.data[index-self.precedingRange:index]
