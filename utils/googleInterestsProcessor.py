@@ -22,7 +22,7 @@ dbm: DatabaseManager = DatabaseManager()
 
 
 def processRawGoogleInterests(exchange=None, symbol=None, verbose=1):
-    '''pulls daily/weekly/monthly data from google_interests_raw then calculates and inserts overall relative interest for each day that has stock data into google_interests table. Essentially rebuilds all data in google_interests table every execution as backfactor modification may be performed'''
+    '''pulls daily/weekly/monthly data from google_interests_d then calculates and inserts overall relative interest for each day that has stock data into google_interests_c table. Essentially rebuilds all data in google_interests_c table every execution as backfactor modification may be performed'''
     
     config = SavedStateManager()
     if config.get('google', 'lastprocessedrowid') == dbm.getMaxRowID():
@@ -32,7 +32,7 @@ def processRawGoogleInterests(exchange=None, symbol=None, verbose=1):
     if exchange and symbol:
         symbolList = [recdotdict({'exchange': exchange, 'symbol': symbol})]
     else:
-        # symbolList = dbm.dbc.execute('SELECT DISTINCT exchange, symbol FROM google_interests_raw').fetchall()
+        # symbolList = dbm.dbc.execute('SELECT DISTINCT exchange, symbol FROM google_interests_d').fetchall()
         symbolList = dbm.getSymbols(exchange=exchange, googleTopicId=SQLHelpers.NOTNULL)
 
     ddh: DailyDataHandler
@@ -134,6 +134,6 @@ def processRawGoogleInterests(exchange=None, symbol=None, verbose=1):
     dbm.commit()
 
 if __name__ == '__main__':
-    # print(dbm.dbc.execute('SELECT MAX(rowid) FROM google_interests_raw').fetchone()['MAX(rowid)'])
+    # print(dbm.dbc.execute('SELECT MAX(rowid) FROM google_interests_d').fetchone()['MAX(rowid)'])
     # processRawGoogleInterests('NASDAQ','VTSI')
     processRawGoogleInterests()

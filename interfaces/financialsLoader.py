@@ -75,7 +75,7 @@ def loadEDGARFinancialDumps():
     ## may need some optimizing, could take almost 2 hours to run
     dbm.dbc.execute(f'''INSERT OR IGNORE INTO vwtb_edgar_financial_nums
         SELECT DISTINCT s.exchange, s.symbol, n.tag, n.ddate, n.qtrs, n.uom, n.value, n.duplicate 
-            FROM {dbm.getTableString("dump_edgar_num")} n JOIN {dbm.getTableString("dump_edgar_sub")} s, {dbm.getTableString("dump_edgar_tag")} t ON n.adsh = s.adsh AND n.tag = t.tag AND n.version = t.version
+            FROM {dbm.getTableString("dump_edgar_num")} n JOIN {dbm.getTableString("dump_edgar_sub")} s, {dbm.getTableString("financial_stmts_tag_data_set_edgar_d")} t ON n.adsh = s.adsh AND n.tag = t.tag AND n.version = t.version
             WHERE n.coreg='' AND t.custom = 0 AND t.abstract = 0 AND t.version LIKE \'%us-gaap%\''''
     )
 

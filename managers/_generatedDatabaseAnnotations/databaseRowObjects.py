@@ -25,14 +25,6 @@ class AssetTypesRow():
 		self.type = typeValue
 		self.description = descriptionValue
 
-## TABLE: sqlite_sequence ######################################
-sqliteSequenceSnakeCaseTableColumns = ['name', 'seq']
-sqliteSequenceCamelCaseTableColumns = ['name', 'seq']
-class SqliteSequenceRow():
-	def __init__(self, nameValue, seqValue):
-		self.name = nameValue
-		self.seq = seqValue
-
 ## TABLE: cboe_volatility_index ######################################
 cboeVolatilityIndexSnakeCaseTableColumns = ['date', 'open', 'high', 'low', 'close', 'artificial']
 cboeVolatilityIndexCamelCaseTableColumns = ['date', 'open', 'high', 'low', 'close', 'artificial']
@@ -189,44 +181,6 @@ class LastUpdatesRow():
 		self.api = apiValue
 		self.date = dateValue
 
-## TABLE: google_interests ######################################
-googleInterestsSnakeCaseTableColumns = ['exchange', 'symbol', 'date', 'relative_interest']
-googleInterestsCamelCaseTableColumns = ['exchange', 'symbol', 'date', 'relativeInterest']
-class GoogleInterestsRow():
-	def __init__(self, exchangeValue: str, symbolValue: str, dateValue: str, relativeInterestValue: int):
-		self.exchange = exchangeValue
-		self.symbol = symbolValue
-		self.date = dateValue
-		self.relativeInterest = relativeInterestValue
-
-## TABLE: historical_calculated_technical_indicator_data ######################################
-historicalCalculatedTechnicalIndicatorDataSnakeCaseTableColumns = ['exchange', 'symbol', 'date_type', 'date', 'indicator', 'period', 'value']
-historicalCalculatedTechnicalIndicatorDataCamelCaseTableColumns = ['exchange', 'symbol', 'dateType', 'date', 'indicator', 'period', 'value']
-class HistoricalCalculatedTechnicalIndicatorDataRow():
-	def __init__(self, exchangeValue: str, symbolValue: str, dateTypeValue: str, dateValue: str, indicatorValue: str, periodValue: float, valueValue: float):
-		self.exchange = exchangeValue
-		self.symbol = symbolValue
-		self.dateType = dateTypeValue
-		self.date = dateValue
-		self.indicator = indicatorValue
-		self.period = periodValue
-		self.value = valueValue
-
-## TABLE: historical_vector_similarity_data ######################################
-historicalVectorSimilarityDataSnakeCaseTableColumns = ['exchange', 'symbol', 'date_type', 'date', 'vector_class', 'preceding_range', 'following_range', 'change_threshold', 'value']
-historicalVectorSimilarityDataCamelCaseTableColumns = ['exchange', 'symbol', 'dateType', 'date', 'vectorClass', 'precedingRange', 'followingRange', 'changeThreshold', 'value']
-class HistoricalVectorSimilarityDataRow():
-	def __init__(self, exchangeValue: str, symbolValue: str, dateTypeValue: str, dateValue: str, vectorClassValue: str, precedingRangeValue: float, followingRangeValue: float, changeThresholdValue: float, valueValue: float):
-		self.exchange = exchangeValue
-		self.symbol = symbolValue
-		self.dateType = dateTypeValue
-		self.date = dateValue
-		self.vectorClass = vectorClassValue
-		self.precedingRange = precedingRangeValue
-		self.followingRange = followingRangeValue
-		self.changeThreshold = changeThresholdValue
-		self.value = valueValue
-
 ## TABLE: networks_temp ######################################
 networksTempSnakeCaseTableColumns = ['id', 'factoryId', 'accuracyType', 'overallAccuracy', 'negativeAccuracy', 'positiveAccuracy', 'changeThreshold', 'precedingRange', 'followingRange', 'seriesType', 'highMax', 'volumeMax', 'epochs']
 networksTempCamelCaseTableColumns = ['id', 'factoryId', 'accuracyType', 'overallAccuracy', 'negativeAccuracy', 'positiveAccuracy', 'changeThreshold', 'precedingRange', 'followingRange', 'seriesType', 'highMax', 'volumeMax', 'epochs']
@@ -303,45 +257,67 @@ class AccuracyLastUpdatesRow():
 		self.lastExchange = lastExchangeValue
 		self.lastSymbol = lastSymbolValue
 
-## TABLE: earnings_dates ######################################
-earningsDatesSnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'earnings_date']
-earningsDatesCamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'earningsDate']
-class EarningsDatesRow():
+## TABLE: technical_indicator_data_c ######################################
+technicalIndicatorDataCSnakeCaseTableColumns = ['exchange', 'symbol', 'date_type', 'date', 'indicator', 'period', 'value']
+technicalIndicatorDataCCamelCaseTableColumns = ['exchange', 'symbol', 'dateType', 'date', 'indicator', 'period', 'value']
+class TechnicalIndicatorDataCRow():
+	def __init__(self, exchangeValue: str, symbolValue: str, dateTypeValue: str, dateValue: str, indicatorValue: str, periodValue: float, valueValue: float):
+		self.exchange = exchangeValue
+		self.symbol = symbolValue
+		self.dateType = dateTypeValue
+		self.date = dateValue
+		self.indicator = indicatorValue
+		self.period = periodValue
+		self.value = valueValue
+
+## TABLE: earnings_dates_c ######################################
+earningsDatesCSnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'earnings_date']
+earningsDatesCCamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'earningsDate']
+class EarningsDatesCRow():
 	def __init__(self, exchangeValue: str, symbolValue: str, inputDateValue: str, earningsDateValue: str):
 		self.exchange = exchangeValue
 		self.symbol = symbolValue
 		self.inputDate = inputDateValue
 		self.earningsDate = earningsDateValue
 
-## TABLE: staging_symbol_info ######################################
-stagingSymbolInfoSnakeCaseTableColumns = ['exchange', 'symbol', 'migrated', 'founded', 'ipo', 'sector', 'polygon_sector', 'fmp_sector', 'alphavantage_sector', 'polygon_industry', 'fmp_industry', 'alphavantage_industry', 'polygon_description', 'fmp_description', 'alphavantage_description', 'polygon_ipo', 'fmp_ipo', 'alphavantage_assettype', 'fmp_isetf']
-stagingSymbolInfoCamelCaseTableColumns = ['exchange', 'symbol', 'migrated', 'founded', 'ipo', 'sector', 'polygonSector', 'fmpSector', 'alphavantageSector', 'polygonIndustry', 'fmpIndustry', 'alphavantageIndustry', 'polygonDescription', 'fmpDescription', 'alphavantageDescription', 'polygonIpo', 'fmpIpo', 'alphavantageAssettype', 'fmpIsetf']
-class StagingSymbolInfoRow():
-	def __init__(self, exchangeValue: str, symbolValue: str, migratedValue: bool, foundedValue: str, ipoValue: str, sectorValue: str, polygonSectorValue: str, fmpSectorValue: str, alphavantageSectorValue: str, polygonIndustryValue: str, fmpIndustryValue: str, alphavantageIndustryValue: str, polygonDescriptionValue: str, fmpDescriptionValue: str, alphavantageDescriptionValue: str, polygonIpoValue: str, fmpIpoValue: str, alphavantageAssettypeValue: str, fmpIsetfValue: bool):
+## TABLE: google_interests_c ######################################
+googleInterestsCSnakeCaseTableColumns = ['exchange', 'symbol', 'date', 'relative_interest']
+googleInterestsCCamelCaseTableColumns = ['exchange', 'symbol', 'date', 'relativeInterest']
+class GoogleInterestsCRow():
+	def __init__(self, exchangeValue: str, symbolValue: str, dateValue: str, relativeInterestValue: int):
 		self.exchange = exchangeValue
 		self.symbol = symbolValue
-		self.migrated = migratedValue
-		self.founded = foundedValue
-		self.ipo = ipoValue
-		self.sector = sectorValue
-		self.polygonSector = polygonSectorValue
-		self.fmpSector = fmpSectorValue
-		self.alphavantageSector = alphavantageSectorValue
-		self.polygonIndustry = polygonIndustryValue
-		self.fmpIndustry = fmpIndustryValue
-		self.alphavantageIndustry = alphavantageIndustryValue
-		self.polygonDescription = polygonDescriptionValue
-		self.fmpDescription = fmpDescriptionValue
-		self.alphavantageDescription = alphavantageDescriptionValue
-		self.polygonIpo = polygonIpoValue
-		self.fmpIpo = fmpIpoValue
-		self.alphavantageAssettype = alphavantageAssettypeValue
-		self.fmpIsetf = fmpIsetfValue
+		self.date = dateValue
+		self.relativeInterest = relativeInterestValue
 
-## TABLE: dump_symbol_info ######################################
-dumpSymbolInfoSnakeCaseTableColumns = ['exchange', 'symbol', 'alphavantage', 'fmp', 'polygon', 'polygon_logo', 'polygon_listdate', 'polygon_cik', 'polygon_bloomberg', 'polygon_figi', 'polygon_lei', 'polygon_sic', 'polygon_country', 'polygon_industry', 'polygon_sector', 'polygon_marketcap', 'polygon_employees', 'polygon_phone', 'polygon_ceo', 'polygon_url', 'polygon_description', 'polygon_name', 'polygon_exchangeSymbol', 'polygon_hq_address', 'polygon_hq_state', 'polygon_hq_country', 'polygon_type', 'polygon_updated', 'polygon_tags', 'polygon_similar', 'polygon_active']
-dumpSymbolInfoCamelCaseTableColumns = ['exchange', 'symbol', 'alphavantage', 'fmp', 'polygon', 'polygonLogo', 'polygonListdate', 'polygonCik', 'polygonBloomberg', 'polygonFigi', 'polygonLei', 'polygonSic', 'polygonCountry', 'polygonIndustry', 'polygonSector', 'polygonMarketcap', 'polygonEmployees', 'polygonPhone', 'polygonCeo', 'polygonUrl', 'polygonDescription', 'polygonName', 'polygonExchangeSymbol', 'polygonHqAddress', 'polygonHqState', 'polygonHqCountry', 'polygonType', 'polygonUpdated', 'polygonTags', 'polygonSimilar', 'polygonActive']
-class DumpSymbolInfoRow():
+## TABLE: vector_similarities_c ######################################
+vectorSimilaritiesCSnakeCaseTableColumns = ['exchange', 'symbol', 'date_type', 'date', 'vector_class', 'preceding_range', 'following_range', 'change_threshold', 'value']
+vectorSimilaritiesCCamelCaseTableColumns = ['exchange', 'symbol', 'dateType', 'date', 'vectorClass', 'precedingRange', 'followingRange', 'changeThreshold', 'value']
+class VectorSimilaritiesCRow():
+	def __init__(self, exchangeValue: str, symbolValue: str, dateTypeValue: str, dateValue: str, vectorClassValue: str, precedingRangeValue: float, followingRangeValue: float, changeThresholdValue: float, valueValue: float):
+		self.exchange = exchangeValue
+		self.symbol = symbolValue
+		self.dateType = dateTypeValue
+		self.date = dateValue
+		self.vectorClass = vectorClassValue
+		self.precedingRange = precedingRangeValue
+		self.followingRange = followingRangeValue
+		self.changeThreshold = changeThresholdValue
+		self.value = valueValue
+
+## TABLE: sqlite_stat1 ######################################
+sqliteStat1SnakeCaseTableColumns = ['tbl', 'idx', 'stat']
+sqliteStat1CamelCaseTableColumns = ['tbl', 'idx', 'stat']
+class SqliteStat1Row():
+	def __init__(self, tblValue, idxValue, statValue):
+		self.tbl = tblValue
+		self.idx = idxValue
+		self.stat = statValue
+
+## TABLE: symbol_info_polygon_d ######################################
+symbolInfoPolygonDSnakeCaseTableColumns = ['exchange', 'symbol', 'alphavantage', 'fmp', 'polygon', 'polygon_logo', 'polygon_listdate', 'polygon_cik', 'polygon_bloomberg', 'polygon_figi', 'polygon_lei', 'polygon_sic', 'polygon_country', 'polygon_industry', 'polygon_sector', 'polygon_marketcap', 'polygon_employees', 'polygon_phone', 'polygon_ceo', 'polygon_url', 'polygon_description', 'polygon_name', 'polygon_exchangeSymbol', 'polygon_hq_address', 'polygon_hq_state', 'polygon_hq_country', 'polygon_type', 'polygon_updated', 'polygon_tags', 'polygon_similar', 'polygon_active']
+symbolInfoPolygonDCamelCaseTableColumns = ['exchange', 'symbol', 'alphavantage', 'fmp', 'polygon', 'polygonLogo', 'polygonListdate', 'polygonCik', 'polygonBloomberg', 'polygonFigi', 'polygonLei', 'polygonSic', 'polygonCountry', 'polygonIndustry', 'polygonSector', 'polygonMarketcap', 'polygonEmployees', 'polygonPhone', 'polygonCeo', 'polygonUrl', 'polygonDescription', 'polygonName', 'polygonExchangeSymbol', 'polygonHqAddress', 'polygonHqState', 'polygonHqCountry', 'polygonType', 'polygonUpdated', 'polygonTags', 'polygonSimilar', 'polygonActive']
+class SymbolInfoPolygonDRow():
 	def __init__(self, exchangeValue: str, symbolValue: str, alphavantageValue: int, fmpValue: int, polygonValue: int, polygonLogoValue: str, polygonListdateValue: str, polygonCikValue: str, polygonBloombergValue: str, polygonFigiValue: str, polygonLeiValue: str, polygonSicValue: str, polygonCountryValue: str, polygonIndustryValue: str, polygonSectorValue: str, polygonMarketcapValue: str, polygonEmployeesValue: str, polygonPhoneValue: str, polygonCeoValue: str, polygonUrlValue: str, polygonDescriptionValue: str, polygonNameValue: str, polygonExchangeSymbolValue: str, polygonHqAddressValue: str, polygonHqStateValue: str, polygonHqCountryValue: str, polygonTypeValue: str, polygonUpdatedValue: str, polygonTagsValue: str, polygonSimilarValue: str, polygonActiveValue: str):
 		self.exchange = exchangeValue
 		self.symbol = symbolValue
@@ -375,10 +351,10 @@ class DumpSymbolInfoRow():
 		self.polygonSimilar = polygonSimilarValue
 		self.polygonActive = polygonActiveValue
 
-## TABLE: dump_edgar_tag ######################################
-dumpEdgarTagSnakeCaseTableColumns = ['tag', 'version', 'custom', 'abstract', 'datatype', 'iord', 'crdr', 'tlabel', 'doc']
-dumpEdgarTagCamelCaseTableColumns = ['tag', 'version', 'custom', 'abstract', 'datatype', 'iord', 'crdr', 'tlabel', 'doc']
-class DumpEdgarTagRow():
+## TABLE: financial_stmts_tag_data_set_edgar_d ######################################
+financialStmtsTagDataSetEdgarDSnakeCaseTableColumns = ['tag', 'version', 'custom', 'abstract', 'datatype', 'iord', 'crdr', 'tlabel', 'doc']
+financialStmtsTagDataSetEdgarDCamelCaseTableColumns = ['tag', 'version', 'custom', 'abstract', 'datatype', 'iord', 'crdr', 'tlabel', 'doc']
+class FinancialStmtsTagDataSetEdgarDRow():
 	def __init__(self, tagValue: str, versionValue: str, customValue: bool, abstractValue: bool, datatypeValue: str, iordValue: str, crdrValue: str, tlabelValue: str, docValue: str):
 		self.tag = tagValue
 		self.version = versionValue
@@ -390,10 +366,10 @@ class DumpEdgarTagRow():
 		self.tlabel = tlabelValue
 		self.doc = docValue
 
-## TABLE: dump_edgar_sub ######################################
-dumpEdgarSubSnakeCaseTableColumns = ['exchange', 'symbol', 'adsh', 'cik', 'name', 'sic', 'countryba', 'stprba', 'cityba', 'zipba', 'bas1', 'bas2', 'baph', 'countryma', 'stprma', 'cityma', 'zipma', 'mas1', 'mas2', 'countryinc', 'stprinc', 'ein', 'former', 'changed', 'afs', 'wksi', 'fye', 'form', 'period', 'fy', 'fp', 'filed', 'accepted', 'prevrpt', 'detail', 'instance', 'nciks', 'aciks']
-dumpEdgarSubCamelCaseTableColumns = ['exchange', 'symbol', 'adsh', 'cik', 'name', 'sic', 'countryba', 'stprba', 'cityba', 'zipba', 'bas1', 'bas2', 'baph', 'countryma', 'stprma', 'cityma', 'zipma', 'mas1', 'mas2', 'countryinc', 'stprinc', 'ein', 'former', 'changed', 'afs', 'wksi', 'fye', 'form', 'period', 'fy', 'fp', 'filed', 'accepted', 'prevrpt', 'detail', 'instance', 'nciks', 'aciks']
-class DumpEdgarSubRow():
+## TABLE: financial_stmts_sub_data_set_edgar_d ######################################
+financialStmtsSubDataSetEdgarDSnakeCaseTableColumns = ['exchange', 'symbol', 'adsh', 'cik', 'name', 'sic', 'countryba', 'stprba', 'cityba', 'zipba', 'bas1', 'bas2', 'baph', 'countryma', 'stprma', 'cityma', 'zipma', 'mas1', 'mas2', 'countryinc', 'stprinc', 'ein', 'former', 'changed', 'afs', 'wksi', 'fye', 'form', 'period', 'fy', 'fp', 'filed', 'accepted', 'prevrpt', 'detail', 'instance', 'nciks', 'aciks']
+financialStmtsSubDataSetEdgarDCamelCaseTableColumns = ['exchange', 'symbol', 'adsh', 'cik', 'name', 'sic', 'countryba', 'stprba', 'cityba', 'zipba', 'bas1', 'bas2', 'baph', 'countryma', 'stprma', 'cityma', 'zipma', 'mas1', 'mas2', 'countryinc', 'stprinc', 'ein', 'former', 'changed', 'afs', 'wksi', 'fye', 'form', 'period', 'fy', 'fp', 'filed', 'accepted', 'prevrpt', 'detail', 'instance', 'nciks', 'aciks']
+class FinancialStmtsSubDataSetEdgarDRow():
 	def __init__(self, exchangeValue: str, symbolValue: str, adshValue: str, cikValue: str, nameValue: str, sicValue: str, countrybaValue: str, stprbaValue: str, citybaValue: str, zipbaValue: str, bas1Value: str, bas2Value: str, baphValue: str, countrymaValue: str, stprmaValue: str, citymaValue: str, zipmaValue: str, mas1Value: str, mas2Value: str, countryincValue: str, stprincValue: str, einValue: str, formerValue: str, changedValue: str, afsValue: str, wksiValue: bool, fyeValue: str, formValue: str, periodValue: str, fyValue: str, fpValue: str, filedValue: str, acceptedValue: str, prevrptValue: bool, detailValue: bool, instanceValue: str, nciksValue: str, aciksValue: str):
 		self.exchange = exchangeValue
 		self.symbol = symbolValue
@@ -434,18 +410,18 @@ class DumpEdgarSubRow():
 		self.nciks = nciksValue
 		self.aciks = aciksValue
 
-## TABLE: dump_edgar_loaded ######################################
-dumpEdgarLoadedSnakeCaseTableColumns = ['type', 'period']
-dumpEdgarLoadedCamelCaseTableColumns = ['type', 'period']
-class DumpEdgarLoadedRow():
+## TABLE: financial_stmts_loaded_periods_d ######################################
+financialStmtsLoadedPeriodsDSnakeCaseTableColumns = ['type', 'period']
+financialStmtsLoadedPeriodsDCamelCaseTableColumns = ['type', 'period']
+class FinancialStmtsLoadedPeriodsDRow():
 	def __init__(self, typeValue: str, periodValue: str):
 		self.type = typeValue
 		self.period = periodValue
 
-## TABLE: dump_edgar_num ######################################
-dumpEdgarNumSnakeCaseTableColumns = ['adsh', 'tag', 'version', 'coreg', 'ddate', 'qtrs', 'uom', 'value', 'footnote', 'duplicate']
-dumpEdgarNumCamelCaseTableColumns = ['adsh', 'tag', 'version', 'coreg', 'ddate', 'qtrs', 'uom', 'value', 'footnote', 'duplicate']
-class DumpEdgarNumRow():
+## TABLE: financial_stmts_num_data_set_edgar_d ######################################
+financialStmtsNumDataSetEdgarDSnakeCaseTableColumns = ['adsh', 'tag', 'version', 'coreg', 'ddate', 'qtrs', 'uom', 'value', 'footnote', 'duplicate']
+financialStmtsNumDataSetEdgarDCamelCaseTableColumns = ['adsh', 'tag', 'version', 'coreg', 'ddate', 'qtrs', 'uom', 'value', 'footnote', 'duplicate']
+class FinancialStmtsNumDataSetEdgarDRow():
 	def __init__(self, adshValue: str, tagValue: str, versionValue: str, coregValue: str, ddateValue: str, qtrsValue: str, uomValue: str, valueValue: float, footnoteValue: str, duplicateValue: bool):
 		self.adsh = adshValue
 		self.tag = tagValue
@@ -458,19 +434,10 @@ class DumpEdgarNumRow():
 		self.footnote = footnoteValue
 		self.duplicate = duplicateValue
 
-## TABLE: sqlite_stat1 ######################################
-sqliteStat1SnakeCaseTableColumns = ['tbl', 'idx', 'stat']
-sqliteStat1CamelCaseTableColumns = ['tbl', 'idx', 'stat']
-class SqliteStat1Row():
-	def __init__(self, tblValue, idxValue, statValue):
-		self.tbl = tblValue
-		self.idx = idxValue
-		self.stat = statValue
-
-## TABLE: dump_stock_splits_polygon ######################################
-dumpStockSplitsPolygonSnakeCaseTableColumns = ['exchange', 'symbol', 'date', 'split_from', 'split_to']
-dumpStockSplitsPolygonCamelCaseTableColumns = ['exchange', 'symbol', 'date', 'splitFrom', 'splitTo']
-class DumpStockSplitsPolygonRow():
+## TABLE: stock_splits_polygon_d ######################################
+stockSplitsPolygonDSnakeCaseTableColumns = ['exchange', 'symbol', 'date', 'split_from', 'split_to']
+stockSplitsPolygonDCamelCaseTableColumns = ['exchange', 'symbol', 'date', 'splitFrom', 'splitTo']
+class StockSplitsPolygonDRow():
 	def __init__(self, exchangeValue: str, symbolValue: str, dateValue: str, splitFromValue: float, splitToValue: float):
 		self.exchange = exchangeValue
 		self.symbol = symbolValue
@@ -478,10 +445,10 @@ class DumpStockSplitsPolygonRow():
 		self.splitFrom = splitFromValue
 		self.splitTo = splitToValue
 
-## TABLE: google_interests_raw ######################################
-googleInterestsRawSnakeCaseTableColumns = ['exchange', 'symbol', 'date', 'type', 'stream', 'relative_interest', 'artificial']
-googleInterestsRawCamelCaseTableColumns = ['exchange', 'symbol', 'date', 'type', 'stream', 'relativeInterest', 'artificial']
-class GoogleInterestsRawRow():
+## TABLE: google_interests_d ######################################
+googleInterestsDSnakeCaseTableColumns = ['exchange', 'symbol', 'date', 'type', 'stream', 'relative_interest', 'artificial']
+googleInterestsDCamelCaseTableColumns = ['exchange', 'symbol', 'date', 'type', 'stream', 'relativeInterest', 'artificial']
+class GoogleInterestsDRow():
 	def __init__(self, exchangeValue: str, symbolValue: str, dateValue: str, typeValue: str, streamValue: int, relativeInterestValue: int, artificialValue: bool):
 		self.exchange = exchangeValue
 		self.symbol = symbolValue
@@ -491,10 +458,10 @@ class GoogleInterestsRawRow():
 		self.relativeInterest = relativeInterestValue
 		self.artificial = artificialValue
 
-## TABLE: staging_financials ######################################
-stagingFinancialsSnakeCaseTableColumns = ['exchange', 'symbol', 'period', 'calendarDate', 'polygon_reportPeriod', 'polygon_updated', 'polygon_dateKey', 'polygon_accumulatedOtherComprehensiveIncome', 'polygon_assets', 'polygon_assetsAverage', 'polygon_assetsCurrent', 'polygon_assetsNonCurrent', 'polygon_assetTurnover', 'polygon_bookValuePerShare', 'polygon_capitalExpenditure', 'polygon_cashAndEquivalents', 'polygon_cashAndEquivalentsUSD', 'polygon_costOfRevenue', 'polygon_consolidatedIncome', 'polygon_currentRatio', 'polygon_debtToEquityRatio', 'polygon_debt', 'polygon_debtCurrent', 'polygon_debtNonCurrent', 'polygon_debtUSD', 'polygon_deferredRevenue', 'polygon_depreciationAmortizationAndAccretion', 'polygon_deposits', 'polygon_dividendYield', 'polygon_dividendsPerBasicCommonShare', 'polygon_earningBeforeInterestTaxes', 'polygon_earningsBeforeInterestTaxesDepreciationAmortization', 'polygon_EBITDAMargin', 'polygon_earningsBeforeInterestTaxesDepreciationAmortizationUSD', 'polygon_earningBeforeInterestTaxesUSD', 'polygon_earningsBeforeTax', 'polygon_earningsPerBasicShare', 'polygon_earningsPerDilutedShare', 'polygon_earningsPerBasicShareUSD', 'polygon_shareholdersEquity', 'polygon_averageEquity', 'polygon_shareholdersEquityUSD', 'polygon_enterpriseValue', 'polygon_enterpriseValueOverEBIT', 'polygon_enterpriseValueOverEBITDA', 'polygon_freeCashFlow', 'polygon_freeCashFlowPerShare', 'polygon_foreignCurrencyUSDExchangeRate', 'polygon_grossProfit', 'polygon_grossMargin', 'polygon_goodwillAndIntangibleAssets', 'polygon_interestExpense', 'polygon_investedCapital', 'polygon_investedCapitalAverage', 'polygon_inventory', 'polygon_investments', 'polygon_investmentsCurrent', 'polygon_investmentsNonCurrent', 'polygon_totalLiabilities', 'polygon_currentLiabilities', 'polygon_liabilitiesNonCurrent', 'polygon_marketCapitalization', 'polygon_netCashFlow', 'polygon_netCashFlowBusinessAcquisitionsDisposals', 'polygon_issuanceEquityShares', 'polygon_issuanceDebtSecurities', 'polygon_paymentDividendsOtherCashDistributions', 'polygon_netCashFlowFromFinancing', 'polygon_netCashFlowFromInvesting', 'polygon_netCashFlowInvestmentAcquisitionsDisposals', 'polygon_netCashFlowFromOperations', 'polygon_effectOfExchangeRateChangesOnCash', 'polygon_netIncome', 'polygon_netIncomeCommonStock', 'polygon_netIncomeCommonStockUSD', 'polygon_netLossIncomeFromDiscontinuedOperations', 'polygon_netIncomeToNonControllingInterests', 'polygon_profitMargin', 'polygon_operatingExpenses', 'polygon_operatingIncome', 'polygon_tradeAndNonTradePayables', 'polygon_payoutRatio', 'polygon_priceToBookValue', 'polygon_priceEarnings', 'polygon_priceToEarningsRatio', 'polygon_propertyPlantEquipmentNet', 'polygon_preferredDividendsIncomeStatementImpact', 'polygon_sharePriceAdjustedClose', 'polygon_priceSales', 'polygon_priceToSalesRatio', 'polygon_tradeAndNonTradeReceivables', 'polygon_accumulatedRetainedEarningsDeficit', 'polygon_revenues', 'polygon_revenuesUSD', 'polygon_researchAndDevelopmentExpense', 'polygon_returnOnAverageAssets', 'polygon_returnOnAverageEquity', 'polygon_returnOnInvestedCapital', 'polygon_returnOnSales', 'polygon_shareBasedCompensation', 'polygon_sellingGeneralAndAdministrativeExpense', 'polygon_shareFactor', 'polygon_shares', 'polygon_weightedAverageShares', 'polygon_salesPerShare', 'polygon_tangibleAssetValue', 'polygon_taxAssets', 'polygon_incomeTaxExpense', 'polygon_taxLiabilities', 'polygon_tangibleAssetsBookValuePerShare', 'polygon_workingCapital', 'polygon_weightedAverageSharesDiluted', 'fmp', 'alphavantage', 'polygon', 'alphavantage_fiscalDateEnding', 'alphavantage_reportedCurrency', 'alphavantage_grossProfit', 'alphavantage_totalRevenue', 'alphavantage_costOfRevenue', 'alphavantage_costofGoodsAndServicesSold', 'alphavantage_operatingIncome', 'alphavantage_sellingGeneralAndAdministrative', 'alphavantage_researchAndDevelopment', 'alphavantage_operatingExpenses', 'alphavantage_investmentIncomeNet', 'alphavantage_netInterestIncome', 'alphavantage_interestIncome', 'alphavantage_interestExpense', 'alphavantage_nonInterestIncome', 'alphavantage_otherNonOperatingIncome', 'alphavantage_depreciation', 'alphavantage_depreciationAndAmortization', 'alphavantage_incomeBeforeTax', 'alphavantage_incomeTaxExpense', 'alphavantage_interestAndDebtExpense', 'alphavantage_netIncomeFromContinuingOperations', 'alphavantage_comprehensiveIncomeNetOfTax', 'alphavantage_ebit', 'alphavantage_ebitda', 'alphavantage_netIncome', 'alphavantage_totalAssets', 'alphavantage_totalCurrentAssets', 'alphavantage_cashAndCashEquivalentsAtCarryingValue', 'alphavantage_cashAndShortTermInvestments', 'alphavantage_inventory', 'alphavantage_currentNetReceivables', 'alphavantage_totalNonCurrentAssets', 'alphavantage_propertyPlantEquipment', 'alphavantage_accumulatedDepreciationAmortizationPPE', 'alphavantage_intangibleAssets', 'alphavantage_intangibleAssetsExcludingGoodwill', 'alphavantage_goodwill', 'alphavantage_investments', 'alphavantage_longTermInvestments', 'alphavantage_shortTermInvestments', 'alphavantage_otherCurrentAssets', 'alphavantage_otherNonCurrrentAssets', 'alphavantage_totalLiabilities', 'alphavantage_totalCurrentLiabilities', 'alphavantage_currentAccountsPayable', 'alphavantage_deferredRevenue', 'alphavantage_currentDebt', 'alphavantage_shortTermDebt', 'alphavantage_totalNonCurrentLiabilities', 'alphavantage_capitalLeaseObligations', 'alphavantage_longTermDebt', 'alphavantage_currentLongTermDebt', 'alphavantage_longTermDebtNoncurrent', 'alphavantage_shortLongTermDebtTotal', 'alphavantage_otherCurrentLiabilities', 'alphavantage_otherNonCurrentLiabilities', 'alphavantage_totalShareholderEquity', 'alphavantage_treasuryStock', 'alphavantage_retainedEarnings', 'alphavantage_commonStock', 'alphavantage_commonStockSharesOutstanding', 'alphavantage_operatingCashflow', 'alphavantage_paymentsForOperatingActivities', 'alphavantage_proceedsFromOperatingActivities', 'alphavantage_changeInOperatingLiabilities', 'alphavantage_changeInOperatingAssets', 'alphavantage_depreciationDepletionAndAmortization', 'alphavantage_capitalExpenditures', 'alphavantage_changeInReceivables', 'alphavantage_changeInInventory', 'alphavantage_profitLoss', 'alphavantage_cashflowFromInvestment', 'alphavantage_cashflowFromFinancing', 'alphavantage_proceedsFromRepaymentsOfShortTermDebt', 'alphavantage_paymentsForRepurchaseOfCommonStock', 'alphavantage_paymentsForRepurchaseOfEquity', 'alphavantage_paymentsForRepurchaseOfPreferredStock', 'alphavantage_dividendPayout', 'alphavantage_dividendPayoutCommonStock', 'alphavantage_dividendPayoutPreferredStock', 'alphavantage_proceedsFromIssuanceOfCommonStock', 'alphavantage_proceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNet', 'alphavantage_proceedsFromIssuanceOfPreferredStock', 'alphavantage_proceedsFromRepurchaseOfEquity', 'alphavantage_proceedsFromSaleOfTreasuryStock', 'alphavantage_changeInCashAndCashEquivalents', 'alphavantage_changeInExchangeRate', 'polygon_logo', 'polygon_listdate', 'polygon_cik', 'polygon_bloomberg', 'polygon_figi', 'polygon_lei', 'polygon_sic', 'polygon_country', 'polygon_industry', 'polygon_sector', 'polygon_marketcap', 'polygon_employees', 'polygon_phone', 'polygon_ceo', 'polygon_url', 'polygon_description', 'polygon_name', 'polygon_exchangeSymbol', 'polygon_hq_address', 'polygon_hq_state', 'polygon_hq_country', 'polygon_type', 'polygon_tags', 'polygon_similar', 'polygon_active']
-stagingFinancialsCamelCaseTableColumns = ['exchange', 'symbol', 'period', 'calendarDate', 'polygonReportPeriod', 'polygonUpdated', 'polygonDateKey', 'polygonAccumulatedOtherComprehensiveIncome', 'polygonAssets', 'polygonAssetsAverage', 'polygonAssetsCurrent', 'polygonAssetsNonCurrent', 'polygonAssetTurnover', 'polygonBookValuePerShare', 'polygonCapitalExpenditure', 'polygonCashAndEquivalents', 'polygonCashAndEquivalentsUSD', 'polygonCostOfRevenue', 'polygonConsolidatedIncome', 'polygonCurrentRatio', 'polygonDebtToEquityRatio', 'polygonDebt', 'polygonDebtCurrent', 'polygonDebtNonCurrent', 'polygonDebtUSD', 'polygonDeferredRevenue', 'polygonDepreciationAmortizationAndAccretion', 'polygonDeposits', 'polygonDividendYield', 'polygonDividendsPerBasicCommonShare', 'polygonEarningBeforeInterestTaxes', 'polygonEarningsBeforeInterestTaxesDepreciationAmortization', 'polygonEBITDAMargin', 'polygonEarningsBeforeInterestTaxesDepreciationAmortizationUSD', 'polygonEarningBeforeInterestTaxesUSD', 'polygonEarningsBeforeTax', 'polygonEarningsPerBasicShare', 'polygonEarningsPerDilutedShare', 'polygonEarningsPerBasicShareUSD', 'polygonShareholdersEquity', 'polygonAverageEquity', 'polygonShareholdersEquityUSD', 'polygonEnterpriseValue', 'polygonEnterpriseValueOverEBIT', 'polygonEnterpriseValueOverEBITDA', 'polygonFreeCashFlow', 'polygonFreeCashFlowPerShare', 'polygonForeignCurrencyUSDExchangeRate', 'polygonGrossProfit', 'polygonGrossMargin', 'polygonGoodwillAndIntangibleAssets', 'polygonInterestExpense', 'polygonInvestedCapital', 'polygonInvestedCapitalAverage', 'polygonInventory', 'polygonInvestments', 'polygonInvestmentsCurrent', 'polygonInvestmentsNonCurrent', 'polygonTotalLiabilities', 'polygonCurrentLiabilities', 'polygonLiabilitiesNonCurrent', 'polygonMarketCapitalization', 'polygonNetCashFlow', 'polygonNetCashFlowBusinessAcquisitionsDisposals', 'polygonIssuanceEquityShares', 'polygonIssuanceDebtSecurities', 'polygonPaymentDividendsOtherCashDistributions', 'polygonNetCashFlowFromFinancing', 'polygonNetCashFlowFromInvesting', 'polygonNetCashFlowInvestmentAcquisitionsDisposals', 'polygonNetCashFlowFromOperations', 'polygonEffectOfExchangeRateChangesOnCash', 'polygonNetIncome', 'polygonNetIncomeCommonStock', 'polygonNetIncomeCommonStockUSD', 'polygonNetLossIncomeFromDiscontinuedOperations', 'polygonNetIncomeToNonControllingInterests', 'polygonProfitMargin', 'polygonOperatingExpenses', 'polygonOperatingIncome', 'polygonTradeAndNonTradePayables', 'polygonPayoutRatio', 'polygonPriceToBookValue', 'polygonPriceEarnings', 'polygonPriceToEarningsRatio', 'polygonPropertyPlantEquipmentNet', 'polygonPreferredDividendsIncomeStatementImpact', 'polygonSharePriceAdjustedClose', 'polygonPriceSales', 'polygonPriceToSalesRatio', 'polygonTradeAndNonTradeReceivables', 'polygonAccumulatedRetainedEarningsDeficit', 'polygonRevenues', 'polygonRevenuesUSD', 'polygonResearchAndDevelopmentExpense', 'polygonReturnOnAverageAssets', 'polygonReturnOnAverageEquity', 'polygonReturnOnInvestedCapital', 'polygonReturnOnSales', 'polygonShareBasedCompensation', 'polygonSellingGeneralAndAdministrativeExpense', 'polygonShareFactor', 'polygonShares', 'polygonWeightedAverageShares', 'polygonSalesPerShare', 'polygonTangibleAssetValue', 'polygonTaxAssets', 'polygonIncomeTaxExpense', 'polygonTaxLiabilities', 'polygonTangibleAssetsBookValuePerShare', 'polygonWorkingCapital', 'polygonWeightedAverageSharesDiluted', 'fmp', 'alphavantage', 'polygon', 'alphavantageFiscalDateEnding', 'alphavantageReportedCurrency', 'alphavantageGrossProfit', 'alphavantageTotalRevenue', 'alphavantageCostOfRevenue', 'alphavantageCostofGoodsAndServicesSold', 'alphavantageOperatingIncome', 'alphavantageSellingGeneralAndAdministrative', 'alphavantageResearchAndDevelopment', 'alphavantageOperatingExpenses', 'alphavantageInvestmentIncomeNet', 'alphavantageNetInterestIncome', 'alphavantageInterestIncome', 'alphavantageInterestExpense', 'alphavantageNonInterestIncome', 'alphavantageOtherNonOperatingIncome', 'alphavantageDepreciation', 'alphavantageDepreciationAndAmortization', 'alphavantageIncomeBeforeTax', 'alphavantageIncomeTaxExpense', 'alphavantageInterestAndDebtExpense', 'alphavantageNetIncomeFromContinuingOperations', 'alphavantageComprehensiveIncomeNetOfTax', 'alphavantageEbit', 'alphavantageEbitda', 'alphavantageNetIncome', 'alphavantageTotalAssets', 'alphavantageTotalCurrentAssets', 'alphavantageCashAndCashEquivalentsAtCarryingValue', 'alphavantageCashAndShortTermInvestments', 'alphavantageInventory', 'alphavantageCurrentNetReceivables', 'alphavantageTotalNonCurrentAssets', 'alphavantagePropertyPlantEquipment', 'alphavantageAccumulatedDepreciationAmortizationPPE', 'alphavantageIntangibleAssets', 'alphavantageIntangibleAssetsExcludingGoodwill', 'alphavantageGoodwill', 'alphavantageInvestments', 'alphavantageLongTermInvestments', 'alphavantageShortTermInvestments', 'alphavantageOtherCurrentAssets', 'alphavantageOtherNonCurrrentAssets', 'alphavantageTotalLiabilities', 'alphavantageTotalCurrentLiabilities', 'alphavantageCurrentAccountsPayable', 'alphavantageDeferredRevenue', 'alphavantageCurrentDebt', 'alphavantageShortTermDebt', 'alphavantageTotalNonCurrentLiabilities', 'alphavantageCapitalLeaseObligations', 'alphavantageLongTermDebt', 'alphavantageCurrentLongTermDebt', 'alphavantageLongTermDebtNoncurrent', 'alphavantageShortLongTermDebtTotal', 'alphavantageOtherCurrentLiabilities', 'alphavantageOtherNonCurrentLiabilities', 'alphavantageTotalShareholderEquity', 'alphavantageTreasuryStock', 'alphavantageRetainedEarnings', 'alphavantageCommonStock', 'alphavantageCommonStockSharesOutstanding', 'alphavantageOperatingCashflow', 'alphavantagePaymentsForOperatingActivities', 'alphavantageProceedsFromOperatingActivities', 'alphavantageChangeInOperatingLiabilities', 'alphavantageChangeInOperatingAssets', 'alphavantageDepreciationDepletionAndAmortization', 'alphavantageCapitalExpenditures', 'alphavantageChangeInReceivables', 'alphavantageChangeInInventory', 'alphavantageProfitLoss', 'alphavantageCashflowFromInvestment', 'alphavantageCashflowFromFinancing', 'alphavantageProceedsFromRepaymentsOfShortTermDebt', 'alphavantagePaymentsForRepurchaseOfCommonStock', 'alphavantagePaymentsForRepurchaseOfEquity', 'alphavantagePaymentsForRepurchaseOfPreferredStock', 'alphavantageDividendPayout', 'alphavantageDividendPayoutCommonStock', 'alphavantageDividendPayoutPreferredStock', 'alphavantageProceedsFromIssuanceOfCommonStock', 'alphavantageProceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNet', 'alphavantageProceedsFromIssuanceOfPreferredStock', 'alphavantageProceedsFromRepurchaseOfEquity', 'alphavantageProceedsFromSaleOfTreasuryStock', 'alphavantageChangeInCashAndCashEquivalents', 'alphavantageChangeInExchangeRate', 'polygonLogo', 'polygonListdate', 'polygonCik', 'polygonBloomberg', 'polygonFigi', 'polygonLei', 'polygonSic', 'polygonCountry', 'polygonIndustry', 'polygonSector', 'polygonMarketcap', 'polygonEmployees', 'polygonPhone', 'polygonCeo', 'polygonUrl', 'polygonDescription', 'polygonName', 'polygonExchangeSymbol', 'polygonHqAddress', 'polygonHqState', 'polygonHqCountry', 'polygonType', 'polygonTags', 'polygonSimilar', 'polygonActive']
-class StagingFinancialsRow():
+## TABLE: staging_financials_d ######################################
+stagingFinancialsDSnakeCaseTableColumns = ['exchange', 'symbol', 'period', 'calendarDate', 'polygon_reportPeriod', 'polygon_updated', 'polygon_dateKey', 'polygon_accumulatedOtherComprehensiveIncome', 'polygon_assets', 'polygon_assetsAverage', 'polygon_assetsCurrent', 'polygon_assetsNonCurrent', 'polygon_assetTurnover', 'polygon_bookValuePerShare', 'polygon_capitalExpenditure', 'polygon_cashAndEquivalents', 'polygon_cashAndEquivalentsUSD', 'polygon_costOfRevenue', 'polygon_consolidatedIncome', 'polygon_currentRatio', 'polygon_debtToEquityRatio', 'polygon_debt', 'polygon_debtCurrent', 'polygon_debtNonCurrent', 'polygon_debtUSD', 'polygon_deferredRevenue', 'polygon_depreciationAmortizationAndAccretion', 'polygon_deposits', 'polygon_dividendYield', 'polygon_dividendsPerBasicCommonShare', 'polygon_earningBeforeInterestTaxes', 'polygon_earningsBeforeInterestTaxesDepreciationAmortization', 'polygon_EBITDAMargin', 'polygon_earningsBeforeInterestTaxesDepreciationAmortizationUSD', 'polygon_earningBeforeInterestTaxesUSD', 'polygon_earningsBeforeTax', 'polygon_earningsPerBasicShare', 'polygon_earningsPerDilutedShare', 'polygon_earningsPerBasicShareUSD', 'polygon_shareholdersEquity', 'polygon_averageEquity', 'polygon_shareholdersEquityUSD', 'polygon_enterpriseValue', 'polygon_enterpriseValueOverEBIT', 'polygon_enterpriseValueOverEBITDA', 'polygon_freeCashFlow', 'polygon_freeCashFlowPerShare', 'polygon_foreignCurrencyUSDExchangeRate', 'polygon_grossProfit', 'polygon_grossMargin', 'polygon_goodwillAndIntangibleAssets', 'polygon_interestExpense', 'polygon_investedCapital', 'polygon_investedCapitalAverage', 'polygon_inventory', 'polygon_investments', 'polygon_investmentsCurrent', 'polygon_investmentsNonCurrent', 'polygon_totalLiabilities', 'polygon_currentLiabilities', 'polygon_liabilitiesNonCurrent', 'polygon_marketCapitalization', 'polygon_netCashFlow', 'polygon_netCashFlowBusinessAcquisitionsDisposals', 'polygon_issuanceEquityShares', 'polygon_issuanceDebtSecurities', 'polygon_paymentDividendsOtherCashDistributions', 'polygon_netCashFlowFromFinancing', 'polygon_netCashFlowFromInvesting', 'polygon_netCashFlowInvestmentAcquisitionsDisposals', 'polygon_netCashFlowFromOperations', 'polygon_effectOfExchangeRateChangesOnCash', 'polygon_netIncome', 'polygon_netIncomeCommonStock', 'polygon_netIncomeCommonStockUSD', 'polygon_netLossIncomeFromDiscontinuedOperations', 'polygon_netIncomeToNonControllingInterests', 'polygon_profitMargin', 'polygon_operatingExpenses', 'polygon_operatingIncome', 'polygon_tradeAndNonTradePayables', 'polygon_payoutRatio', 'polygon_priceToBookValue', 'polygon_priceEarnings', 'polygon_priceToEarningsRatio', 'polygon_propertyPlantEquipmentNet', 'polygon_preferredDividendsIncomeStatementImpact', 'polygon_sharePriceAdjustedClose', 'polygon_priceSales', 'polygon_priceToSalesRatio', 'polygon_tradeAndNonTradeReceivables', 'polygon_accumulatedRetainedEarningsDeficit', 'polygon_revenues', 'polygon_revenuesUSD', 'polygon_researchAndDevelopmentExpense', 'polygon_returnOnAverageAssets', 'polygon_returnOnAverageEquity', 'polygon_returnOnInvestedCapital', 'polygon_returnOnSales', 'polygon_shareBasedCompensation', 'polygon_sellingGeneralAndAdministrativeExpense', 'polygon_shareFactor', 'polygon_shares', 'polygon_weightedAverageShares', 'polygon_salesPerShare', 'polygon_tangibleAssetValue', 'polygon_taxAssets', 'polygon_incomeTaxExpense', 'polygon_taxLiabilities', 'polygon_tangibleAssetsBookValuePerShare', 'polygon_workingCapital', 'polygon_weightedAverageSharesDiluted', 'fmp', 'alphavantage', 'polygon', 'alphavantage_fiscalDateEnding', 'alphavantage_reportedCurrency', 'alphavantage_grossProfit', 'alphavantage_totalRevenue', 'alphavantage_costOfRevenue', 'alphavantage_costofGoodsAndServicesSold', 'alphavantage_operatingIncome', 'alphavantage_sellingGeneralAndAdministrative', 'alphavantage_researchAndDevelopment', 'alphavantage_operatingExpenses', 'alphavantage_investmentIncomeNet', 'alphavantage_netInterestIncome', 'alphavantage_interestIncome', 'alphavantage_interestExpense', 'alphavantage_nonInterestIncome', 'alphavantage_otherNonOperatingIncome', 'alphavantage_depreciation', 'alphavantage_depreciationAndAmortization', 'alphavantage_incomeBeforeTax', 'alphavantage_incomeTaxExpense', 'alphavantage_interestAndDebtExpense', 'alphavantage_netIncomeFromContinuingOperations', 'alphavantage_comprehensiveIncomeNetOfTax', 'alphavantage_ebit', 'alphavantage_ebitda', 'alphavantage_netIncome', 'alphavantage_totalAssets', 'alphavantage_totalCurrentAssets', 'alphavantage_cashAndCashEquivalentsAtCarryingValue', 'alphavantage_cashAndShortTermInvestments', 'alphavantage_inventory', 'alphavantage_currentNetReceivables', 'alphavantage_totalNonCurrentAssets', 'alphavantage_propertyPlantEquipment', 'alphavantage_accumulatedDepreciationAmortizationPPE', 'alphavantage_intangibleAssets', 'alphavantage_intangibleAssetsExcludingGoodwill', 'alphavantage_goodwill', 'alphavantage_investments', 'alphavantage_longTermInvestments', 'alphavantage_shortTermInvestments', 'alphavantage_otherCurrentAssets', 'alphavantage_otherNonCurrrentAssets', 'alphavantage_totalLiabilities', 'alphavantage_totalCurrentLiabilities', 'alphavantage_currentAccountsPayable', 'alphavantage_deferredRevenue', 'alphavantage_currentDebt', 'alphavantage_shortTermDebt', 'alphavantage_totalNonCurrentLiabilities', 'alphavantage_capitalLeaseObligations', 'alphavantage_longTermDebt', 'alphavantage_currentLongTermDebt', 'alphavantage_longTermDebtNoncurrent', 'alphavantage_shortLongTermDebtTotal', 'alphavantage_otherCurrentLiabilities', 'alphavantage_otherNonCurrentLiabilities', 'alphavantage_totalShareholderEquity', 'alphavantage_treasuryStock', 'alphavantage_retainedEarnings', 'alphavantage_commonStock', 'alphavantage_commonStockSharesOutstanding', 'alphavantage_operatingCashflow', 'alphavantage_paymentsForOperatingActivities', 'alphavantage_proceedsFromOperatingActivities', 'alphavantage_changeInOperatingLiabilities', 'alphavantage_changeInOperatingAssets', 'alphavantage_depreciationDepletionAndAmortization', 'alphavantage_capitalExpenditures', 'alphavantage_changeInReceivables', 'alphavantage_changeInInventory', 'alphavantage_profitLoss', 'alphavantage_cashflowFromInvestment', 'alphavantage_cashflowFromFinancing', 'alphavantage_proceedsFromRepaymentsOfShortTermDebt', 'alphavantage_paymentsForRepurchaseOfCommonStock', 'alphavantage_paymentsForRepurchaseOfEquity', 'alphavantage_paymentsForRepurchaseOfPreferredStock', 'alphavantage_dividendPayout', 'alphavantage_dividendPayoutCommonStock', 'alphavantage_dividendPayoutPreferredStock', 'alphavantage_proceedsFromIssuanceOfCommonStock', 'alphavantage_proceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNet', 'alphavantage_proceedsFromIssuanceOfPreferredStock', 'alphavantage_proceedsFromRepurchaseOfEquity', 'alphavantage_proceedsFromSaleOfTreasuryStock', 'alphavantage_changeInCashAndCashEquivalents', 'alphavantage_changeInExchangeRate', 'polygon_logo', 'polygon_listdate', 'polygon_cik', 'polygon_bloomberg', 'polygon_figi', 'polygon_lei', 'polygon_sic', 'polygon_country', 'polygon_industry', 'polygon_sector', 'polygon_marketcap', 'polygon_employees', 'polygon_phone', 'polygon_ceo', 'polygon_url', 'polygon_description', 'polygon_name', 'polygon_exchangeSymbol', 'polygon_hq_address', 'polygon_hq_state', 'polygon_hq_country', 'polygon_type', 'polygon_tags', 'polygon_similar', 'polygon_active']
+stagingFinancialsDCamelCaseTableColumns = ['exchange', 'symbol', 'period', 'calendarDate', 'polygonReportPeriod', 'polygonUpdated', 'polygonDateKey', 'polygonAccumulatedOtherComprehensiveIncome', 'polygonAssets', 'polygonAssetsAverage', 'polygonAssetsCurrent', 'polygonAssetsNonCurrent', 'polygonAssetTurnover', 'polygonBookValuePerShare', 'polygonCapitalExpenditure', 'polygonCashAndEquivalents', 'polygonCashAndEquivalentsUSD', 'polygonCostOfRevenue', 'polygonConsolidatedIncome', 'polygonCurrentRatio', 'polygonDebtToEquityRatio', 'polygonDebt', 'polygonDebtCurrent', 'polygonDebtNonCurrent', 'polygonDebtUSD', 'polygonDeferredRevenue', 'polygonDepreciationAmortizationAndAccretion', 'polygonDeposits', 'polygonDividendYield', 'polygonDividendsPerBasicCommonShare', 'polygonEarningBeforeInterestTaxes', 'polygonEarningsBeforeInterestTaxesDepreciationAmortization', 'polygonEBITDAMargin', 'polygonEarningsBeforeInterestTaxesDepreciationAmortizationUSD', 'polygonEarningBeforeInterestTaxesUSD', 'polygonEarningsBeforeTax', 'polygonEarningsPerBasicShare', 'polygonEarningsPerDilutedShare', 'polygonEarningsPerBasicShareUSD', 'polygonShareholdersEquity', 'polygonAverageEquity', 'polygonShareholdersEquityUSD', 'polygonEnterpriseValue', 'polygonEnterpriseValueOverEBIT', 'polygonEnterpriseValueOverEBITDA', 'polygonFreeCashFlow', 'polygonFreeCashFlowPerShare', 'polygonForeignCurrencyUSDExchangeRate', 'polygonGrossProfit', 'polygonGrossMargin', 'polygonGoodwillAndIntangibleAssets', 'polygonInterestExpense', 'polygonInvestedCapital', 'polygonInvestedCapitalAverage', 'polygonInventory', 'polygonInvestments', 'polygonInvestmentsCurrent', 'polygonInvestmentsNonCurrent', 'polygonTotalLiabilities', 'polygonCurrentLiabilities', 'polygonLiabilitiesNonCurrent', 'polygonMarketCapitalization', 'polygonNetCashFlow', 'polygonNetCashFlowBusinessAcquisitionsDisposals', 'polygonIssuanceEquityShares', 'polygonIssuanceDebtSecurities', 'polygonPaymentDividendsOtherCashDistributions', 'polygonNetCashFlowFromFinancing', 'polygonNetCashFlowFromInvesting', 'polygonNetCashFlowInvestmentAcquisitionsDisposals', 'polygonNetCashFlowFromOperations', 'polygonEffectOfExchangeRateChangesOnCash', 'polygonNetIncome', 'polygonNetIncomeCommonStock', 'polygonNetIncomeCommonStockUSD', 'polygonNetLossIncomeFromDiscontinuedOperations', 'polygonNetIncomeToNonControllingInterests', 'polygonProfitMargin', 'polygonOperatingExpenses', 'polygonOperatingIncome', 'polygonTradeAndNonTradePayables', 'polygonPayoutRatio', 'polygonPriceToBookValue', 'polygonPriceEarnings', 'polygonPriceToEarningsRatio', 'polygonPropertyPlantEquipmentNet', 'polygonPreferredDividendsIncomeStatementImpact', 'polygonSharePriceAdjustedClose', 'polygonPriceSales', 'polygonPriceToSalesRatio', 'polygonTradeAndNonTradeReceivables', 'polygonAccumulatedRetainedEarningsDeficit', 'polygonRevenues', 'polygonRevenuesUSD', 'polygonResearchAndDevelopmentExpense', 'polygonReturnOnAverageAssets', 'polygonReturnOnAverageEquity', 'polygonReturnOnInvestedCapital', 'polygonReturnOnSales', 'polygonShareBasedCompensation', 'polygonSellingGeneralAndAdministrativeExpense', 'polygonShareFactor', 'polygonShares', 'polygonWeightedAverageShares', 'polygonSalesPerShare', 'polygonTangibleAssetValue', 'polygonTaxAssets', 'polygonIncomeTaxExpense', 'polygonTaxLiabilities', 'polygonTangibleAssetsBookValuePerShare', 'polygonWorkingCapital', 'polygonWeightedAverageSharesDiluted', 'fmp', 'alphavantage', 'polygon', 'alphavantageFiscalDateEnding', 'alphavantageReportedCurrency', 'alphavantageGrossProfit', 'alphavantageTotalRevenue', 'alphavantageCostOfRevenue', 'alphavantageCostofGoodsAndServicesSold', 'alphavantageOperatingIncome', 'alphavantageSellingGeneralAndAdministrative', 'alphavantageResearchAndDevelopment', 'alphavantageOperatingExpenses', 'alphavantageInvestmentIncomeNet', 'alphavantageNetInterestIncome', 'alphavantageInterestIncome', 'alphavantageInterestExpense', 'alphavantageNonInterestIncome', 'alphavantageOtherNonOperatingIncome', 'alphavantageDepreciation', 'alphavantageDepreciationAndAmortization', 'alphavantageIncomeBeforeTax', 'alphavantageIncomeTaxExpense', 'alphavantageInterestAndDebtExpense', 'alphavantageNetIncomeFromContinuingOperations', 'alphavantageComprehensiveIncomeNetOfTax', 'alphavantageEbit', 'alphavantageEbitda', 'alphavantageNetIncome', 'alphavantageTotalAssets', 'alphavantageTotalCurrentAssets', 'alphavantageCashAndCashEquivalentsAtCarryingValue', 'alphavantageCashAndShortTermInvestments', 'alphavantageInventory', 'alphavantageCurrentNetReceivables', 'alphavantageTotalNonCurrentAssets', 'alphavantagePropertyPlantEquipment', 'alphavantageAccumulatedDepreciationAmortizationPPE', 'alphavantageIntangibleAssets', 'alphavantageIntangibleAssetsExcludingGoodwill', 'alphavantageGoodwill', 'alphavantageInvestments', 'alphavantageLongTermInvestments', 'alphavantageShortTermInvestments', 'alphavantageOtherCurrentAssets', 'alphavantageOtherNonCurrrentAssets', 'alphavantageTotalLiabilities', 'alphavantageTotalCurrentLiabilities', 'alphavantageCurrentAccountsPayable', 'alphavantageDeferredRevenue', 'alphavantageCurrentDebt', 'alphavantageShortTermDebt', 'alphavantageTotalNonCurrentLiabilities', 'alphavantageCapitalLeaseObligations', 'alphavantageLongTermDebt', 'alphavantageCurrentLongTermDebt', 'alphavantageLongTermDebtNoncurrent', 'alphavantageShortLongTermDebtTotal', 'alphavantageOtherCurrentLiabilities', 'alphavantageOtherNonCurrentLiabilities', 'alphavantageTotalShareholderEquity', 'alphavantageTreasuryStock', 'alphavantageRetainedEarnings', 'alphavantageCommonStock', 'alphavantageCommonStockSharesOutstanding', 'alphavantageOperatingCashflow', 'alphavantagePaymentsForOperatingActivities', 'alphavantageProceedsFromOperatingActivities', 'alphavantageChangeInOperatingLiabilities', 'alphavantageChangeInOperatingAssets', 'alphavantageDepreciationDepletionAndAmortization', 'alphavantageCapitalExpenditures', 'alphavantageChangeInReceivables', 'alphavantageChangeInInventory', 'alphavantageProfitLoss', 'alphavantageCashflowFromInvestment', 'alphavantageCashflowFromFinancing', 'alphavantageProceedsFromRepaymentsOfShortTermDebt', 'alphavantagePaymentsForRepurchaseOfCommonStock', 'alphavantagePaymentsForRepurchaseOfEquity', 'alphavantagePaymentsForRepurchaseOfPreferredStock', 'alphavantageDividendPayout', 'alphavantageDividendPayoutCommonStock', 'alphavantageDividendPayoutPreferredStock', 'alphavantageProceedsFromIssuanceOfCommonStock', 'alphavantageProceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNet', 'alphavantageProceedsFromIssuanceOfPreferredStock', 'alphavantageProceedsFromRepurchaseOfEquity', 'alphavantageProceedsFromSaleOfTreasuryStock', 'alphavantageChangeInCashAndCashEquivalents', 'alphavantageChangeInExchangeRate', 'polygonLogo', 'polygonListdate', 'polygonCik', 'polygonBloomberg', 'polygonFigi', 'polygonLei', 'polygonSic', 'polygonCountry', 'polygonIndustry', 'polygonSector', 'polygonMarketcap', 'polygonEmployees', 'polygonPhone', 'polygonCeo', 'polygonUrl', 'polygonDescription', 'polygonName', 'polygonExchangeSymbol', 'polygonHqAddress', 'polygonHqState', 'polygonHqCountry', 'polygonType', 'polygonTags', 'polygonSimilar', 'polygonActive']
+class StagingFinancialsDRow():
 	def __init__(self, exchangeValue: str, symbolValue: str, periodValue: str, calendarDateValue: str, polygonReportPeriodValue: str, polygonUpdatedValue: str, polygonDateKeyValue: str, polygonAccumulatedOtherComprehensiveIncomeValue: str, polygonAssetsValue: str, polygonAssetsAverageValue: str, polygonAssetsCurrentValue: str, polygonAssetsNonCurrentValue: str, polygonAssetTurnoverValue: str, polygonBookValuePerShareValue: str, polygonCapitalExpenditureValue: str, polygonCashAndEquivalentsValue: str, polygonCashAndEquivalentsUSDValue: str, polygonCostOfRevenueValue: str, polygonConsolidatedIncomeValue: str, polygonCurrentRatioValue: str, polygonDebtToEquityRatioValue: str, polygonDebtValue: str, polygonDebtCurrentValue: str, polygonDebtNonCurrentValue: str, polygonDebtUSDValue: str, polygonDeferredRevenueValue: str, polygonDepreciationAmortizationAndAccretionValue: str, polygonDepositsValue: str, polygonDividendYieldValue: str, polygonDividendsPerBasicCommonShareValue: str, polygonEarningBeforeInterestTaxesValue: str, polygonEarningsBeforeInterestTaxesDepreciationAmortizationValue: str, polygonEBITDAMarginValue: str, polygonEarningsBeforeInterestTaxesDepreciationAmortizationUSDValue: str, polygonEarningBeforeInterestTaxesUSDValue: str, polygonEarningsBeforeTaxValue: str, polygonEarningsPerBasicShareValue: str, polygonEarningsPerDilutedShareValue: str, polygonEarningsPerBasicShareUSDValue: str, polygonShareholdersEquityValue: str, polygonAverageEquityValue: str, polygonShareholdersEquityUSDValue: str, polygonEnterpriseValueValue: str, polygonEnterpriseValueOverEBITValue: str, polygonEnterpriseValueOverEBITDAValue: str, polygonFreeCashFlowValue: str, polygonFreeCashFlowPerShareValue: str, polygonForeignCurrencyUSDExchangeRateValue: str, polygonGrossProfitValue: str, polygonGrossMarginValue: str, polygonGoodwillAndIntangibleAssetsValue: str, polygonInterestExpenseValue: str, polygonInvestedCapitalValue: str, polygonInvestedCapitalAverageValue: str, polygonInventoryValue: str, polygonInvestmentsValue: str, polygonInvestmentsCurrentValue: str, polygonInvestmentsNonCurrentValue: str, polygonTotalLiabilitiesValue: str, polygonCurrentLiabilitiesValue: str, polygonLiabilitiesNonCurrentValue: str, polygonMarketCapitalizationValue: str, polygonNetCashFlowValue: str, polygonNetCashFlowBusinessAcquisitionsDisposalsValue: str, polygonIssuanceEquitySharesValue: str, polygonIssuanceDebtSecuritiesValue: str, polygonPaymentDividendsOtherCashDistributionsValue: str, polygonNetCashFlowFromFinancingValue: str, polygonNetCashFlowFromInvestingValue: str, polygonNetCashFlowInvestmentAcquisitionsDisposalsValue: str, polygonNetCashFlowFromOperationsValue: str, polygonEffectOfExchangeRateChangesOnCashValue: str, polygonNetIncomeValue: str, polygonNetIncomeCommonStockValue: str, polygonNetIncomeCommonStockUSDValue: str, polygonNetLossIncomeFromDiscontinuedOperationsValue: str, polygonNetIncomeToNonControllingInterestsValue: str, polygonProfitMarginValue: str, polygonOperatingExpensesValue: str, polygonOperatingIncomeValue: str, polygonTradeAndNonTradePayablesValue: str, polygonPayoutRatioValue: str, polygonPriceToBookValueValue: str, polygonPriceEarningsValue: str, polygonPriceToEarningsRatioValue: str, polygonPropertyPlantEquipmentNetValue: str, polygonPreferredDividendsIncomeStatementImpactValue: str, polygonSharePriceAdjustedCloseValue: str, polygonPriceSalesValue: str, polygonPriceToSalesRatioValue: str, polygonTradeAndNonTradeReceivablesValue: str, polygonAccumulatedRetainedEarningsDeficitValue: str, polygonRevenuesValue: str, polygonRevenuesUSDValue: str, polygonResearchAndDevelopmentExpenseValue: str, polygonReturnOnAverageAssetsValue: str, polygonReturnOnAverageEquityValue: str, polygonReturnOnInvestedCapitalValue: str, polygonReturnOnSalesValue: str, polygonShareBasedCompensationValue: str, polygonSellingGeneralAndAdministrativeExpenseValue: str, polygonShareFactorValue: str, polygonSharesValue: str, polygonWeightedAverageSharesValue: str, polygonSalesPerShareValue: str, polygonTangibleAssetValueValue: str, polygonTaxAssetsValue: str, polygonIncomeTaxExpenseValue: str, polygonTaxLiabilitiesValue: str, polygonTangibleAssetsBookValuePerShareValue: str, polygonWorkingCapitalValue: str, polygonWeightedAverageSharesDilutedValue: str, fmpValue: int, alphavantageValue: int, polygonValue: int, alphavantageFiscalDateEndingValue: str, alphavantageReportedCurrencyValue: str, alphavantageGrossProfitValue: str, alphavantageTotalRevenueValue: str, alphavantageCostOfRevenueValue: str, alphavantageCostofGoodsAndServicesSoldValue: str, alphavantageOperatingIncomeValue: str, alphavantageSellingGeneralAndAdministrativeValue: str, alphavantageResearchAndDevelopmentValue: str, alphavantageOperatingExpensesValue: str, alphavantageInvestmentIncomeNetValue: str, alphavantageNetInterestIncomeValue: str, alphavantageInterestIncomeValue: str, alphavantageInterestExpenseValue: str, alphavantageNonInterestIncomeValue: str, alphavantageOtherNonOperatingIncomeValue: str, alphavantageDepreciationValue: str, alphavantageDepreciationAndAmortizationValue: str, alphavantageIncomeBeforeTaxValue: str, alphavantageIncomeTaxExpenseValue: str, alphavantageInterestAndDebtExpenseValue: str, alphavantageNetIncomeFromContinuingOperationsValue: str, alphavantageComprehensiveIncomeNetOfTaxValue: str, alphavantageEbitValue: str, alphavantageEbitdaValue: str, alphavantageNetIncomeValue: str, alphavantageTotalAssetsValue: str, alphavantageTotalCurrentAssetsValue: str, alphavantageCashAndCashEquivalentsAtCarryingValueValue: str, alphavantageCashAndShortTermInvestmentsValue: str, alphavantageInventoryValue: str, alphavantageCurrentNetReceivablesValue: str, alphavantageTotalNonCurrentAssetsValue: str, alphavantagePropertyPlantEquipmentValue: str, alphavantageAccumulatedDepreciationAmortizationPPEValue: str, alphavantageIntangibleAssetsValue: str, alphavantageIntangibleAssetsExcludingGoodwillValue: str, alphavantageGoodwillValue: str, alphavantageInvestmentsValue: str, alphavantageLongTermInvestmentsValue: str, alphavantageShortTermInvestmentsValue: str, alphavantageOtherCurrentAssetsValue: str, alphavantageOtherNonCurrrentAssetsValue: str, alphavantageTotalLiabilitiesValue: str, alphavantageTotalCurrentLiabilitiesValue: str, alphavantageCurrentAccountsPayableValue: str, alphavantageDeferredRevenueValue: str, alphavantageCurrentDebtValue: str, alphavantageShortTermDebtValue: str, alphavantageTotalNonCurrentLiabilitiesValue: str, alphavantageCapitalLeaseObligationsValue: str, alphavantageLongTermDebtValue: str, alphavantageCurrentLongTermDebtValue: str, alphavantageLongTermDebtNoncurrentValue: str, alphavantageShortLongTermDebtTotalValue: str, alphavantageOtherCurrentLiabilitiesValue: str, alphavantageOtherNonCurrentLiabilitiesValue: str, alphavantageTotalShareholderEquityValue: str, alphavantageTreasuryStockValue: str, alphavantageRetainedEarningsValue: str, alphavantageCommonStockValue: str, alphavantageCommonStockSharesOutstandingValue: str, alphavantageOperatingCashflowValue: str, alphavantagePaymentsForOperatingActivitiesValue: str, alphavantageProceedsFromOperatingActivitiesValue: str, alphavantageChangeInOperatingLiabilitiesValue: str, alphavantageChangeInOperatingAssetsValue: str, alphavantageDepreciationDepletionAndAmortizationValue: str, alphavantageCapitalExpendituresValue: str, alphavantageChangeInReceivablesValue: str, alphavantageChangeInInventoryValue: str, alphavantageProfitLossValue: str, alphavantageCashflowFromInvestmentValue: str, alphavantageCashflowFromFinancingValue: str, alphavantageProceedsFromRepaymentsOfShortTermDebtValue: str, alphavantagePaymentsForRepurchaseOfCommonStockValue: str, alphavantagePaymentsForRepurchaseOfEquityValue: str, alphavantagePaymentsForRepurchaseOfPreferredStockValue: str, alphavantageDividendPayoutValue: str, alphavantageDividendPayoutCommonStockValue: str, alphavantageDividendPayoutPreferredStockValue: str, alphavantageProceedsFromIssuanceOfCommonStockValue: str, alphavantageProceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNetValue: str, alphavantageProceedsFromIssuanceOfPreferredStockValue: str, alphavantageProceedsFromRepurchaseOfEquityValue: str, alphavantageProceedsFromSaleOfTreasuryStockValue: str, alphavantageChangeInCashAndCashEquivalentsValue: str, alphavantageChangeInExchangeRateValue: str, polygonLogoValue: str, polygonListdateValue: str, polygonCikValue: str, polygonBloombergValue: str, polygonFigiValue: str, polygonLeiValue: str, polygonSicValue: str, polygonCountryValue: str, polygonIndustryValue: str, polygonSectorValue: str, polygonMarketcapValue: str, polygonEmployeesValue: str, polygonPhoneValue: str, polygonCeoValue: str, polygonUrlValue: str, polygonDescriptionValue: str, polygonNameValue: str, polygonExchangeSymbolValue: str, polygonHqAddressValue: str, polygonHqStateValue: str, polygonHqCountryValue: str, polygonTypeValue: str, polygonTagsValue: str, polygonSimilarValue: str, polygonActiveValue: str):
 		self.exchange = exchangeValue
 		self.symbol = symbolValue
@@ -725,10 +692,10 @@ class StagingFinancialsRow():
 		self.polygonSimilar = polygonSimilarValue
 		self.polygonActive = polygonActiveValue
 
-## TABLE: dump_nasdaq_earnings_dates ######################################
-dumpNasdaqEarningsDatesSnakeCaseTableColumns = ['symbol', 'input_date', 'earnings_date', 'eps', 'surprise_percentage', 'time', 'name', 'last_year_report_date', 'last_year_eps', 'market_cap', 'fiscal_quarter_ending', 'eps_forecast', 'number_of_estimates']
-dumpNasdaqEarningsDatesCamelCaseTableColumns = ['symbol', 'inputDate', 'earningsDate', 'eps', 'surprisePercentage', 'time', 'name', 'lastYearReportDate', 'lastYearEps', 'marketCap', 'fiscalQuarterEnding', 'epsForecast', 'numberOfEstimates']
-class DumpNasdaqEarningsDatesRow():
+## TABLE: earnings_dates_nasdaq_d ######################################
+earningsDatesNasdaqDSnakeCaseTableColumns = ['symbol', 'input_date', 'earnings_date', 'eps', 'surprise_percentage', 'time', 'name', 'last_year_report_date', 'last_year_eps', 'market_cap', 'fiscal_quarter_ending', 'eps_forecast', 'number_of_estimates']
+earningsDatesNasdaqDCamelCaseTableColumns = ['symbol', 'inputDate', 'earningsDate', 'eps', 'surprisePercentage', 'time', 'name', 'lastYearReportDate', 'lastYearEps', 'marketCap', 'fiscalQuarterEnding', 'epsForecast', 'numberOfEstimates']
+class EarningsDatesNasdaqDRow():
 	def __init__(self, symbolValue: str, inputDateValue: str, earningsDateValue: str, epsValue: float, surprisePercentageValue: float, timeValue: str, nameValue: str, lastYearReportDateValue: str, lastYearEpsValue: int, marketCapValue: int, fiscalQuarterEndingValue: str, epsForecastValue: str, numberOfEstimatesValue: int):
 		self.symbol = symbolValue
 		self.inputDate = inputDateValue
@@ -744,95 +711,10 @@ class DumpNasdaqEarningsDatesRow():
 		self.epsForecast = epsForecastValue
 		self.numberOfEstimates = numberOfEstimatesValue
 
-## TABLE: staging_earnings_dates ######################################
-stagingEarningsDatesSnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'earnings_date', 'nasdaq_eps', 'nasdaq_surprise_percentage', 'nasdaq_time', 'nasdaq_name', 'nasdaq_last_year_report_date', 'nasdaq_last_year_eps', 'nasdaq_market_cap', 'nasdaq_fiscal_quarter_ending', 'nasdaq_eps_forecast', 'nasdaq_number_of_estimates', 'yahoo_name', 'yahoo_event_name', 'yahoo_eps_forecast', 'yahoo_eps', 'yahoo_surprise_percentage', 'yahoo_start_date_time', 'yahoo_start_date_time_type', 'yahoo_time_zone_short_name', 'yahoo_gmt_offset_milli_seconds', 'marketwatch_name', 'marketwatch_fiscal_quarter_ending', 'marketwatch_eps_forecast', 'marketwatch_eps', 'marketwatch_surprise_percentage']
-stagingEarningsDatesCamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'earningsDate', 'nasdaqEps', 'nasdaqSurprisePercentage', 'nasdaqTime', 'nasdaqName', 'nasdaqLastYearReportDate', 'nasdaqLastYearEps', 'nasdaqMarketCap', 'nasdaqFiscalQuarterEnding', 'nasdaqEpsForecast', 'nasdaqNumberOfEstimates', 'yahooName', 'yahooEventName', 'yahooEpsForecast', 'yahooEps', 'yahooSurprisePercentage', 'yahooStartDateTime', 'yahooStartDateTimeType', 'yahooTimeZoneShortName', 'yahooGmtOffsetMilliSeconds', 'marketwatchName', 'marketwatchFiscalQuarterEnding', 'marketwatchEpsForecast', 'marketwatchEps', 'marketwatchSurprisePercentage']
-class StagingEarningsDatesRow():
-	def __init__(self, exchangeValue: str, symbolValue: str, inputDateValue: str, earningsDateValue: str, nasdaqEpsValue: float, nasdaqSurprisePercentageValue: float, nasdaqTimeValue: str, nasdaqNameValue: str, nasdaqLastYearReportDateValue: str, nasdaqLastYearEpsValue: int, nasdaqMarketCapValue: int, nasdaqFiscalQuarterEndingValue: str, nasdaqEpsForecastValue: str, nasdaqNumberOfEstimatesValue: int, yahooNameValue: str, yahooEventNameValue: str, yahooEpsForecastValue: str, yahooEpsValue: float, yahooSurprisePercentageValue: float, yahooStartDateTimeValue: str, yahooStartDateTimeTypeValue: str, yahooTimeZoneShortNameValue: str, yahooGmtOffsetMilliSecondsValue: float, marketwatchNameValue: str, marketwatchFiscalQuarterEndingValue: str, marketwatchEpsForecastValue: float, marketwatchEpsValue: float, marketwatchSurprisePercentageValue: float):
-		self.exchange = exchangeValue
-		self.symbol = symbolValue
-		self.inputDate = inputDateValue
-		self.earningsDate = earningsDateValue
-		self.nasdaqEps = nasdaqEpsValue
-		self.nasdaqSurprisePercentage = nasdaqSurprisePercentageValue
-		self.nasdaqTime = nasdaqTimeValue
-		self.nasdaqName = nasdaqNameValue
-		self.nasdaqLastYearReportDate = nasdaqLastYearReportDateValue
-		self.nasdaqLastYearEps = nasdaqLastYearEpsValue
-		self.nasdaqMarketCap = nasdaqMarketCapValue
-		self.nasdaqFiscalQuarterEnding = nasdaqFiscalQuarterEndingValue
-		self.nasdaqEpsForecast = nasdaqEpsForecastValue
-		self.nasdaqNumberOfEstimates = nasdaqNumberOfEstimatesValue
-		self.yahooName = yahooNameValue
-		self.yahooEventName = yahooEventNameValue
-		self.yahooEpsForecast = yahooEpsForecastValue
-		self.yahooEps = yahooEpsValue
-		self.yahooSurprisePercentage = yahooSurprisePercentageValue
-		self.yahooStartDateTime = yahooStartDateTimeValue
-		self.yahooStartDateTimeType = yahooStartDateTimeTypeValue
-		self.yahooTimeZoneShortName = yahooTimeZoneShortNameValue
-		self.yahooGmtOffsetMilliSeconds = yahooGmtOffsetMilliSecondsValue
-		self.marketwatchName = marketwatchNameValue
-		self.marketwatchFiscalQuarterEnding = marketwatchFiscalQuarterEndingValue
-		self.marketwatchEpsForecast = marketwatchEpsForecastValue
-		self.marketwatchEps = marketwatchEpsValue
-		self.marketwatchSurprisePercentage = marketwatchSurprisePercentageValue
-
-## TABLE: dump_symbol_info_yahoo ######################################
-dumpSymbolInfoYahooSnakeCaseTableColumns = ['exchange', 'symbol', 'quote_type', 'short_name', 'long_name', 'message_board_id', 'exchange_timezone_name', 'exchange_timezone_short_name', 'gmt_off_set_milliseconds', 'market', 'is_esg_populated']
-dumpSymbolInfoYahooCamelCaseTableColumns = ['exchange', 'symbol', 'quoteType', 'shortName', 'longName', 'messageBoardId', 'exchangeTimezoneName', 'exchangeTimezoneShortName', 'gmtOffSetMilliseconds', 'market', 'isEsgPopulated']
-class DumpSymbolInfoYahooRow():
-	def __init__(self, exchangeValue: str, symbolValue: str, quoteTypeValue: str, shortNameValue: str, longNameValue: str, messageBoardIdValue: str, exchangeTimezoneNameValue: str, exchangeTimezoneShortNameValue: str, gmtOffSetMillisecondsValue: float, marketValue: str, isEsgPopulatedValue):
-		self.exchange = exchangeValue
-		self.symbol = symbolValue
-		self.quoteType = quoteTypeValue
-		self.shortName = shortNameValue
-		self.longName = longNameValue
-		self.messageBoardId = messageBoardIdValue
-		self.exchangeTimezoneName = exchangeTimezoneNameValue
-		self.exchangeTimezoneShortName = exchangeTimezoneShortNameValue
-		self.gmtOffSetMilliseconds = gmtOffSetMillisecondsValue
-		self.market = marketValue
-		self.isEsgPopulated = isEsgPopulatedValue
-
-## TABLE: staging_earnings_dates_bk ######################################
-stagingEarningsDatesBkSnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'earnings_date', 'nasdaq_eps', 'nasdaq_surprise_percentage', 'nasdaq_time', 'nasdaq_name', 'nasdaq_last_year_report_date', 'nasdaq_last_year_eps', 'nasdaq_market_cap', 'nasdaq_fiscal_quarter_ending', 'nasdaq_eps_forecast', 'nasdaq_number_of_estimates', 'yahoo_name', 'yahoo_event_name', 'yahoo_eps_forecast', 'yahoo_eps', 'yahoo_surprise_percentage', 'yahoo_start_date_time', 'yahoo_start_date_time_type', 'yahoo_time_zone_short_name', 'yahoo_gmt_offset_milli_seconds', 'marketwatch_name', 'marketwatch_fiscal_quarter_ending', 'marketwatch_eps_forecast', 'marketwatch_eps', 'marketwatch_surprise_percentage']
-stagingEarningsDatesBkCamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'earningsDate', 'nasdaqEps', 'nasdaqSurprisePercentage', 'nasdaqTime', 'nasdaqName', 'nasdaqLastYearReportDate', 'nasdaqLastYearEps', 'nasdaqMarketCap', 'nasdaqFiscalQuarterEnding', 'nasdaqEpsForecast', 'nasdaqNumberOfEstimates', 'yahooName', 'yahooEventName', 'yahooEpsForecast', 'yahooEps', 'yahooSurprisePercentage', 'yahooStartDateTime', 'yahooStartDateTimeType', 'yahooTimeZoneShortName', 'yahooGmtOffsetMilliSeconds', 'marketwatchName', 'marketwatchFiscalQuarterEnding', 'marketwatchEpsForecast', 'marketwatchEps', 'marketwatchSurprisePercentage']
-class StagingEarningsDatesBkRow():
-	def __init__(self, exchangeValue: str, symbolValue: str, inputDateValue: str, earningsDateValue: str, nasdaqEpsValue: float, nasdaqSurprisePercentageValue: float, nasdaqTimeValue: str, nasdaqNameValue: str, nasdaqLastYearReportDateValue: str, nasdaqLastYearEpsValue: int, nasdaqMarketCapValue: int, nasdaqFiscalQuarterEndingValue: str, nasdaqEpsForecastValue: str, nasdaqNumberOfEstimatesValue: int, yahooNameValue: str, yahooEventNameValue: str, yahooEpsForecastValue: str, yahooEpsValue: float, yahooSurprisePercentageValue: float, yahooStartDateTimeValue: str, yahooStartDateTimeTypeValue: str, yahooTimeZoneShortNameValue: str, yahooGmtOffsetMilliSecondsValue: float, marketwatchNameValue: str, marketwatchFiscalQuarterEndingValue: str, marketwatchEpsForecastValue: float, marketwatchEpsValue: float, marketwatchSurprisePercentageValue: float):
-		self.exchange = exchangeValue
-		self.symbol = symbolValue
-		self.inputDate = inputDateValue
-		self.earningsDate = earningsDateValue
-		self.nasdaqEps = nasdaqEpsValue
-		self.nasdaqSurprisePercentage = nasdaqSurprisePercentageValue
-		self.nasdaqTime = nasdaqTimeValue
-		self.nasdaqName = nasdaqNameValue
-		self.nasdaqLastYearReportDate = nasdaqLastYearReportDateValue
-		self.nasdaqLastYearEps = nasdaqLastYearEpsValue
-		self.nasdaqMarketCap = nasdaqMarketCapValue
-		self.nasdaqFiscalQuarterEnding = nasdaqFiscalQuarterEndingValue
-		self.nasdaqEpsForecast = nasdaqEpsForecastValue
-		self.nasdaqNumberOfEstimates = nasdaqNumberOfEstimatesValue
-		self.yahooName = yahooNameValue
-		self.yahooEventName = yahooEventNameValue
-		self.yahooEpsForecast = yahooEpsForecastValue
-		self.yahooEps = yahooEpsValue
-		self.yahooSurprisePercentage = yahooSurprisePercentageValue
-		self.yahooStartDateTime = yahooStartDateTimeValue
-		self.yahooStartDateTimeType = yahooStartDateTimeTypeValue
-		self.yahooTimeZoneShortName = yahooTimeZoneShortNameValue
-		self.yahooGmtOffsetMilliSeconds = yahooGmtOffsetMilliSecondsValue
-		self.marketwatchName = marketwatchNameValue
-		self.marketwatchFiscalQuarterEnding = marketwatchFiscalQuarterEndingValue
-		self.marketwatchEpsForecast = marketwatchEpsForecastValue
-		self.marketwatchEps = marketwatchEpsValue
-		self.marketwatchSurprisePercentage = marketwatchSurprisePercentageValue
-
-## TABLE: dump_symbol_statistics_yahoo ######################################
-dumpSymbolStatisticsYahooSnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'quote_type', 'currency', 'shares_outstanding', 'market_cap', 'full_exchange_name', 'first_trade_date_milliseconds', 'tradeable', 'crypto_tradeable']
-dumpSymbolStatisticsYahooCamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'quoteType', 'currency', 'sharesOutstanding', 'marketCap', 'fullExchangeName', 'firstTradeDateMilliseconds', 'tradeable', 'cryptoTradeable']
-class DumpSymbolStatisticsYahooRow():
+## TABLE: symbol_statistics_yahoo_d ######################################
+symbolStatisticsYahooDSnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'quote_type', 'currency', 'shares_outstanding', 'market_cap', 'full_exchange_name', 'first_trade_date_milliseconds', 'tradeable', 'crypto_tradeable']
+symbolStatisticsYahooDCamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'quoteType', 'currency', 'sharesOutstanding', 'marketCap', 'fullExchangeName', 'firstTradeDateMilliseconds', 'tradeable', 'cryptoTradeable']
+class SymbolStatisticsYahooDRow():
 	def __init__(self, exchangeValue: str, symbolValue: str, inputDateValue: str, quoteTypeValue: str, currencyValue: str, sharesOutstandingValue: int, marketCapValue: int, fullExchangeNameValue: str, firstTradeDateMillisecondsValue: int, tradeableValue: bool, cryptoTradeableValue: bool):
 		self.exchange = exchangeValue
 		self.symbol = symbolValue
@@ -846,10 +728,10 @@ class DumpSymbolStatisticsYahooRow():
 		self.tradeable = tradeableValue
 		self.cryptoTradeable = cryptoTradeableValue
 
-## TABLE: dump_short_interest_finra ######################################
-dumpShortInterestFinraSnakeCaseTableColumns = ['market_class_code', 'symbol_code', 'settlement_date', 'revision_flag', 'issue_name', 'current_short_position_quantity', 'days_to_cover_quantity', 'previous_short_position_quantity', 'issuer_services_group_exchange_code', 'stock_split_flag']
-dumpShortInterestFinraCamelCaseTableColumns = ['marketClassCode', 'symbolCode', 'settlementDate', 'revisionFlag', 'issueName', 'currentShortPositionQuantity', 'daysToCoverQuantity', 'previousShortPositionQuantity', 'issuerServicesGroupExchangeCode', 'stockSplitFlag']
-class DumpShortInterestFinraRow():
+## TABLE: short_interest_finra_d ######################################
+shortInterestFinraDSnakeCaseTableColumns = ['market_class_code', 'symbol_code', 'settlement_date', 'revision_flag', 'issue_name', 'current_short_position_quantity', 'days_to_cover_quantity', 'previous_short_position_quantity', 'issuer_services_group_exchange_code', 'stock_split_flag']
+shortInterestFinraDCamelCaseTableColumns = ['marketClassCode', 'symbolCode', 'settlementDate', 'revisionFlag', 'issueName', 'currentShortPositionQuantity', 'daysToCoverQuantity', 'previousShortPositionQuantity', 'issuerServicesGroupExchangeCode', 'stockSplitFlag']
+class ShortInterestFinraDRow():
 	def __init__(self, marketClassCodeValue: str, symbolCodeValue: str, settlementDateValue: str, revisionFlagValue: float, issueNameValue: str, currentShortPositionQuantityValue: int, daysToCoverQuantityValue: int, previousShortPositionQuantityValue: int, issuerServicesGroupExchangeCodeValue: str, stockSplitFlagValue: float):
 		self.marketClassCode = marketClassCodeValue
 		self.symbolCode = symbolCodeValue
@@ -862,95 +744,10 @@ class DumpShortInterestFinraRow():
 		self.issuerServicesGroupExchangeCode = issuerServicesGroupExchangeCodeValue
 		self.stockSplitFlag = stockSplitFlagValue
 
-## TABLE: dump_yahoo_earnings_dates_bk ######################################
-dumpYahooEarningsDatesBkSnakeCaseTableColumns = ['symbol', 'input_date', 'earnings_date', 'name', 'event_name', 'eps_forecast', 'earnings_per_share', 'surprise_percentage', 'start_date_time', 'start_date_time_type', 'time_zone_short_name', 'gmt_offset_milli_seconds']
-dumpYahooEarningsDatesBkCamelCaseTableColumns = ['symbol', 'inputDate', 'earningsDate', 'name', 'eventName', 'epsForecast', 'earningsPerShare', 'surprisePercentage', 'startDateTime', 'startDateTimeType', 'timeZoneShortName', 'gmtOffsetMilliSeconds']
-class DumpYahooEarningsDatesBkRow():
-	def __init__(self, symbolValue: str, inputDateValue: str, earningsDateValue: str, nameValue: str, eventNameValue: str, epsForecastValue: str, earningsPerShareValue: float, surprisePercentageValue: float, startDateTimeValue: str, startDateTimeTypeValue: str, timeZoneShortNameValue: str, gmtOffsetMilliSecondsValue: float):
-		self.symbol = symbolValue
-		self.inputDate = inputDateValue
-		self.earningsDate = earningsDateValue
-		self.name = nameValue
-		self.eventName = eventNameValue
-		self.epsForecast = epsForecastValue
-		self.earningsPerShare = earningsPerShareValue
-		self.surprisePercentage = surprisePercentageValue
-		self.startDateTime = startDateTimeValue
-		self.startDateTimeType = startDateTimeTypeValue
-		self.timeZoneShortName = timeZoneShortNameValue
-		self.gmtOffsetMilliSeconds = gmtOffsetMilliSecondsValue
-
-## TABLE: dump_nasdaq_earnings_dates_bk ######################################
-dumpNasdaqEarningsDatesBkSnakeCaseTableColumns = ['symbol', 'input_date', 'earnings_date', 'earnings_per_share', 'surprise_percentage', 'time', 'name', 'last_year_report_date', 'last_year_eps', 'market_cap', 'fiscal_quarter_ending', 'eps_forecast', 'number_of_estimates']
-dumpNasdaqEarningsDatesBkCamelCaseTableColumns = ['symbol', 'inputDate', 'earningsDate', 'earningsPerShare', 'surprisePercentage', 'time', 'name', 'lastYearReportDate', 'lastYearEps', 'marketCap', 'fiscalQuarterEnding', 'epsForecast', 'numberOfEstimates']
-class DumpNasdaqEarningsDatesBkRow():
-	def __init__(self, symbolValue: str, inputDateValue: str, earningsDateValue: str, earningsPerShareValue: float, surprisePercentageValue: float, timeValue: str, nameValue: str, lastYearReportDateValue: str, lastYearEpsValue: int, marketCapValue: int, fiscalQuarterEndingValue: str, epsForecastValue: str, numberOfEstimatesValue: int):
-		self.symbol = symbolValue
-		self.inputDate = inputDateValue
-		self.earningsDate = earningsDateValue
-		self.earningsPerShare = earningsPerShareValue
-		self.surprisePercentage = surprisePercentageValue
-		self.time = timeValue
-		self.name = nameValue
-		self.lastYearReportDate = lastYearReportDateValue
-		self.lastYearEps = lastYearEpsValue
-		self.marketCap = marketCapValue
-		self.fiscalQuarterEnding = fiscalQuarterEndingValue
-		self.epsForecast = epsForecastValue
-		self.numberOfEstimates = numberOfEstimatesValue
-
-## TABLE: dump_marketwatch_earnings_dates_bk ######################################
-dumpMarketwatchEarningsDatesBkSnakeCaseTableColumns = ['symbol', 'input_date', 'earnings_date', 'name', 'fiscal_quarter_ending', 'eps_forecast', 'earnings_per_share', 'surprise_percentage']
-dumpMarketwatchEarningsDatesBkCamelCaseTableColumns = ['symbol', 'inputDate', 'earningsDate', 'name', 'fiscalQuarterEnding', 'epsForecast', 'earningsPerShare', 'surprisePercentage']
-class DumpMarketwatchEarningsDatesBkRow():
-	def __init__(self, symbolValue: str, inputDateValue: str, earningsDateValue: str, nameValue: str, fiscalQuarterEndingValue: str, epsForecastValue: str, earningsPerShareValue: float, surprisePercentageValue: float):
-		self.symbol = symbolValue
-		self.inputDate = inputDateValue
-		self.earningsDate = earningsDateValue
-		self.name = nameValue
-		self.fiscalQuarterEnding = fiscalQuarterEndingValue
-		self.epsForecast = epsForecastValue
-		self.earningsPerShare = earningsPerShareValue
-		self.surprisePercentage = surprisePercentageValue
-
-## TABLE: staging_earnings_dates_bk_20230722 ######################################
-stagingEarningsDatesBk20230722SnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'earnings_date', 'nasdaq_eps', 'nasdaq_surprise_percentage', 'nasdaq_time', 'nasdaq_name', 'nasdaq_last_year_report_date', 'nasdaq_last_year_eps', 'nasdaq_market_cap', 'nasdaq_fiscal_quarter_ending', 'nasdaq_eps_forecast', 'nasdaq_number_of_estimates', 'yahoo_name', 'yahoo_event_name', 'yahoo_eps_forecast', 'yahoo_eps', 'yahoo_surprise_percentage', 'yahoo_start_date_time', 'yahoo_start_date_time_type', 'yahoo_time_zone_short_name', 'yahoo_gmt_offset_milli_seconds', 'marketwatch_name', 'marketwatch_fiscal_quarter_ending', 'marketwatch_eps_forecast', 'marketwatch_eps', 'marketwatch_surprise_percentage']
-stagingEarningsDatesBk20230722CamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'earningsDate', 'nasdaqEps', 'nasdaqSurprisePercentage', 'nasdaqTime', 'nasdaqName', 'nasdaqLastYearReportDate', 'nasdaqLastYearEps', 'nasdaqMarketCap', 'nasdaqFiscalQuarterEnding', 'nasdaqEpsForecast', 'nasdaqNumberOfEstimates', 'yahooName', 'yahooEventName', 'yahooEpsForecast', 'yahooEps', 'yahooSurprisePercentage', 'yahooStartDateTime', 'yahooStartDateTimeType', 'yahooTimeZoneShortName', 'yahooGmtOffsetMilliSeconds', 'marketwatchName', 'marketwatchFiscalQuarterEnding', 'marketwatchEpsForecast', 'marketwatchEps', 'marketwatchSurprisePercentage']
-class StagingEarningsDatesBk20230722Row():
-	def __init__(self, exchangeValue: str, symbolValue: str, inputDateValue: str, earningsDateValue: str, nasdaqEpsValue: float, nasdaqSurprisePercentageValue: float, nasdaqTimeValue: str, nasdaqNameValue: str, nasdaqLastYearReportDateValue: str, nasdaqLastYearEpsValue: int, nasdaqMarketCapValue: int, nasdaqFiscalQuarterEndingValue: str, nasdaqEpsForecastValue: str, nasdaqNumberOfEstimatesValue: int, yahooNameValue: str, yahooEventNameValue: str, yahooEpsForecastValue: str, yahooEpsValue: float, yahooSurprisePercentageValue: float, yahooStartDateTimeValue: str, yahooStartDateTimeTypeValue: str, yahooTimeZoneShortNameValue: str, yahooGmtOffsetMilliSecondsValue: float, marketwatchNameValue: str, marketwatchFiscalQuarterEndingValue: str, marketwatchEpsForecastValue: float, marketwatchEpsValue: float, marketwatchSurprisePercentageValue: float):
-		self.exchange = exchangeValue
-		self.symbol = symbolValue
-		self.inputDate = inputDateValue
-		self.earningsDate = earningsDateValue
-		self.nasdaqEps = nasdaqEpsValue
-		self.nasdaqSurprisePercentage = nasdaqSurprisePercentageValue
-		self.nasdaqTime = nasdaqTimeValue
-		self.nasdaqName = nasdaqNameValue
-		self.nasdaqLastYearReportDate = nasdaqLastYearReportDateValue
-		self.nasdaqLastYearEps = nasdaqLastYearEpsValue
-		self.nasdaqMarketCap = nasdaqMarketCapValue
-		self.nasdaqFiscalQuarterEnding = nasdaqFiscalQuarterEndingValue
-		self.nasdaqEpsForecast = nasdaqEpsForecastValue
-		self.nasdaqNumberOfEstimates = nasdaqNumberOfEstimatesValue
-		self.yahooName = yahooNameValue
-		self.yahooEventName = yahooEventNameValue
-		self.yahooEpsForecast = yahooEpsForecastValue
-		self.yahooEps = yahooEpsValue
-		self.yahooSurprisePercentage = yahooSurprisePercentageValue
-		self.yahooStartDateTime = yahooStartDateTimeValue
-		self.yahooStartDateTimeType = yahooStartDateTimeTypeValue
-		self.yahooTimeZoneShortName = yahooTimeZoneShortNameValue
-		self.yahooGmtOffsetMilliSeconds = yahooGmtOffsetMilliSecondsValue
-		self.marketwatchName = marketwatchNameValue
-		self.marketwatchFiscalQuarterEnding = marketwatchFiscalQuarterEndingValue
-		self.marketwatchEpsForecast = marketwatchEpsForecastValue
-		self.marketwatchEps = marketwatchEpsValue
-		self.marketwatchSurprisePercentage = marketwatchSurprisePercentageValue
-
-## TABLE: dump_marketwatch_earnings_dates ######################################
-dumpMarketwatchEarningsDatesSnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'earnings_date', 'name', 'fiscal_quarter_ending', 'eps_forecast', 'eps', 'surprise_percentage']
-dumpMarketwatchEarningsDatesCamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'earningsDate', 'name', 'fiscalQuarterEnding', 'epsForecast', 'eps', 'surprisePercentage']
-class DumpMarketwatchEarningsDatesRow():
+## TABLE: earnings_dates_marketwatch_d ######################################
+earningsDatesMarketwatchDSnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'earnings_date', 'name', 'fiscal_quarter_ending', 'eps_forecast', 'eps', 'surprise_percentage']
+earningsDatesMarketwatchDCamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'earningsDate', 'name', 'fiscalQuarterEnding', 'epsForecast', 'eps', 'surprisePercentage']
+class EarningsDatesMarketwatchDRow():
 	def __init__(self, exchangeValue: str, symbolValue: str, inputDateValue: str, earningsDateValue: str, nameValue: str, fiscalQuarterEndingValue: str, epsForecastValue: str, epsValue: float, surprisePercentageValue: float):
 		self.exchange = exchangeValue
 		self.symbol = symbolValue
@@ -962,10 +759,10 @@ class DumpMarketwatchEarningsDatesRow():
 		self.eps = epsValue
 		self.surprisePercentage = surprisePercentageValue
 
-## TABLE: dump_yahoo_earnings_dates ######################################
-dumpYahooEarningsDatesSnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'earnings_date', 'name', 'event_name', 'eps_forecast', 'eps', 'surprise_percentage', 'start_date_time', 'start_date_time_type', 'time_zone_short_name', 'gmt_offset_milli_seconds']
-dumpYahooEarningsDatesCamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'earningsDate', 'name', 'eventName', 'epsForecast', 'eps', 'surprisePercentage', 'startDateTime', 'startDateTimeType', 'timeZoneShortName', 'gmtOffsetMilliSeconds']
-class DumpYahooEarningsDatesRow():
+## TABLE: earnings_dates_yahoo_d ######################################
+earningsDatesYahooDSnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'earnings_date', 'name', 'event_name', 'eps_forecast', 'eps', 'surprise_percentage', 'start_date_time', 'start_date_time_type', 'time_zone_short_name', 'gmt_offset_milli_seconds']
+earningsDatesYahooDCamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'earningsDate', 'name', 'eventName', 'epsForecast', 'eps', 'surprisePercentage', 'startDateTime', 'startDateTimeType', 'timeZoneShortName', 'gmtOffsetMilliSeconds']
+class EarningsDatesYahooDRow():
 	def __init__(self, exchangeValue: str, symbolValue: str, inputDateValue: str, earningsDateValue: str, nameValue: str, eventNameValue: str, epsForecastValue: str, epsValue: float, surprisePercentageValue: float, startDateTimeValue: str, startDateTimeTypeValue: str, timeZoneShortNameValue: str, gmtOffsetMilliSecondsValue: float):
 		self.exchange = exchangeValue
 		self.symbol = symbolValue
@@ -981,37 +778,45 @@ class DumpYahooEarningsDatesRow():
 		self.timeZoneShortName = timeZoneShortNameValue
 		self.gmtOffsetMilliSeconds = gmtOffsetMilliSecondsValue
 
-## TABLE: staging_earnings_dates_bk_wip_20230810 ######################################
-stagingEarningsDatesBkWip20230810SnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'earnings_date', 'nasdaq_eps', 'nasdaq_surprise_percentage', 'nasdaq_time', 'nasdaq_name', 'nasdaq_last_year_report_date', 'nasdaq_last_year_eps', 'nasdaq_market_cap', 'nasdaq_fiscal_quarter_ending', 'nasdaq_eps_forecast', 'nasdaq_number_of_estimates', 'yahoo_name', 'yahoo_event_name', 'yahoo_eps_forecast', 'yahoo_eps', 'yahoo_surprise_percentage', 'yahoo_start_date_time', 'yahoo_start_date_time_type', 'yahoo_time_zone_short_name', 'yahoo_gmt_offset_milli_seconds', 'marketwatch_name', 'marketwatch_fiscal_quarter_ending', 'marketwatch_eps_forecast', 'marketwatch_eps', 'marketwatch_surprise_percentage']
-stagingEarningsDatesBkWip20230810CamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'earningsDate', 'nasdaqEps', 'nasdaqSurprisePercentage', 'nasdaqTime', 'nasdaqName', 'nasdaqLastYearReportDate', 'nasdaqLastYearEps', 'nasdaqMarketCap', 'nasdaqFiscalQuarterEnding', 'nasdaqEpsForecast', 'nasdaqNumberOfEstimates', 'yahooName', 'yahooEventName', 'yahooEpsForecast', 'yahooEps', 'yahooSurprisePercentage', 'yahooStartDateTime', 'yahooStartDateTimeType', 'yahooTimeZoneShortName', 'yahooGmtOffsetMilliSeconds', 'marketwatchName', 'marketwatchFiscalQuarterEnding', 'marketwatchEpsForecast', 'marketwatchEps', 'marketwatchSurprisePercentage']
-class StagingEarningsDatesBkWip20230810Row():
-	def __init__(self, exchangeValue: str, symbolValue: str, inputDateValue: str, earningsDateValue: str, nasdaqEpsValue: float, nasdaqSurprisePercentageValue: float, nasdaqTimeValue: str, nasdaqNameValue: str, nasdaqLastYearReportDateValue: str, nasdaqLastYearEpsValue: int, nasdaqMarketCapValue: int, nasdaqFiscalQuarterEndingValue: str, nasdaqEpsForecastValue: str, nasdaqNumberOfEstimatesValue: int, yahooNameValue: str, yahooEventNameValue: str, yahooEpsForecastValue: str, yahooEpsValue: float, yahooSurprisePercentageValue: float, yahooStartDateTimeValue: str, yahooStartDateTimeTypeValue: str, yahooTimeZoneShortNameValue: str, yahooGmtOffsetMilliSecondsValue: float, marketwatchNameValue: str, marketwatchFiscalQuarterEndingValue: str, marketwatchEpsForecastValue: float, marketwatchEpsValue: float, marketwatchSurprisePercentageValue: float):
+## TABLE: symbol_info_yahoo_d ######################################
+symbolInfoYahooDSnakeCaseTableColumns = ['exchange', 'symbol', 'quote_type', 'short_name', 'long_name', 'message_board_id', 'exchange_timezone_name', 'exchange_timezone_short_name', 'gmt_off_set_milliseconds', 'market', 'is_esg_populated']
+symbolInfoYahooDCamelCaseTableColumns = ['exchange', 'symbol', 'quoteType', 'shortName', 'longName', 'messageBoardId', 'exchangeTimezoneName', 'exchangeTimezoneShortName', 'gmtOffSetMilliseconds', 'market', 'isEsgPopulated']
+class SymbolInfoYahooDRow():
+	def __init__(self, exchangeValue: str, symbolValue: str, quoteTypeValue: str, shortNameValue: str, longNameValue: str, messageBoardIdValue: str, exchangeTimezoneNameValue: str, exchangeTimezoneShortNameValue: str, gmtOffSetMillisecondsValue: float, marketValue: str, isEsgPopulatedValue):
 		self.exchange = exchangeValue
 		self.symbol = symbolValue
-		self.inputDate = inputDateValue
-		self.earningsDate = earningsDateValue
-		self.nasdaqEps = nasdaqEpsValue
-		self.nasdaqSurprisePercentage = nasdaqSurprisePercentageValue
-		self.nasdaqTime = nasdaqTimeValue
-		self.nasdaqName = nasdaqNameValue
-		self.nasdaqLastYearReportDate = nasdaqLastYearReportDateValue
-		self.nasdaqLastYearEps = nasdaqLastYearEpsValue
-		self.nasdaqMarketCap = nasdaqMarketCapValue
-		self.nasdaqFiscalQuarterEnding = nasdaqFiscalQuarterEndingValue
-		self.nasdaqEpsForecast = nasdaqEpsForecastValue
-		self.nasdaqNumberOfEstimates = nasdaqNumberOfEstimatesValue
-		self.yahooName = yahooNameValue
-		self.yahooEventName = yahooEventNameValue
-		self.yahooEpsForecast = yahooEpsForecastValue
-		self.yahooEps = yahooEpsValue
-		self.yahooSurprisePercentage = yahooSurprisePercentageValue
-		self.yahooStartDateTime = yahooStartDateTimeValue
-		self.yahooStartDateTimeType = yahooStartDateTimeTypeValue
-		self.yahooTimeZoneShortName = yahooTimeZoneShortNameValue
-		self.yahooGmtOffsetMilliSeconds = yahooGmtOffsetMilliSecondsValue
-		self.marketwatchName = marketwatchNameValue
-		self.marketwatchFiscalQuarterEnding = marketwatchFiscalQuarterEndingValue
-		self.marketwatchEpsForecast = marketwatchEpsForecastValue
-		self.marketwatchEps = marketwatchEpsValue
-		self.marketwatchSurprisePercentage = marketwatchSurprisePercentageValue
+		self.quoteType = quoteTypeValue
+		self.shortName = shortNameValue
+		self.longName = longNameValue
+		self.messageBoardId = messageBoardIdValue
+		self.exchangeTimezoneName = exchangeTimezoneNameValue
+		self.exchangeTimezoneShortName = exchangeTimezoneShortNameValue
+		self.gmtOffSetMilliseconds = gmtOffSetMillisecondsValue
+		self.market = marketValue
+		self.isEsgPopulated = isEsgPopulatedValue
+
+## TABLE: staging_symbol_info_d ######################################
+stagingSymbolInfoDSnakeCaseTableColumns = ['exchange', 'symbol', 'migrated', 'founded', 'ipo', 'sector', 'polygon_sector', 'fmp_sector', 'alphavantage_sector', 'polygon_industry', 'fmp_industry', 'alphavantage_industry', 'polygon_description', 'fmp_description', 'alphavantage_description', 'polygon_ipo', 'fmp_ipo', 'alphavantage_assettype', 'fmp_isetf']
+stagingSymbolInfoDCamelCaseTableColumns = ['exchange', 'symbol', 'migrated', 'founded', 'ipo', 'sector', 'polygonSector', 'fmpSector', 'alphavantageSector', 'polygonIndustry', 'fmpIndustry', 'alphavantageIndustry', 'polygonDescription', 'fmpDescription', 'alphavantageDescription', 'polygonIpo', 'fmpIpo', 'alphavantageAssettype', 'fmpIsetf']
+class StagingSymbolInfoDRow():
+	def __init__(self, exchangeValue: str, symbolValue: str, migratedValue: bool, foundedValue: str, ipoValue: str, sectorValue: str, polygonSectorValue: str, fmpSectorValue: str, alphavantageSectorValue: str, polygonIndustryValue: str, fmpIndustryValue: str, alphavantageIndustryValue: str, polygonDescriptionValue: str, fmpDescriptionValue: str, alphavantageDescriptionValue: str, polygonIpoValue: str, fmpIpoValue: str, alphavantageAssettypeValue: str, fmpIsetfValue: bool):
+		self.exchange = exchangeValue
+		self.symbol = symbolValue
+		self.migrated = migratedValue
+		self.founded = foundedValue
+		self.ipo = ipoValue
+		self.sector = sectorValue
+		self.polygonSector = polygonSectorValue
+		self.fmpSector = fmpSectorValue
+		self.alphavantageSector = alphavantageSectorValue
+		self.polygonIndustry = polygonIndustryValue
+		self.fmpIndustry = fmpIndustryValue
+		self.alphavantageIndustry = alphavantageIndustryValue
+		self.polygonDescription = polygonDescriptionValue
+		self.fmpDescription = fmpDescriptionValue
+		self.alphavantageDescription = alphavantageDescriptionValue
+		self.polygonIpo = polygonIpoValue
+		self.fmpIpo = fmpIpoValue
+		self.alphavantageAssettype = alphavantageAssettypeValue
+		self.fmpIsetf = fmpIsetfValue
 

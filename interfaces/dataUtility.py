@@ -199,7 +199,7 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
                     oldDate = dm.stockDataHandlers[ticker].data[dindx].period_date
                     if not dryrun:
                         args = [asISOFormat(newDate), ticker.exchange, ticker.symbol, dm.seriesType.name, asISOFormat(oldDate), OutputClass.NEGATIVE.name, *list(props.values())]
-                        dbm.dbc.execute('UPDATE historical_vector_similarity_data SET date=? WHERE exchange=? AND symbol=? AND date_type=? AND date=? AND vector_class=? AND preceding_range=? AND following_range=? AND change_threshold=?', tuple(args))
+                        dbm.dbc.execute(f'UPDATE {dbm.getTableString("vector_similarities_c")} SET date=? WHERE exchange=? AND symbol=? AND date_type=? AND date=? AND vector_class=? AND preceding_range=? AND following_range=? AND change_threshold=?', tuple(args))
                     else:
                         print(oldDate, '->', newDate)
 
@@ -236,8 +236,8 @@ def _verifyTechnicalIndicatorDataIntegrity(stockdata, indicator: IndicatorType, 
 
 def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cacheIndicators, indicatorConfig):
     localdbm = DatabaseManager()
-    latestIndicators = localdbm.dbc.execute('''
-        SELECT MAX(date) AS date, COUNT(*) AS count, exchange, symbol, indicator, period, value FROM historical_calculated_technical_indicator_data WHERE date_type=? AND exchange=? AND symbol=? group by exchange, symbol, indicator, period
+    latestIndicators = localdbm.dbc.execute(f'''
+        SELECT MAX(date) AS date, COUNT(*) AS count, exchange, symbol, indicator, period, value FROM {localdbm.getTableString("technical_indicator_data_c")} WHERE date_type=? AND exchange=? AND symbol=? group by exchange, symbol, indicator, period
     ''', (seriesType.name, ticker.exchange, ticker.symbol)).fetchall()
     def getLatestIndicator(i: IndicatorType, period):
         for li in latestIndicators:
@@ -391,8 +391,8 @@ def technicalIndicatorDataCalculationAndInsertion(exchange=[], seriesType: Serie
             inserttpls.extend(tpls)
     
     for tplchunk in tqdm.tqdm(numpy.array_split(inserttpls, 10), desc='Inserting data'):
-        dbm.dbc.executemany('''
-            INSERT OR REPLACE INTO historical_calculated_technical_indicator_data VALUES (?,?,?,?,?,?,?)
+        dbm.dbc.executemany(f'''
+            INSERT OR REPLACE INTO {dbm.getTableString("technical_indicator_data_c")} VALUES (?,?,?,?,?,?,?)
         ''', tplchunk)
 
     print('Updated {} tickers'.format(tickersupdated))
@@ -603,9 +603,9 @@ def earningsDateCalculationAndInsertion(simple=True, verbose=1):
 
     # exchange='NASDAQ'
     exchange=None
-    nasdaqSymbols = [x.symbol for x in dbm.dbc.execute('select distinct symbol from dump_nasdaq_earnings_dates').fetchall() if x.symbol not in excludeTickers]
-    marketwatchSymbols = [x.symbol for x in dbm.dbc.execute('select distinct symbol from dump_marketwatch_earnings_dates').fetchall() if x.symbol not in excludeTickers]
-    yahooSymbols = [x.symbol for x in dbm.dbc.execute('select distinct symbol from dump_yahoo_earnings_dates').fetchall() if x.symbol not in excludeTickers]
+    nasdaqSymbols = [x.symbol for x in dbm.dbc.execute(f'select distinct symbol from {dbm.getTableString("earnings_dates_nasdaq_d")}').fetchall() if x.symbol not in excludeTickers]
+    marketwatchSymbols = [x.symbol for x in dbm.dbc.execute(f'select distinct symbol from {dbm.getTableString("earnings_dates_marketwatch_d")}').fetchall() if x.symbol not in excludeTickers]
+    yahooSymbols = [x.symbol for x in dbm.dbc.execute(f'select distinct symbol from {dbm.getTableString("earnings_dates_yahoo_d")}').fetchall() if x.symbol not in excludeTickers]
     ntickers = set(nasdaqSymbols + marketwatchSymbols + yahooSymbols)
     # ntickers = ['OILSF']
     # ntickers = ['WBD'] ## 2008 - 5, 2009 - 6, 2010 - 7
@@ -632,7 +632,7 @@ def earningsDateCalculationAndInsertion(simple=True, verbose=1):
     # fqeAverageDaysFollowing = { q: int(numpy.average(fqeDaysFollowingBuckets[q])) for q in fqeDaysFollowingBuckets.keys() }
     # print(fqeAverageDaysFollowing)
 
-    dbm.dbc.execute('DELETE FROM earnings_dates') ## clear table as processing may change some old data
+    dbm.dbc.execute(f'DELETE FROM {dbm.getTableString("earnings_dates_c")}') ## clear table as processing may change some old data
     totalRowsInserted = 0
     for symbol in tqdmLoopHandleWrapper(ntickers, verbose=verbose):
         if verbose > 1: print(f'Starting {symbol}')

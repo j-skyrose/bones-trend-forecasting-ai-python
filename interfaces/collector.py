@@ -358,12 +358,12 @@ class Collector:
                 print('Unable to get Friday data')
 
     def collectAPIDump_symbolInfo(self, api, **kwargs):
-        substmt = f'SELECT * FROM {dbm.getTableString("dump_symbol_info")} dsi WHERE dsi.exchange = ssi.exchange AND dsi.symbol = ssi.symbol AND ' + api + ' IS NOT NULL'
+        substmt = f'SELECT * FROM {dbm.getTableString("symbol_info_polygon_d")} dsi WHERE dsi.exchange = ssi.exchange AND dsi.symbol = ssi.symbol AND ' + api + ' IS NOT NULL'
         # stmt = 'SELECT exchange, symbol FROM symbols WHERE NOT EXISTS (' + substmt + ') AND api_' + api + ' = 1'
 
         ## still pulling NYSE:AAC even though row is present in dump table
 
-        stmt = f'SELECT ssi.exchange, ssi.symbol FROM {dbm.getTableString("staging_symbol_info")} ssi JOIN symbols ON ssi.exchange = symbols.exchange AND ssi.symbol = symbols.symbol WHERE NOT EXISTS (' + substmt + ') AND polygon_sector NOT IN (\'e\',\'x\') AND api_' + api + ' = 1'
+        stmt = f'SELECT ssi.exchange, ssi.symbol FROM {dbm.getTableString("staging_symbol_info_d")} ssi JOIN symbols ON ssi.exchange = symbols.exchange AND ssi.symbol = symbols.symbol WHERE NOT EXISTS (' + substmt + ') AND polygon_sector NOT IN (\'e\',\'x\') AND api_' + api + ' = 1'
         tickers = dbm.dbc.execute(stmt).fetchall()
 
         # print(tickers[0].exchange, tickers[0].symbol)

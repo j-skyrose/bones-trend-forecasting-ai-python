@@ -12,7 +12,7 @@ from typing import Tuple, Union
 
 from constants.values import usExchanges, multiExchangeSymbols
 from managers.databaseManager import DatabaseManager
-from managers._generatedDatabaseAnnotations.databaseRowObjects import dumpSymbolInfoYahooCamelCaseTableColumns
+from managers._generatedDatabaseAnnotations.databaseRowObjects import symbolInfoYahooDCamelCaseTableColumns
 from structures.api.yahoo import Yahoo
 from utils.support import generateCommaSeparatedQuestionMarkString, getItem, shortcdict, tqdmLoopHandleWrapper
 
@@ -58,14 +58,14 @@ def getYahooExchangeForSymbolWithDetails(symbol, companyName, verbose=1) -> Tupl
         proccessedkwargs = {}
         for k,v in yahooSymbol.items():
             if v is not None:
-                if k not in dumpSymbolInfoYahooCamelCaseTableColumns: 
+                if k not in symbolInfoYahooDCamelCaseTableColumns: 
                     ## only appears for limited number of symbols (e.g. MYO), ignore unless real data is apparent
                     ## ['underlyingExchangeSymbol', 'headSymbol', 'uuid', 'underlyingSymbol']
                     if k not in ['uuid']:
                         raise ValueError(f'"{k}" argument not in table columns')
                 proccessedkwargs[k] = v
-        args = [shortcdict(proccessedkwargs, argName) for argName in dumpSymbolInfoYahooCamelCaseTableColumns]
-        dbm.dbc.execute(f'INSERT INTO {dbm.getTableString("dump_symbol_info_yahoo")} VALUES ({generateCommaSeparatedQuestionMarkString(dumpSymbolInfoYahooCamelCaseTableColumns)})', args)
+        args = [shortcdict(proccessedkwargs, argName) for argName in symbolInfoYahooDCamelCaseTableColumns]
+        dbm.dbc.execute(f'INSERT INTO {dbm.getTableString("symbol_info_yahoo_d")} VALUES ({generateCommaSeparatedQuestionMarkString(symbolInfoYahooDCamelCaseTableColumns)})', args)
 
     elif len(yahooSymbol) > 1:
         raise ValueError(f'too many DB results for {symbol}')
@@ -230,11 +230,11 @@ def getYahooExchangeForSymbolWithDetails(symbol, companyName, verbose=1) -> Tupl
 ## OBSOLETE: data moved back to individual tables based on the API supplying the data (2023-08-16)
 def transferYahooEarningsDateDumpTableToStaging(symbolList=[], dryrun=False, verbose=1):
         ## nasdaq is mostly covered by yahoo, only ~375 symbols are unique
-        # nasdaqtablesymbols = [r.symbol for r in dbm.dbc.execute('select distinct symbol from dump_nasdaq_earnings_dates').fetchall()]
+        # nasdaqtablesymbols = [r.symbol for r in dbm.dbc.execute('select distinct symbol from earnings_dates_nasdaq_d').fetchall()]
         if symbolList:
             yahootablesymbols = symbolList if type(symbolList[0]) == str else [r.symbol for r in symbolList]
         else:
-            yahootablesymbols = [r.symbol for r in dbm.dbc.execute('select distinct symbol from dump_yahoo_earnings_dates').fetchall()]
+            yahootablesymbols = [r.symbol for r in dbm.dbc.execute(f'select distinct symbol from {dbm.getTableString("earnings_dates_yahoo_d")}').fetchall()]
 
         # brokensymbols = ['AACQ']
         ## Exantas Capital Corp. Changes Name to ACRES: NYSE:ACR
@@ -254,7 +254,7 @@ def transferYahooEarningsDateDumpTableToStaging(symbolList=[], dryrun=False, ver
             # elif not checkpoint: continue
             if verbose > 1: print(f'----- {indx}/{len(yahootablesymbols)}: {s} --------------------------------------------')
 
-            data = dbm.dbc.execute(f'select * from {dbm.getTableString("dump_yahoo_earnings_dates")} WHERE symbol=?', (s,)).fetchall()
+            data = dbm.dbc.execute(f'select * from {dbm.getTableString("earnings_dates_yahoo_d")} WHERE symbol=?', (s,)).fetchall()
             totalexceptionslength = len(e0nx) + len(e1n1) + len(e1nx)
 
             try:
@@ -310,7 +310,7 @@ if __name__ == '__main__':
     # for s in exceptionsymbols:
     #     print(f'-----{s} --------------------------------------------')
     #     try:
-    #         # anyrow = dbm.dbc.execute(f'''select * from {dbm.getTableString("dump_yahoo_earnings_dates")} where symbol=?''', (s,)).fetchone()
+    #         # anyrow = dbm.dbc.execute(f'''select * from {dbm.getTableString("earnings_dates_yahoo_d")} where symbol=?''', (s,)).fetchone()
     #         # exchange = getYahooExchangeForSymbol(s, shortcdict(anyrow, 'name'), 2)
     #         # print('exchange:', exchange)
     #         histdata = dbm.dbc.execute('select * from historical_data where symbol=?', (s,)).fetchall()
@@ -318,7 +318,7 @@ if __name__ == '__main__':
     #         lastupd = dbm.dbc.execute('select * from last_updates where symbol=? and api is not null', (s,)).fetchall()
     #         lastupdtickers = dbm.dbc.execute('select distinct exchange,symbol from last_updates where symbol=? ', (s,)).fetchall()
     #         syms = dbm.getSymbols(symbol=s)
-    #         ysym = dbm.dbc.execute(f'''select * from {dbm.getTableString("dump_symbol_info_yahoo")} where symbol=?''', (s,)).fetchall()
+    #         ysym = dbm.dbc.execute(f'''select * from {dbm.getTableString("symbol_info_yahoo_d")} where symbol=?''', (s,)).fetchall()
 
     #         if len(histdata) > 0:
     #             print('has hist data')
