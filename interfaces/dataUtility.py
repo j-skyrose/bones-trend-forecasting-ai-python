@@ -10,6 +10,7 @@ sys.path.append(path)
 import tqdm, numpy, numba, calendar, sqlite3
 from datetime import date, timedelta
 from functools import partial
+from numpy.core import _exceptions as numpy_exceptions
 from typing import Dict, List
 
 from globalConfig import config as gconfig
@@ -390,10 +391,17 @@ def technicalIndicatorDataCalculationAndInsertion(exchange=[], seriesType: Serie
             tickersupdated += 1
             inserttpls.extend(tpls)
     
-    for tplchunk in tqdm.tqdm(numpy.array_split(inserttpls, 10), desc='Inserting data'):
-        dbm.dbc.executemany(f'''
-            INSERT OR REPLACE INTO {dbm.getTableString("technical_indicator_data_c")} VALUES (?,?,?,?,?,?,?)
-        ''', tplchunk)
+    stmt = f'INSERT OR REPLACE INTO {dbm.getTableString("technical_indicator_data_c")} VALUES (?,?,?,?,?,?,?)'
+    stmtExecFunc = lambda t: dbm.dbc.execute(stmt, t)
+    ## ideally split into chunks to speed up insertion
+    try:
+        inserttpls[:] = numpy.array_split(inserttpls, 10)
+        stmtExecFunc = lambda t: dbm.dbc.executemany(stmt, t)
+    except numpy_exceptions._ArrayMemoryError:
+        pass
+
+    for tplchunk in tqdm.tqdm(inserttpls, desc='Inserting data'):
+        stmtExecFunc(tplchunk)
 
     print('Updated {} tickers'.format(tickersupdated))
     print('Added or replaced {} rows'.format(rowsadded))
