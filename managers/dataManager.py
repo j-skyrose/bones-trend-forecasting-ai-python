@@ -208,7 +208,11 @@ class DataManager():
             self.windows = dbm.getTickerSplit('split1681021636', 50000)
             for windex in range(len(self.windows)):
                 for i in range(len(self.windows[windex])):
-                    self.windows[windex][i] = dbm.getSymbols(exchange=self.windows[windex][i].exchange, symbol=self.windows[windex][i].symbol)[0]
+                    exchange = self.windows[windex][i].exchange
+                    symbol = self.windows[windex][i].symbol
+                    wsymbols = dbm.getSymbols(exchange=exchange, symbol=symbol)
+                    if len(wsymbols):
+                        self.windows[windex][i] = wsymbols[0]
         ## not useAllSets and not useOptimizedSplitMethodForAllSets
         else:
             ## reduce amount of unneccessary data retrieved and maintained in memory during lifecycle
