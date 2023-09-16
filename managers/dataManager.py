@@ -905,7 +905,7 @@ class DataManager():
             for s in tqdmLoopHandleWrapper(symbolList, verbose, desc='Creating earnings date handlers'):
                 key = TickerKeyType(s.exchange, s.symbol)
                 self.earningsDateHandlers[key] = StockEarningsDateHandler(*key.getTuple(), dbData=dbm.getEarningsDate(s.exchange, s.symbol))
-        if verbose >= 1: print('Initialized earnings date handlers of which', len([1 for v in self.earningsDateHandlers.values() if len(v.data) > 0]), '/', len(self.earningsDateHandlers), 'have no data')
+        if verbose >= 1: print('Initialized earnings date handlers of which', len([1 for v in self.earningsDateHandlers.values() if len(v.data) > 0]), '/', len(self.earningsDateHandlers), 'have data')
 
     def initializeWindow(self, windowIndex):
         self.normalized = False
