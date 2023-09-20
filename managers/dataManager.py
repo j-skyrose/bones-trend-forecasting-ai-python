@@ -18,7 +18,7 @@ from argparse import ArgumentError
 
 from globalConfig import config as gconfig
 from constants.enums import DataFormType, Direction, NormalizationGroupings, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetType, DataManagerType, IndicatorType
-from utils.support import asList, generateFibonacciSequence, getAdjustedSlidingWindowPercentage, partition, recdotlist, shortc, multicore_poolIMap, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
+from utils.support import asList, generateFibonacciSequence, getAdjustedSlidingWindowPercentage, partition, recdotlist, shortc, multicore_poolIMap, shortcdict, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.other import getInstancesByClass, getMaxIndicatorPeriod, maxQuarters, getIndicatorPeriod, addAdditionalDefaultKWArgs
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
 from constants.values import unusableSymbols, indicatorsKey
@@ -807,7 +807,7 @@ class DataManager():
 
         startt = time.time()
         indicators = self.inputVectorFactory.getIndicators()
-        ## for determinubg how to handle ADX data: needs total generation, can use cached DIs values, etc
+        ## for determining how to handle ADX data: needs total generation, can use cached DIs values, etc
         notInitializingDIData = IndicatorType.DIS not in indicators
 
         genTimes = {k: [] for k in indicators}
@@ -827,12 +827,12 @@ class DataManager():
                     getIndc = indc
                     if indc == IndicatorType.ADX and notInitializingDIData:
                         ## need to try and use cached DI data even if that indicator will not be used
-                        getIndc = IndicatorType.DIS.key
+                        getIndc = IndicatorType.DIS
                     indcdata = dbm.getTechnicalIndicatorData(sdh.symbolData.exchange, sdh.symbolData.symbol, getIndc, period=getIndicatorPeriod(indc, self.indicatorConfig))
                     if len(indcdata):
                         if indc == IndicatorType.ADX and notInitializingDIData:
                             ## need to generate ADX data in place off the cached DI data
-                            indcdata = generateADXs_AverageDirectionalIndex(periods=self.indicatorConfig.defaultIndicatorFormulaConfig.periods[IndicatorType.ADX], posDIs=[d[0] for d in indcdata], negDIs=[d[1] for d in indcdata])
+                            indcdata = generateADXs_AverageDirectionalIndex(periods=shortcdict(self.indicatorConfig, 'defaultIndicatorFormulaConfig', gconfig.defaultIndicatorFormulaConfig).periods[IndicatorType.ADX], posDIs=[d[0] for d in indcdata], negDIs=[d[1] for d in indcdata])
 
                         sdh.setIndicatorData(indc, indcdata)
                         cachesUsed += 1
