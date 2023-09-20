@@ -321,7 +321,7 @@ class NeuralNetworkInstance:
                 self.stats.negativeAccuracy = results[AccuracyType.NEGATIVE][LossAccuracy.ACCURACY]
 
 
-            if not self.reEvaluating and verbose > 0: self.printAccuracyStats()
+            if not self.reEvaluating and verbose > 0: self.printAllAccuracyStats()
         
         self.updated = True
 
@@ -344,14 +344,27 @@ class NeuralNetworkInstance:
         elif self.config.dataForm.outputVector == DataFormType.CATEGORICAL:
             return numpy.argmax(p, axis=None, out=None)
 
-    def printAccuracyStats(self):
+    def getAccuracyStats(self):
+        retstats = {}
         for actype in AccuracyType:
-            currentval = self.stats.__getattribute__(actype.statsName)
-            lastval = self.useAllSetsAccumulator['last'][actype]
-            print('{} accuracy:'.format(actype.name).ljust(19) + '{}'.format(currentval).ljust(22) + ('' if not True else '({} {})'.format(
-                '+' if currentval >= lastval else '-', '{:.20f}'.format(abs(currentval - lastval))
-            )))
+            retstats[actype.name] = {
+                'current': self.stats.__getattribute__(actype.statsName),
+                'last': self.useAllSetsAccumulator['last'][actype]
+            }
+        return recdotdict(retstats)
+
+    @classmethod
+    def prettyPrintAccuracyStat(cls, name, stats):
+        print(f'{name} accuracy:'.ljust(19) + f'{stats.current}'.ljust(22) + f"({'+' if stats.current >= stats.last else '-'} {f'{abs(stats.current - stats.last):.20f}'})")
+
+    @classmethod
+    def printAccuracyStats(cls, statsDict):
+        for name, stats in statsDict.items():
+            cls.prettyPrintAccuracyStat(name, stats)
         print()
+
+    def printAllAccuracyStats(self):
+        self.printAccuracyStats(self.getAccuracyStats())
 
 if __name__ == '__main__':
     ## standard neural network

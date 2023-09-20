@@ -149,7 +149,7 @@ class Trainer:
 
                     iterationTimes.append(time.time() - startt)
 
-            self.instance.network.printAccuracyStats()
+            self.instance.network.printAllAccuracyStats()
 
     def saveNetwork(self, withSets=False, dryrun=False):
         nnm.save(self.network, dryrun)
