@@ -50,7 +50,7 @@ class StockDataHandler(GetMemoryUsage):
 
     def determineSelections(self, precedingRange=None, followingRange=None):
         precedingRange = shortc(precedingRange, self.precedingRange)
-        lowerLimit = precedingRange + self.maxIndicatorPeriod
+        lowerLimit = precedingRange + 1 + self.maxIndicatorPeriod
         followingRange = shortc(followingRange, self.followingRange)
 
         self.prunedIndexes = []
