@@ -418,7 +418,8 @@ def generateDXs_DirectionalMovementIndex(data=[], periods=gconfig.defaultIndicat
 
     if len(pdis) < len(data)-periods-1: raise ValueError('Insufficient DI data for further calculation, try updating cached technical indicator data')
 
-    dxs = [_calculateDX(pdis[i], ndis[i]) for i in range(len(data)-periods)]
+    looprange = range(len(posDIs) if posDIs else len(data)-periods)
+    dxs = [_calculateDX(pdis[i], ndis[i]) for i in looprange]
     if DEBUGGING: debugMatrix.setToColumn(debugMatrix.getColByKey('DX'), periods, dxs)
 
     return dxs
@@ -435,7 +436,7 @@ def getDXExpectedLength(datalength, periodlength=gconfig.defaultIndicatorFormula
     https://www.investopedia.com/terms/a/adx.asp        
 '''
 def generateADXs_AverageDirectionalIndex(data=[], periods=gconfig.defaultIndicatorFormulaConfig.periods[IndicatorType.ADX], posDIs=[], negDIs=[]) -> List[float]:
-    if len(data) < periods*2 and (len(posDIs) < periods*2 or len(negDIs) < periods*2): raise InsufficientDataAvailable
+    if len(data) < periods*2 and (len(posDIs) < periods or len(negDIs) < periods): raise InsufficientDataAvailable
 
     dxs = generateDXs_DirectionalMovementIndex(data, periods, posDIs, negDIs)
     if len(dxs) < periods: raise IndexError
