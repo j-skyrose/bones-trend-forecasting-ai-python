@@ -241,7 +241,7 @@ class DataManager():
 
         if not skips: skips = self.skips
         ## pull and setup financial reports ref
-        if gconfig.feature.financials.enabled and not skips.financials:
+        if self.config.feature.financials.enabled and not skips.financials:
             startt2 = time.time()
             self.initializeFinancialDataHandlers(symbolList, self.explicitValidationSymbolList, refresh=refresh, verbose=verbose)
             if verbose>=1: print('Financial data handler initialization time:', time.time() - startt2, 'seconds')
@@ -476,7 +476,7 @@ class DataManager():
         try: googleinterests = self.googleInterestsHandlers[stockDataHandler.getTickerTuple()].getPrecedingRange(anchordate.isoformat(), self.precedingRange)
         except KeyError: googleinterests = []
 
-        if gconfig.feature.financials.enabled:
+        if self.config.feature.financials.enabled:
             startt = time.time()
             precfinset = self.financialDataHandlers[stockDataHandler.getTickerTuple()].getPrecedingReports(anchordate, self.precedingRange)
             self.getprecfintime += time.time() - startt
@@ -1118,7 +1118,7 @@ class DataManager():
             else: slice = None
 
         ## "cache" values for constrList functions
-        if gconfig.network.recurrent:
+        if self.config.network.recurrent:
             staticSize, semiseriesSize, seriesSize = self.inputVectorFactory.getInputSize()
 
         def constrList_helper(set: List[DataPointInstance], isInput, showProgress=True):
@@ -1143,12 +1143,12 @@ class DataManager():
 
             return [
                 numpy.array(staticList),
-                *([numpy.array(semiseriesList)] if gconfig.feature.financials.enabled else []),
+                *([numpy.array(semiseriesList)] if self.config.feature.financials.enabled else []),
                 numpy.array(seriesList)
             ]
 
         def constructDataSet(dpiList=[], vectorList=[]):
-            if gconfig.network.recurrent:
+            if self.config.network.recurrent:
                 inp = constrList_recurrent(dpiList, vectorList)
             else:
                 if vectorList: inp = vectorList
@@ -1156,7 +1156,7 @@ class DataManager():
             oup = constrList(dpiList, False)
             return [
                 inp, 
-                keras.utils.to_categorical(oup, num_classes=OutputClass.__len__()) if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL else oup
+                keras.utils.to_categorical(oup, num_classes=OutputClass.__len__()) if self.config.dataForm.outputVector == DataFormType.CATEGORICAL else oup
             ]
 
 
