@@ -186,6 +186,7 @@ config = recdotdict({
             IndicatorType.MACD: genFeatureObj(True, IndicatorType.MACD.featureExtraType),
             IndicatorType.BB: genFeatureObj(True, IndicatorType.BB.featureExtraType),
             IndicatorType.ST: genFeatureObj(True, IndicatorType.ST.featureExtraType),
+            IndicatorType.RGVB: genFeatureObj(True, IndicatorType.RGVB.featureExtraType),
         },
 
     },

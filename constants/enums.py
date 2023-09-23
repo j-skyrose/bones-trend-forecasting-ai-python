@@ -231,6 +231,7 @@ class IndicatorType(Enum):
     MACD = 'MACD', 'movingAverageConvergenceDivergence', FeatureExtraType.SINGLE
     BB = 'BB', 'bollingerBands', FeatureExtraType.MULTIPLE
     ST = 'ST', 'superTrend', FeatureExtraType.MULTIPLE
+    RGVB = 'RGVB', 'redGreenVolumeBars', FeatureExtraType.SINGLE
 
 class CalculationMethod(Enum):
     SMA = 'SMA'

@@ -25,7 +25,7 @@ from structures.skipsObj import SkipsObj
 from utils.other import buildCommaSeparatedTickerPairString, getIndicatorPeriod, getInstancesByClass, parseCommandLineOptions
 from utils.support import addItemToContainerAtDictKey, asDate, asISOFormat, asList, flatten, getIndex, partition, recdotdict, shortc, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.types import TickerKeyType
-from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends, getExpectedLengthForIndicator, unresumableGenerationIndicators
+from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends, generateVolumeBars, getExpectedLengthForIndicator, unresumableGenerationIndicators
 from utils.vectorSimilarity import euclideanSimilarity_jit
 
 dbm: DatabaseManager = DatabaseManager()
@@ -309,6 +309,8 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
                         indcdata = generateBollingerBands(stkdata, iperiod)
                     elif i == IndicatorType.ST:
                         indcdata = generateSuperTrends(stkdata, iperiod)
+                    elif i == IndicatorType.RGVB:
+                        indcdata = generateVolumeBars(stkdata)
                 except InsufficientDataAvailable:
                     continueFlag = True
 

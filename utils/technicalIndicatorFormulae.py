@@ -799,6 +799,17 @@ if __name__ == '__main__':
     pyplot.show()
 
 
+'''
+    Red-Green Volume bars
+    type: volume indicator
+    range: {0,1}
+    https://www.worden.com/TeleChartHelp/Content/Indicators/Volume_Bars.htm#:~:text=Volume%20Bars%20are%20the%20familiar,lower%20than%20the%20previous%20close.
+'''
+def generateVolumeBars(data) -> List[int]:
+    return [(1 if indx > 0 and d.close > data[indx-1].close else 0) for indx,d in enumerate(data)]
+
+def getVolumeBarsExpectedLength(datalength):
+    return datalength
 
 def getExpectedLengthForIndicator(indicator: IndicatorType, datalength, periodlength=None):
     kwargs = { 'datalength': datalength }
@@ -822,3 +833,5 @@ def getExpectedLengthForIndicator(indicator: IndicatorType, datalength, periodle
         return getBolligerBandsExpectedLength(**kwargs)
     elif indicator == IndicatorType.ST:
         return getSuperTrendExpectedLength(**kwargs)
+    elif indicator == IndicatorType.RGVB:
+        return getVolumeBarsExpectedLength(**kwargs)

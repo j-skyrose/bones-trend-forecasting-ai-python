@@ -129,7 +129,7 @@ def getMarketType(exchange):
 def getIndicatorPeriod(i: IndicatorType, indicatorConfig=gconfig.defaultIndicatorFormulaConfig):
     if i.isEMA():
         period = i.emaPeriod
-    elif i == IndicatorType.MACD:
+    elif i in [IndicatorType.MACD, IndicatorType.RGVB]:
         period = None
     else:
         period = indicatorConfig.periods[i] if i != IndicatorType.DIS else indicatorConfig.periods[IndicatorType.ADX]

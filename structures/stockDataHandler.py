@@ -17,7 +17,7 @@ from structures.normalizationDataHandler import NormalizationDataHandler
 from utils.types import TickerKeyType
 from utils.support import GetMemoryUsage, asList, recdotdict, recdotobj, shortc
 from utils.other import normalizeStockData, denormalizeStockData, getIndicatorPeriod
-from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends
+from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends, generateVolumeBars
 
 '''
 maintains the time series data from the DB, in normalized and raw forms
@@ -153,6 +153,8 @@ class StockDataHandler(GetMemoryUsage):
                 self.indicators[i] = generateBollingerBands(self.data, iperiod, multiplier=indicatorConfig.modifiers[IndicatorType.BB].multiplier)
             elif i == IndicatorType.ST:
                 self.indicators[i] = generateSuperTrends(self.data, atrPeriod=iperiod, multiplier=indicatorConfig.modifiers[IndicatorType.ST].multiplier)
+            elif i == IndicatorType.RGVB:
+                self.indicators[i] = generateVolumeBars(self.data)
                 
             genTimes[i] += time.time() - startt
         
