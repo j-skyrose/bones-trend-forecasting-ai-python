@@ -112,6 +112,7 @@ class InputVectorFactory(Singleton):
         staticarr = []
 
         ## loop thru all features and sub-features incrementally adding them to the end of the vector
+        # e.g. open FeatureExtraType.KEY stock_open
         for k, extraType, compositeKey in self.featureTuples:
             logstuff = False
 
@@ -226,7 +227,7 @@ class InputVectorFactory(Singleton):
                         if earningsDate:
                             daydiff = (date.fromisoformat(earningsDate) - date.fromisoformat(d.period_date)).days
                         
-                        if self.config.inputVectorFactory.earningsDate.useVectorSize2:
+                        if self.config.dataForm.earningsDate.vectorSize2:
                             itlist = [
                                 1 if earningsDate else 0, ## current earnings date is known; unknown being either missing, or current day is more than 180 days (~2 quarters) away from closest known earnings date
                                 daydiff if earningsDate else 0 ## distance (in days) from current earnings date
@@ -245,7 +246,7 @@ class InputVectorFactory(Singleton):
 
                         vectorAsList.extend(itlist)
                 else:
-                    if self.config.inputVectorFactory.earningsDate.useVectorSize2:
+                    if self.config.dataForm.earningsDate.vectorSize2:
                         vectorAsList = [0,0]*len(stockDataSet)
                     else:
                         vectorAsList = [0,0,0,0]*len(stockDataSet)
