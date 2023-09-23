@@ -126,6 +126,11 @@ config = recdotdict({
     'network': {
         'recurrent': True
     },
+    'inputVectorFactory': {
+        'earningsDate': {
+            'useVectorSize2': True # else size 4
+        }
+    },
     'trainer': {
         'customValidationClassValueRatio': 0.15, ## positive : negative
 

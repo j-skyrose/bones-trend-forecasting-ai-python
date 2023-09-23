@@ -224,16 +224,32 @@ class InputVectorFactory(Singleton):
                     for index,d in enumerate(stockDataSet):
                         earningsDate = earningsDateHandler.getNextEarningsDate(d.period_date)
                         if earningsDate:
-                            daydiff = (date.fromisoformat(d.period_date) - date.fromisoformat(earningsDate)).days
+                            daydiff = (date.fromisoformat(earningsDate) - date.fromisoformat(d.period_date)).days
                         
-                        vectorAsList.extend([
-                            1 if earningsDate else 0, ## current earnings date is known; unknown being either missing, or current day is more than 180 days (~2 quarters) away from closest known earnings date
-                            1 if earningsDate and daydiff < 0 else 0, ## value is days before current (i.e. most recent) earnings date
-                            1 if earningsDate and daydiff > 0 else 0, ## value is (up to 7) days after current (i.e. most recent) earnings date
-                            abs(daydiff) if earningsDate else 0 ## distance (in days) from current earnings date
-                        ])
+                        if self.config.inputVectorFactory.earningsDate.useVectorSize2:
+                            itlist = [
+                                1 if earningsDate else 0, ## current earnings date is known; unknown being either missing, or current day is more than 180 days (~2 quarters) away from closest known earnings date
+                                daydiff if earningsDate else 0 ## distance (in days) from current earnings date
+                            ]
+                        else:
+                            itlist = [
+                                1 if earningsDate else 0, ## current earnings date is known; unknown being either missing, or current day is more than 180 days (~2 quarters) away from closest known earnings date
+                                1 if earningsDate and daydiff > 0 else 0, ## value is days until current (i.e. most recent) earnings date
+                                1 if earningsDate and daydiff < 0 else 0, ## value is days after current (i.e. most recent) earnings date
+                                abs(daydiff) if earningsDate else 0 ## distance (in days) from current earnings date
+                            ]
+                            
+                            # 1 if earningsDate else 0, ## current earnings date is known; unknown being either missing, or current day is more than 180 days (~2 quarters) away from closest known earnings date
+                            # 1 if earningsDate and daydiff > 0 else 0, ## value is days until current (i.e. most recent) earnings date
+                            # abs(daydiff) if earningsDate else 0 ## distance (in days) from current earnings date
+
+                        vectorAsList.extend(itlist)
                 else:
-                    vectorAsList = [0,0,0,0]*len(stockDataSet)
+                    if self.config.inputVectorFactory.earningsDate.useVectorSize2:
+                        vectorAsList = [0,0]*len(stockDataSet)
+                    else:
+                        vectorAsList = [0,0,0,0]*len(stockDataSet)
+                    # vectorAsList = [0,0,0]*len(stockDataSet)
 
                 if collectStats: sm.ktypeearningsdatetime += time.time() - startt
 
