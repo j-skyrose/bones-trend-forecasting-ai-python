@@ -382,7 +382,7 @@ class DatabaseManager(Singleton):
     def getStockData(self, exchange: str, symbol: str, seriesType: SeriesType, minDate=None, fillGaps=False, queryLimit=None) -> List[HistoricalDataRow]:
         stmt = 'SELECT * from historical_data WHERE exchange=? AND symbol=? AND series_type=? ' 
         # return self._queryOrGetCache(stmt, (exchange, symbol, type.name), self._getHistoricalDataCount(), exchange+';'+symbol+';'+type.name)
-        if minDate:    stmt += 'AND period_date > \'' + minDate + '\''
+        if minDate:    stmt += 'AND period_date > \'' + asISOFormat(minDate) + '\''
         stmt += ' ORDER BY period_date'
         if queryLimit: stmt += ' DESC LIMIT ' + str(queryLimit)
 
