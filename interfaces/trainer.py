@@ -36,10 +36,14 @@ def getTimestamp(year=datetime.now().year, month=datetime.now().month, day=datet
     return time.mktime(datetime(year, month, day, hour, minute).timetuple())
 
 class Trainer:
-    def __init__(self, network=None, networkId=None, useAllSets=False, **kwargs):
+    def __init__(self, network=None, networkId=None, useAllSets=False, dataManager=None, **kwargs):
         startt = time.time()
         self.network = nnm.get(networkId) if networkId else network
-        self.dm: DataManager = DataManager.forTraining(inputVectorFactory=self.network.inputVectorFactory, useAllSets=useAllSets, **kwargs)
+        self.dm: DataManager = None
+        if dataManager:
+            self.dm = dataManager
+        else:    
+            self.dm =  DataManager.forTraining(inputVectorFactory=self.network.inputVectorFactory, useAllSets=useAllSets, **kwargs)
         self.useAllSets = useAllSets
 
         if network:
@@ -57,7 +61,7 @@ class Trainer:
             print('Set creation breakdown')
             StatsManager().printAll()
 
-        self.instance = TrainingInstance(self.network, { 'epochs': 1, 'batchSize': 32 }, **kwparams)
+        self.instance = TrainingInstance(self.network, { 'epochs': 1, 'batchSize': 128 }, **kwparams)
         print('Startup time required:', time.time() - startt, 'seconds')
 
     def _getSetKWParams(self, **kwargs):
