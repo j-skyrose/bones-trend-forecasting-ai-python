@@ -454,6 +454,34 @@ class DataManager():
                 print(o, outputClassCountsDict[o])
 
         return tickerWindows
+    
+    def _getMaxIndicatorPeriod(self):
+        return getMaxIndicatorPeriod(self.config.feature[indicatorsKey].keys(), self.indicatorConfig)
+
+    ## preserves much of the initialized data while mainly allowing new input vectors to be created with a different configuration
+    def setNewConfig(self, config, indicatorConfig=None, verbose=None):
+        verbose = shortc(verbose, self.verbose)
+
+        indicatorConfig = shortc(indicatorConfig, config.defaultIndicatorFormulaConfig)
+        currentMaxIndicatorPeriod = self._getMaxIndicatorPeriod()
+        newMaxIndicatorPeriod = getMaxIndicatorPeriod(config.feature[indicatorsKey].keys(), indicatorConfig)
+
+        self.config = config
+        self.indicatorConfig = indicatorConfig
+        self.inputVectorFactory = InputVectorFactory(config)
+
+        if currentMaxIndicatorPeriod < newMaxIndicatorPeriod:
+            # TODO: need to regen everything starting with stock data handlers as some may have been excluded due to insufficient data length
+            pass
+        elif currentMaxIndicatorPeriod > newMaxIndicatorPeriod:
+            ## available selections will decrease
+            for sdh in self.stockDataHandlers.values():
+                sdh.maxIndicatorPeriod = newMaxIndicatorPeriod
+                sdh.determineSelections()
+            # TODO: should modify _initializeAllData to handle this re-init instead, some conditions may be missed and no use duplicating here
+            self.initializeTechnicalIndicators(verbose)
+            self.initializeStockDataInstances(refresh=True, verbose=verbose)
+            self.setupSets(verbose=verbose)
 
     def buildInputVector(self, stockDataHandler: StockDataHandler, stockDataIndex):
         symbolData = stockDataHandler.symbolData
@@ -514,7 +542,7 @@ class DataManager():
         ## purge old data
         if refresh: self.__getattribute__(dmProperty).clear()
 
-        maxIndicatorPeriod = getMaxIndicatorPeriod(self.config.feature[indicatorsKey].keys(), self.indicatorConfig)
+        maxIndicatorPeriod = self._getMaxIndicatorPeriod()
 
         ## check if there is enough stock data to fulfill (hyperparameter) requirements
         precedingFollowingShortfallCheck = lambda d: len(d) >= self.precedingRange + self.followingRange + 1
@@ -931,11 +959,13 @@ class DataManager():
             self.explicitValidationSet = self.explicitValidationSet[:self.setCount]
         random.shuffle(self.explicitValidationSet)
 
-    def setupSets(self, setCount=None, setSplitTuple=None, minimumSetsPerSymbol=0, selectAll=False, verbose=None):
+    def setupSets(self, setCount=None, setSplitTuple=None, minimumSetsPerSymbol=None, selectAll=False, verbose=None):
         verbose = shortc(verbose, self.verbose)
 
+        setCount = shortc(setCount, self.setCount)
         if not setSplitTuple:
             setSplitTuple = shortc(self.setSplitTuple, (1/3,1/3))
+        minimumSetsPerSymbol = shortc(minimumSetsPerSymbol, self.minimumSetsPerSymbol)
 
         if self.useAllSets or selectAll:
             self.unselectedInstances = []
