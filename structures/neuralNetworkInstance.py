@@ -136,19 +136,13 @@ class NeuralNetworkInstance:
                 )(semiseries_x)
                 semiseries_x = Activation(_getActivationString(l))(semiseries_x)
 
-            series_x = GRU(
-                int(layers[2][0]['units']),
-                # input_shape=inputSize,  ## (time_steps, features) ...i.e. (days, datapoints per day)
-                # activation='selu',
-                kernel_initializer='lecun_normal',
-                return_sequences=len(layers[2]) > 1
-            )(series_input)
-            series_x = Activation(_getActivationString(layers[2][0]))(series_x)
-            for l in layers[2][1:]:
+            for indx,l in enumerate(layers[2]):
                 series_x = GRU(
                     int(l['units']),
-                    kernel_initializer='lecun_normal'
-                )(series_x)
+                    # input_shape=inputSize,  ## (time_steps, features) ...i.e. (days, datapoints per day)
+                    kernel_initializer='lecun_normal',
+                    return_sequences=indx < len(layers[2])-1 ## last does not need to return seq
+                )(series_x if indx > 0 else series_input)
                 series_x = Activation(_getActivationString(l))(series_x)
 
             x_combined = Concatenate()([
