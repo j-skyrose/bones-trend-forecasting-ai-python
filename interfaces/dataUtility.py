@@ -366,12 +366,14 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
     return returntpls
 
 ## generates or updates cached technical indicator data; should be run after every stock data dump
-def technicalIndicatorDataCalculationAndInsertion(exchange=[], seriesType: SeriesType=SeriesType.DAILY, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, doNotCacheADX=True, sequential=False):
+def technicalIndicatorDataCalculationAndInsertion(exchange=[], symbol=[], seriesType: SeriesType=SeriesType.DAILY, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, doNotCacheADX=True, sequential=False):
     exchange = asList(exchange)
+    symbol = asList(symbol)
     tickers = dbm.dbc.execute('''
-        SELECT MAX(period_date) AS date, exchange, symbol FROM historical_data WHERE series_type=? {} group by exchange, symbol
+        SELECT MAX(period_date) AS date, exchange, symbol FROM historical_data WHERE series_type=? {} {} group by exchange, symbol
     '''.format(
-            ('AND exchange IN (\'{}\')'.format('\',\''.join(exchange))) if len(exchange)>0 else ''
+            ('AND exchange IN (\'{}\')'.format('\',\''.join(exchange))) if len(exchange) > 0 else '',
+            ('AND symbol IN (\'{}\')'.format('\',\''.join(symbol))) if len(symbol) > 0 else ''
         ), (seriesType.name,)).fetchall()
     print('Got {} tickers'.format(len(tickers)))
 
