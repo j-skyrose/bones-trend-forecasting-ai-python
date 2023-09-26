@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from globalConfig import config as gconfig
 from constants.enums import MarketType
 from constants.exceptions import ArgumentError
-from utils.support import Singleton, getIndex
+from utils.support import Singleton, asDatetime, getIndex
 from utils.other import getMarketType
 
 # http://www.market-holidays.com/2022
@@ -79,7 +79,7 @@ class MarketDayManager(Singleton):
         return marketdays.index(toDate) - marketdays.index(fromDate)
 
     @classmethod
-    def getMarketDays(cls, year=None, month: int=None, startingYear: int=None, startingFrom: datetime=None) -> List[date]:
+    def getMarketDays(cls, year=None, month: int=None, startingYear: int=None, startingFrom: datetime=None, ending: datetime=None) -> List[date]:
         self = cls()
         if year:
             if month is not None:
@@ -89,12 +89,15 @@ class MarketDayManager(Singleton):
         elif startingYear:
             days = self._getMarketDaysStartingFromYear(startingYear)
         elif startingFrom:
-            # return [d for d in self._getMarketDaysStartingFromYear(startingFrom.year) if d >= startingFrom]
+            startingFrom = asDatetime(startingFrom)
             days = self._getMarketDaysStartingFromYear(startingFrom.year)
         else:
             raise ArgumentError
+        
+        lowerLimit = datetime.min if not startingFrom else startingFrom
+        upperLimit = datetime.max if not ending else asDatetime(ending)
             
-        return [d.date() for d in days if (True if not startingFrom else d >= startingFrom)]
+        return [d.date() for d in days if lowerLimit <= d and d <= upperLimit]
 
     @classmethod
     def advance(cls, startDate: date=date.today(), amount: int=1) -> date:
@@ -125,7 +128,7 @@ class MarketDayManager(Singleton):
         if year not in self.marketDays:
             days = [datetime(year, 1, 1, 23, 59, 59) + timedelta(days=d) for d in range(366 if calendar.isleap(year) else 365)]
             ## remove weekends and holidays
-            days[:] = [d for d in days if d.weekday() < 5 and d not in self.getMarketHolidays(year)]
+            days[:] = [d for d in days if d.weekday() < 5 and d.date() not in self.getMarketHolidays(year)]
             self.marketDays[str(year)] = days
         return self.marketDays[str(year)]
 
