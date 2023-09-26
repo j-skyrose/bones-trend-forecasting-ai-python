@@ -15,7 +15,7 @@ from constants.values import stockOffset
 from constants.enums import IndicatorType, SeriesType
 from structures.normalizationDataHandler import NormalizationDataHandler
 from utils.types import TickerKeyType
-from utils.support import GetMemoryUsage, asList, recdotdict, recdotobj, shortc
+from utils.support import GetMemoryUsage, asISOFormat, asList, getItem, recdotdict, recdotobj, shortc
 from utils.other import normalizeStockData, denormalizeStockData, getIndicatorPeriod
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends, generateVolumeBars
 
@@ -74,7 +74,7 @@ class StockDataHandler(GetMemoryUsage):
                 raise RuntimeError('Data maxes not available for denormalization')
 
     def setData(self, data, normalizationData: NormalizationDataHandler=None, precedingRange=None, followingRange=None):
-        self.data = data
+        self.data: List = data
         if normalizationData:
             self.stockPriceNormalizationMax = normalizationData.getValue('high', orNone=True)
             self.stockVolumeNormalizationMax = normalizationData.getValue('volume', orNone=True)
@@ -97,6 +97,10 @@ class StockDataHandler(GetMemoryUsage):
 
     def getPrecedingSet(self, index):
         return self.data[index-self.precedingRange:index]
+    
+    def getDay(self, dt):
+        dt = asISOFormat(dt)
+        return getItem(self.data, lambda x: x.period_date == dt)
 
     def setIndicatorData(self, indicator: IndicatorType, data):
         self.indicators[indicator] = data
