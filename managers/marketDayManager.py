@@ -26,37 +26,35 @@ class MarketDayManager(Singleton):
     marketDays: dict = {}
 
     @classmethod
-    def getMarketHolidays(cls, yr, exchange='NYSE'):
-        self = cls()
+    def getMarketHolidays(cls, yr, exchange='NYSE', **kwargs):
         yr = str(yr)
 
         market = getMarketType(exchange)
-        if market not in self.marketHolidays:
-            self.marketHolidays[market] = {}
+        if market not in cls.marketHolidays:
+            cls.marketHolidays[market] = {}
 
-        if yr not in self.marketHolidays[market]:
-            self.marketHolidays[market][yr] = self._getMarketHolidays(yr, market)
+        if yr not in cls.marketHolidays[market]:
+            cls.marketHolidays[market][yr] = cls._getMarketHolidays(yr, market)
 
         if market == MarketType.CANADA or market == MarketType.US:
-            if yr not in self.marketHolidays[MarketType.CANADA_US_SHARED]:
-                self.marketHolidays[MarketType.CANADA_US_SHARED][yr] = self._getMarketHolidays(yr, MarketType.CANADA_US_SHARED)
-            return self.marketHolidays[MarketType.CANADA_US_SHARED][yr] + self.marketHolidays[market][yr]
+            if yr not in cls.marketHolidays[MarketType.CANADA_US_SHARED]:
+                cls.marketHolidays[MarketType.CANADA_US_SHARED][yr] = cls._getMarketHolidays(yr, MarketType.CANADA_US_SHARED)
+            return cls.marketHolidays[MarketType.CANADA_US_SHARED][yr] + cls.marketHolidays[market][yr]
 
-        return self.marketHolidays[market][yr]
+        return cls.marketHolidays[market][yr]
 
     @classmethod
     def getMarketHalfdays(cls, yr):
-        self = cls()
         yr = str(yr)
-        if yr not in self.marketHalfDays:
-            self.marketHalfDays[yr] = self._getMarketHalfDays(yr)
-        return self.marketHalfDays[yr]
+        if yr not in cls.marketHalfDays:
+            cls.marketHalfDays[yr] = cls._getMarketHalfDays(yr)
+        return cls.marketHalfDays[yr]
 
     @classmethod
     def getLastMarketDay(cls, d: date=date.today()) -> date:
         if d.weekday() > 4:
             d = d - timedelta(days=(d.weekday() % 4))
-        holidays = cls().getMarketHolidays(d.year)
+        holidays = cls.getMarketHolidays(d.year)
         while d in holidays or d.weekday() > 4:
             d = d - timedelta(days=1)
         return d
@@ -64,33 +62,32 @@ class MarketDayManager(Singleton):
     @classmethod
     def getPreviousMarketDay(cls, d: date=date.today()) -> date:
         d = d - timedelta(days=1)
-        return cls().getLastMarketDay(d)
+        return cls.getLastMarketDay(d)
 
     @classmethod
     def getMarketDayDiff(cls, fromDate: date, toDate: date) -> int:
-        holidays1 = cls().getMarketHolidays(fromDate.year)
-        holidays2 = cls().getMarketHolidays(toDate.year)
+        holidays1 = cls.getMarketHolidays(fromDate.year)
+        holidays2 = cls.getMarketHolidays(toDate.year)
         if fromDate.weekday() > 4 or toDate.weekday() > 4 or fromDate in holidays1 or toDate in holidays2:
             raise ValueError('One of the dates is not a market day')
         if fromDate == toDate:
             return 0
         
-        marketdays = cls().getMarketDays(startingYear=min(fromDate.year, toDate.year))
+        marketdays = cls.getMarketDays(startingYear=min(fromDate.year, toDate.year))
         return marketdays.index(toDate) - marketdays.index(fromDate)
 
     @classmethod
-    def getMarketDays(cls, year=None, month: int=None, startingYear: int=None, startingFrom: datetime=None, ending: datetime=None) -> List[date]:
-        self = cls()
+    def getMarketDays(cls, year=None, month: int=None, startingYear: int=None, startingFrom: datetime=None, ending: datetime=None, **kwargs) -> List[date]:
         if year:
             if month is not None:
-                days = self._getMarketDaysForMonth(year, month)
+                days = cls._getMarketDaysForMonth(year, month, **kwargs)
             else:
-                days = self._getMarketDaysForYear(year)
+                days = cls._getMarketDaysForYear(year, **kwargs)
         elif startingYear:
-            days = self._getMarketDaysStartingFromYear(startingYear)
+            days = cls._getMarketDaysStartingFromYear(startingYear, **kwargs)
         elif startingFrom:
             startingFrom = asDatetime(startingFrom)
-            days = self._getMarketDaysStartingFromYear(startingFrom.year)
+            days = cls._getMarketDaysStartingFromYear(startingFrom.year, **kwargs)
         else:
             raise ArgumentError
         
@@ -104,19 +101,19 @@ class MarketDayManager(Singleton):
         ## assume ~265 market days per year
 
         cdate = startDate
-        marketdays = cls().getMarketDays(year=cdate.year)
+        marketdays = cls.getMarketDays(year=cdate.year)
         ind = getIndex(marketdays, lambda d: d==cdate)
         if ind is None: raise ValueError('Start date is not a market day')
 
         for i in range(50):
             if ind + amount > len(marketdays) - 1:
                 amount = amount - (len(marketdays) - ind)
-                marketdays = cls().getMarketDays(year=cdate.year+1)
+                marketdays = cls.getMarketDays(year=cdate.year+1)
                 cdate = marketdays[0]
                 ind = 0
             elif ind + amount < 0:
                 amount = amount + ind + 1
-                marketdays = cls().getMarketDays(year=cdate.year-1)
+                marketdays = cls.getMarketDays(year=cdate.year-1)
                 cdate = marketdays[-1]
                 ind = len(marketdays) - 1
             else:
@@ -124,28 +121,32 @@ class MarketDayManager(Singleton):
             
         raise IndexError('Unable to determine vanced date')
 
-    def _getMarketDaysForYear(self, year) -> List[date]:
-        if year not in self.marketDays:
+    @classmethod
+    def _getMarketDaysForYear(cls, year, **kwargs) -> List[date]:
+        if year not in cls.marketDays:
             days = [datetime(year, 1, 1, 23, 59, 59) + timedelta(days=d) for d in range(366 if calendar.isleap(year) else 365)]
             ## remove weekends and holidays
-            days[:] = [d for d in days if d.weekday() < 5 and d.date() not in self.getMarketHolidays(year)]
-            self.marketDays[str(year)] = days
-        return self.marketDays[str(year)]
+            days[:] = [d for d in days if d.weekday() < 5 and d.date() not in cls.getMarketHolidays(year, **kwargs)]
+            cls.marketDays[str(year)] = days
+        return cls.marketDays[str(year)]
 
-    def _getMarketDaysForMonth(self, year, month):
-        days = self._getMarketDaysForYear(year)
+    @classmethod
+    def _getMarketDaysForMonth(cls, year, month, **kwargs):
+        days = cls._getMarketDaysForYear(year, **kwargs)
         ## keep only given month
         days[:] = [d for d in days if d.month == month]
         return days
 
-    def _getMarketDaysStartingFromYear(self, year) -> List[date]:
+    @classmethod
+    def _getMarketDaysStartingFromYear(cls, year, **kwargs) -> List[date]:
         year = int(year)
         days = []
         for y in range(datetime.now().year - year + 1):
-            days.extend(self._getMarketDaysForYear(year + y))
+            days.extend(cls._getMarketDaysForYear(year + y, **kwargs))
         return days
 
-    def _getMarketHolidays(self, yr, market:MarketType):
+    @classmethod
+    def _getMarketHolidays(cls, yr, market:MarketType):
         holidays = []
         yr = int(yr)
 
@@ -250,10 +251,10 @@ class MarketDayManager(Singleton):
                 holidays.append(dt)
 
         if market != MarketType.CANADA_US_SHARED:
-            holidays.append(self._getThanksgivingDay(yr, market))
+            holidays.append(cls._getThanksgivingDay(yr, market))
 
         if market != MarketType.CANADA_US_SHARED:
-            xmasdt = self._getChristmasDay(yr, market)
+            xmasdt = cls._getChristmasDay(yr, market)
             holidays.append(xmasdt)
 
         # boxing day
@@ -292,22 +293,23 @@ class MarketDayManager(Singleton):
         elif dt.weekday() == 6: dt = dt + timedelta(days=1)
         return dt
 
-    def _getMarketHalfDays(self, yr):
+    @classmethod
+    def _getMarketHalfDays(cls, yr):
         holidays = []
         yr = int(yr)
 
-        holidays.append(self._getThanksgivingDay(yr) + timedelta(days=1))
-        holidays.append(self._getChristmasDay(yr) - timedelta(days=1))
+        holidays.append(cls._getThanksgivingDay(yr) + timedelta(days=1))
+        holidays.append(cls._getChristmasDay(yr) - timedelta(days=1))
 
         return holidays
 
 
 
 if __name__ == '__main__':
-    # print(MarketDayManager.getMarketHolidays(2021))
+    print(MarketDayManager.getMarketHolidays(2021))
     print(MarketDayManager.getMarketHolidays(2020, exchange='TSX'))
     # print(MarketDayManager.getMarketHolidays(2020))
-    # print(MarketDayManager.getMarketDays(startingFrom=datetime(2019, 12, 2, 8, 0)))
+    print(MarketDayManager.getMarketDays(startingFrom=datetime(2019, 12, 2, 8, 0)))
     # print(MarketDayManager.getMarketDayDiff(date(2022, 1, 14), date(2021, 12, 28)))
-    # print(MarketDayManager.getMarketDayDiff(date(2021, 1, 25), date(2000, 1, 25)))
-    # print(MarketDayManager.getPreviousMarketDay(date(2000, 2, 22)))
+    print(MarketDayManager.getMarketDayDiff(date(2021, 1, 25), date(2000, 1, 25)))
+    print(MarketDayManager.getPreviousMarketDay(date(2000, 2, 22)))
