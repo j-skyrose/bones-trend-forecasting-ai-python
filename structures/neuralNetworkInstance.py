@@ -329,7 +329,7 @@ class NeuralNetworkInstance:
         else:
             inputData = [tf.experimental.numpy.vstack(inputData[0]), tf.experimental.numpy.vstack(inputData[1])]
 
-        p = self.model.predict(inputData, **kwargs)
+        p = self.model.predict(inputData, **kwargs) if shortcdict(kwargs, 'verbose', 0) != 0 else self.model(inputData)
         if batchInput:
             return p
         if self.config.dataForm.outputVector == DataFormType.BINARY:
