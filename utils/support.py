@@ -8,11 +8,12 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 import numpy, re, math, calendar, json, pickle, tqdm, zlib, hashlib, base64
-from tqdm.contrib.concurrent import process_map
+from enum import Enum
 from datetime import date, datetime, timedelta
 from multiprocessing import Pool, cpu_count
+from tqdm.contrib.concurrent import process_map
+from types import FunctionType
 from typing import Callable, Dict, Union
-from enum import Enum
 
 from constants.values import months, foundedSynonyms, indicatorsKey, normalizationColumnPrefix
 
@@ -346,7 +347,7 @@ def getItem(iterable, matchArg: Callable[[Dict], bool]):
     return _getFromListWithCustomMatchFunction(iterable, matchArg, ReturnType.VALUE)
 
 def _getFromListWithCustomMatchFunction(iterable, matchArg, returnType: ReturnType):
-    matchFunction = (lambda x: x == matchArg) if type(matchArg) != Callable else matchArg
+    matchFunction = (lambda x: x == matchArg) if type(matchArg) not in [Callable, FunctionType] else matchArg
     for i, val in enumerate(iterable):
         if matchFunction(val):
             if returnType == ReturnType.INDEX: return i
