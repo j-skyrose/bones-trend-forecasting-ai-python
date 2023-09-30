@@ -236,8 +236,9 @@ class DatabaseManager(Singleton):
                 else:
                     if issubclass(argVal.__class__, Enum): argVal = argVal.name
                     vlist = asList(argVal)
-                    adds.append(f' {col} in ({",".join(["?" for x in range(len(vlist))])}) ')
-                    args.extend(vlist)
+                    if len(vlist) > 0:
+                        adds.append(f' {col} in ({",".join(["?" for x in range(len(vlist))])}) ')
+                        args.extend(vlist)
 
         ## add normalization args to query
         if normalizationData:
