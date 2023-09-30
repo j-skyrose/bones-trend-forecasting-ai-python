@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import numpy, importlib, gc, time
+import numpy, importlib, gc, time, copy
 # from keras import backend as K
 import tensorflow as tf
 from keras import backend as K
@@ -268,6 +268,47 @@ class NeuralNetworkInstance:
                 actype: 0 for actype in AccuracyType
             }
 
+    def _generateAccuracyStatsObj(rootObj):
+        retstats = {}
+        for actype in AccuracyType:
+            retstats[actype.name] = {
+                'current': rootObj.stats.__getattribute__(actype.statsName),
+                'last': rootObj.useAllSetsAccumulator['last'][actype]
+            }
+        return recdotdict(retstats)
+
+    def updateAccuracyStats(self, resultsObj: EvaluationResultsObj, dryRun=False):
+        if dryRun:
+            rootObj = recdotdict()
+            rootObj.useAllSetsAccumulator = copy.deepcopy(self.useAllSetsAccumulator)
+            # parent.stats = copy.deepcopy(self.stats)
+            rootObj.stats = NetworkStats(None, **{ actype.statsName: self.stats.__getattribute__(actype.statsName) for actype in AccuracyType })
+        else:
+            rootObj = self
+
+        if self.useAllSets:
+            for actype in AccuracyType:
+                if not self.reEvaluating:
+                    rootObj.useAllSetsAccumulator['last'][actype] = self.stats.__getattribute__(actype.statsName)
+                    
+                rootObj.useAllSetsAccumulator[actype].append(resultsObj[actype][LossAccuracy.ACCURACY])
+                rootObj.stats.__setattr__(actype.statsName, numpy.average(rootObj.useAllSetsAccumulator[actype]))
+
+        elif resultsObj[self.stats.accuracyType][LossAccuracy.ACCURACY] > self.stats[self.stats.accuracyType.statsName]:
+            rootObj.stats.overallAccuracy = resultsObj[AccuracyType.OVERALL][LossAccuracy.ACCURACY]
+            rootObj.stats.positiveAccuracy = resultsObj[AccuracyType.POSITIVE][LossAccuracy.ACCURACY]
+            rootObj.stats.negativeAccuracy = resultsObj[AccuracyType.NEGATIVE][LossAccuracy.ACCURACY]
+
+        if dryRun:
+            return NeuralNetworkInstance._generateAccuracyStatsObj(rootObj)
+
+    def prepareForReEvaluation(self):
+        '''sets reEvaluating to true, clears useAllSetsAccumulator for new stats'''
+        self.reEvaluating = True
+        for actype in AccuracyType:
+            self.useAllSetsAccumulator['last'][actype] = self.stats.__getattribute__(actype.statsName)
+            self.useAllSetsAccumulator[actype] = []
+
     def fit(self, inputVectors, outputVectors, **kwargs):
         if not self.model: raise BufferError('Model not loaded')
         
@@ -279,45 +320,17 @@ class NeuralNetworkInstance:
             # self.stats.epochs += kwargs['epochs']
             self.stats.epochs += len(hist.epoch)
     
-    def evaluate(self, evaluationDataHandler: EvaluationDataHandler, reEvaluate=False, verbose=1, **kwargs) -> EvaluationResultsObj:
-        firstreevaluate = False
+    def evaluate(self, evaluationDataHandler: EvaluationDataHandler, updateAccuracyStats=True, verbose=1, **kwargs) -> EvaluationResultsObj:
         if not self.model: raise BufferError('Model not loaded')
-        if reEvaluate and not self.reEvaluating:
-            firstreevaluate = True
-            self.reEvaluating = True
         if verbose > 0: print('{}valuating... (overall > positive > negative)'.format('Re-e' if self.reEvaluating else 'E'))
         
         results = evaluationDataHandler.evaluateAll(self.model, verbose=verbose, **kwargs)
 
-        if evaluationDataHandler.accuracyTypesCount() == 3:
-
-            if self.useAllSets:
-                self._initializeAccumulatorIfRequired()
-                if firstreevaluate:
-                    iterationCount = 1
-                else:
-                    iterationCount = len(self.useAllSetsAccumulator[AccuracyType.OVERALL]) + 1
-
-                for actype in AccuracyType:
-                    if firstreevaluate or not self.reEvaluating:
-                        self.useAllSetsAccumulator['last'][actype] = self.stats.__getattribute__(actype.statsName)
-                    if firstreevaluate: self.useAllSetsAccumulator[actype] = []
-                        
-                    self.useAllSetsAccumulator[actype].append(results[actype][LossAccuracy.ACCURACY])
-                    self.stats.__setattr__(actype.statsName, sum(self.useAllSetsAccumulator[actype]) / iterationCount)
-
-                if verbose > 0: print('Iterations:', iterationCount)
-                
-
-            elif results[self.stats.accuracyType][LossAccuracy.ACCURACY] > self.stats[self.stats.accuracyType.statsName]:
-                self.stats.overallAccuracy = results[AccuracyType.OVERALL][LossAccuracy.ACCURACY]
-                self.stats.positiveAccuracy = results[AccuracyType.POSITIVE][LossAccuracy.ACCURACY]
-                self.stats.negativeAccuracy = results[AccuracyType.NEGATIVE][LossAccuracy.ACCURACY]
-
-
-            if not self.reEvaluating and verbose > 0: self.printAllAccuracyStats()
-        
-        self.updated = True
+        if updateAccuracyStats and evaluationDataHandler.accuracyTypesCount() == 3:
+            self.updateAccuracyStats(results)
+            if verbose > 0:
+                if self.useAllSets: print('Iterations:', len(self.useAllSetsAccumulator[AccuracyType.OVERALL]) + 1)
+                if not self.reEvaluating: self.printAllAccuracyStats()
 
         return results
 
@@ -339,13 +352,7 @@ class NeuralNetworkInstance:
             return numpy.argmax(p, axis=None, out=None)
 
     def getAccuracyStats(self):
-        retstats = {}
-        for actype in AccuracyType:
-            retstats[actype.name] = {
-                'current': self.stats.__getattribute__(actype.statsName),
-                'last': self.useAllSetsAccumulator['last'][actype]
-            }
-        return recdotdict(retstats)
+        return self._generateAccuracyStatsObj()
 
     @classmethod
     def prettyPrintAccuracyStat(cls, name, stats):

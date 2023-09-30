@@ -35,6 +35,12 @@ dbm: DatabaseManager = DatabaseManager()
 def getTimestamp(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day, hour=datetime.now().hour, minute=datetime.now().minute):
     return time.mktime(datetime(year, month, day, hour, minute).timetuple())
 
+accuracyStatsHeaderLine1 = ['','Curr Accum Acc', 'Future Accum Acc','Future Accum Acc']
+accuracyStatsHeaderLine2 = ['','', 'bef-Training-acc', 'aft-Training-acc']
+def getCustomAccuracy(statsObj): return statsObj[AccuracyType.POSITIVE.name].current*gconfig.trainer.customValidationClassValueRatio + statsObj[AccuracyType.NEGATIVE.name].current*(1 - gconfig.trainer.customValidationClassValueRatio)
+def getAccDiffStr(forwardAccuracy, currentAccuracy):
+    return f"{ '+' if forwardAccuracy > currentAccuracy else '' }{forwardAccuracy - currentAccuracy:.5f}"
+
 class Trainer:
     def __init__(self, network=None, networkId=None, useAllSets=False, dataManager=None, **kwargs):
         startt = time.time()
@@ -125,21 +131,61 @@ class Trainer:
             print('Iterating through set slices')
             for s in range(maxIterations):
                 startt = time.time()
+                printCurrentStatus(s)
 
+                ## snapshot state/stats before training
+                currentWeights = self.instance.network.model.get_weights()
+                currentAccuracyStats = self.instance.network.getAccuracyStats()
+
+                ## pre-training setup
                 if usePatienceGradient:
                     kwargs['patience'] = kwargs['initialPatience'] + int(s * (kwargs['finalPatience'] - kwargs['initialPatience']) / (maxIterations-1))
                     print('Patience:', kwargs['patience'])
-
-                printCurrentStatus(s)
                 self.instance.updateSets(**self._getSetKWParams(slice=s, omitValidation=True if explicitValidation and s > 0 else False))
-                self.instance.train(**kwargs)
+
+                ## snapshot accuracy stats on the new validation set before training
+                prevaluateResults = self.instance.evaluate(updateAccuracyStats=False)
+                futureAccuracyStats_prevaluate = self.instance.network.updateAccuracyStats(prevaluateResults, dryRun=True)
+
+                ## train and evaluate
+                postEvaluateResults = self.instance.train(verbose=0, updateAccuracyStats=False, **kwargs)
+                futureAccuracyStats_postEvaluate = self.instance.network.updateAccuracyStats(postEvaluateResults, dryRun=True)
+
+                ## compare accuracy stats before and after training
+                accuracyRows = []
+                for acctype in AccuracyType:
+                    currentAccuracy = currentAccuracyStats[acctype.name].current
+                    futureAccuracy_prevaluate = futureAccuracyStats_prevaluate[acctype.name].current
+                    futureAccuracy_postEvaluate = futureAccuracyStats_postEvaluate[acctype.name].current
+                    accuracyRows.append([acctype.name, currentAccuracy, futureAccuracy_prevaluate, futureAccuracy_postEvaluate])
+                    accuracyRows.append(['', '', getAccDiffStr(futureAccuracy_prevaluate, currentAccuracy), getAccDiffStr(futureAccuracy_postEvaluate, currentAccuracy)])
+                currentCustomAccuracy = getCustomAccuracy(currentAccuracyStats)
+                futureCustomAccuracy_prevaluate = getCustomAccuracy(futureAccuracyStats_prevaluate)
+                futureCustomAccuracy_postEvaluate = getCustomAccuracy(futureAccuracyStats_postEvaluate)
+                accuracyRows.append(['CUSTOM', currentCustomAccuracy, futureCustomAccuracy_prevaluate, futureCustomAccuracy_postEvaluate])
+                accuracyRows.append(['','', getAccDiffStr(futureCustomAccuracy_prevaluate, currentCustomAccuracy), getAccDiffStr(futureCustomAccuracy_postEvaluate, currentCustomAccuracy)])
+
+                for r in [accuracyStatsHeaderLine1, accuracyStatsHeaderLine2, *accuracyRows]:
+                    print("{: >10} {: >21} {: >21} {: >21}".format(*r))
+
+                ## if network was in a better state accuracy-wise before the training, then restore it to that original
+                if futureCustomAccuracy_prevaluate > futureCustomAccuracy_postEvaluate:
+                    print('Future state is worse, restoring weights...')
+                    self.instance.network.model.set_weights(currentWeights)
+                    self.instance.network.updateAccuracyStats(prevaluateResults)
+                else:
+                    self.instance.network.updateAccuracyStats(postEvaluateResults)
+
+                print()
+
                 gc.collect()
                 iterationTimes.append(time.time() - startt)
             
 
+            self.instance.network.prepareForReEvaluation()
             if explicitValidation:
                 ## validation set never changes, so no loop and re-build required
-                self.instance.evaluate(reEvaluate=True)
+                self.instance.evaluate()
             else:
                 iterationTimes = []
                 ## re-evaluating
@@ -148,7 +194,7 @@ class Trainer:
 
                     printCurrentStatus(s)
                     self.instance.updateSets(**self._getSetKWParams(slice=s, validationDataOnly=True))
-                    self.instance.evaluate(reEvaluate=True)
+                    self.instance.evaluate()
                     gc.collect()
 
                     iterationTimes.append(time.time() - startt)
