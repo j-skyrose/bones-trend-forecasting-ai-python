@@ -28,7 +28,7 @@ class NetworkStats:
         self.positiveAccuracy = 0
         self.epochs = 0
 
-        for k,v in kwargs:
+        for k,v in kwargs.items():
             setattr(self, k, v)
 
     @classmethod
