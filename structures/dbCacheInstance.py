@@ -17,7 +17,7 @@ class DBCacheInstance:
         self.value = value
 
     def test(self, q, st):
-        return q == self.queryStatement and self.stampZip == compressObj(st)
+        return q == self.queryStatement and self.stampZip if hasattr(self, 'stampZip') else self.validationZip == compressObj(st)
 
     def getUniqueHash(self):
         return urlSafeHash(self.queryStatement)
