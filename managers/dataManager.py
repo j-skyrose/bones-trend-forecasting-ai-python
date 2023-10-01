@@ -229,7 +229,7 @@ class DataManager():
 
         self.vixDataHandler = VIXManager(self.shouldNormalize).data
 
-        if self.verbose>=1: print('DataManager init complete. Took', time.time() - startt, 'seconds')
+        if self.verbose>=2: print('DataManager init complete. Took', time.time() - startt, 'seconds')
 
     def initializeAllDataForPage(self, page, verbose=None):
         if not self.usePaging: raise ArgumentError('Manager not setup with paging')
@@ -340,7 +340,7 @@ class DataManager():
             kwargs['normalizationData'] = nn.stats.normalizationData
         symbolList = dbm.getLastUpdatedInfo(nn.stats.seriesType, anchorDate, OperatorDict.LESSTHANOREQUAL, **kwargs)
 
-        print('OG list length', len(symbolList))
+        if shortcdict(kwargs, 'verbose', 1) >= 1: print('OG list length', len(symbolList))
 
         if gconfig.testing.REDUCED_SYMBOL_SCOPE:
             symbolList[:] = symbolList[:gconfig.testing.REDUCED_SYMBOL_SCOPE]
@@ -874,7 +874,7 @@ class DataManager():
             for k in genKeys:
                 genTimes[k].append(genTime[k])
 
-        if verbose>=1:
+        if verbose>=2:
             print('Technical indicator generation complete. Took', time.time() - startt, 'seconds')
             print('Skipped {} stocks'.format(sdhSkips))
             print('Used {} caches'.format(cachesUsed))
@@ -1060,7 +1060,7 @@ class DataManager():
         random.shuffle(self.trainingSet)
         random.shuffle(self.validationSet)
         random.shuffle(self.testingSet)
-        if verbose>=1: print('Sets split into', len(self.trainingSet), '/', len(self.validationSet), '/', len(self.testingSet))
+        if verbose>=2: print('Sets split into', len(self.trainingSet), '/', len(self.validationSet), '/', len(self.testingSet))
 
         # return trainingSet, validationSet, testingSet
 

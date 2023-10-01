@@ -43,6 +43,7 @@ def getAccDiffStr(forwardAccuracy, currentAccuracy):
 
 class Trainer:
     def __init__(self, network=None, networkId=None, useAllSets=False, dataManager=None, **kwargs):
+        verbose = shortcdict(kwargs, 'verbose', 1)
         startt = time.time()
         self.network = nnm.get(networkId) if networkId else network
         self.dm: DataManager = None
@@ -61,19 +62,21 @@ class Trainer:
         kwparams = {}
         if not useAllSets:
             setstartt = time.time()
-            kwparams = self._getSetKWParams()
+            kwparams = self._getSetKWParams(verbose=verbose)
 
-            print('Set creation time required:', time.time() - setstartt, 'seconds')
-            print('Set creation breakdown')
-            StatsManager().printAll()
+            if verbose >= 2:
+                print('Set creation time required:', time.time() - setstartt, 'seconds')
+                print('Set creation breakdown')
+                StatsManager().printAll()
 
         self.instance = TrainingInstance(self.network, { 'epochs': 1, 'batchSize': 128 }, **kwparams)
-        print('Startup time required:', time.time() - startt, 'seconds')
+        if verbose >= 2: print('Startup time required:', time.time() - startt, 'seconds')
 
     def _getSetKWParams(self, **kwargs):
+        verbose = shortcdict(kwargs, 'verbose', 0)
         omitValidation = shortcdict(kwargs, 'omitValidation', False)
 
-        print('Building KWParams object')
+        if verbose >= 2: print('Building KWParams object')
         sets = self.dm.getKerasSets(**kwargs)
         if shortcdict(kwargs, 'validationDataOnly', False):
             if omitValidation: raise ArgumentError
@@ -83,14 +86,14 @@ class Trainer:
             del kwargs['validationDataOnly']
         else: 
             t, v, ts = sets
-        print('KWParams class sets')
+        if verbose >= 2: print('KWParams class sets')
 
         class1set = None
         class2set = None
         if not omitValidation:
             class1set = self.dm.getKerasSets(1, True, **kwargs)
             class2set = self.dm.getKerasSets(2, True, **kwargs)
-        print('Keras sets built')
+        if verbose >= 2: print('Keras sets built')
         return {
             'trainingSet': t, 
             'validationSet': v, 
@@ -100,6 +103,7 @@ class Trainer:
         }
 
     def train(self, **kwargs):
+        verbose = shortcdict(kwargs, 'verbose', 1)
         if not self.useAllSets:
             if not any(x in kwargs.keys() for x in ['epochs', 'patience']):
                 raise ArgumentError(None, 'Missing epochs, network will not train at all')
@@ -144,11 +148,12 @@ class Trainer:
                 self.instance.updateSets(**self._getSetKWParams(slice=s, omitValidation=True if explicitValidation and s > 0 else False))
 
                 ## snapshot accuracy stats on the new validation set before training
-                prevaluateResults = self.instance.evaluate(updateAccuracyStats=False)
+                prevaluateResults = self.instance.evaluate(updateAccuracyStats=False, verbose=verbose-1)
                 futureAccuracyStats_prevaluate = self.instance.network.updateAccuracyStats(prevaluateResults, dryRun=True)
 
                 ## train and evaluate
-                postEvaluateResults = self.instance.train(verbose=0, updateAccuracyStats=False, **kwargs)
+                if verbose >= 1: print('Training...')
+                postEvaluateResults = self.instance.train(updateAccuracyStats=False, verbose=verbose-1, **kwargs)
                 futureAccuracyStats_postEvaluate = self.instance.network.updateAccuracyStats(postEvaluateResults, dryRun=True)
 
                 ## compare accuracy stats before and after training
@@ -273,6 +278,7 @@ if __name__ == '__main__':
                 optimizer, layers, precedingRange=precrange, inputSize=inputSize,
                 # useAllSets=useAllSets
             ),
+            verbose=1,
             precedingRange=precrange, 
             followingRange=folrange,
             changeValue=changeValue,
