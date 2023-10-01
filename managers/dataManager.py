@@ -939,16 +939,37 @@ class DataManager():
                 self.earningsDateHandlers[key] = StockEarningsDateHandler(*key.getTuple(), dbData=dbm.getEarningsDate(s.exchange, s.symbol))
         if verbose >= 1: print('Initialized earnings date handlers of which', len([1 for v in self.earningsDateHandlers.values() if len(v.data) > 0]), '/', len(self.earningsDateHandlers), 'have data')
 
-    def initializeWindow(self, windowIndex):
+    def initializeWindow(self, windowIndex, verbose=None):
+        verbose = shortc(verbose, self.verbose)
         self.normalized = False
         windowData = self.windows[windowIndex]
-        self.initializeStockDataHandlers(windowData, refresh=True)
-        self.initializeTechnicalIndicators()
-        self.initializeStockSplitsHandlers(windowData, refresh=True)
-        self.initializeEarningsDateHandlers(windowData, refresh=True)
-        self.initializeGoogleInterestsHandlers(windowData, refresh=True)
-        self.initializeStockDataInstances(refresh=True)
-        self.setupSets(selectAll=True)
+
+        stepCount = 1
+        stepStringStart = 'Initializing window... {}'
+        stepStringInterim = stepStringStart.format('Step {} - {}')
+
+        if verbose == 1: print (stepStringInterim.format(stepCount, 'stocks'), end="\r")
+        self.initializeStockDataHandlers(windowData, refresh=True, verbose=verbose-1)
+        stepCount += 1
+        if verbose == 1: print (stepStringInterim.format(stepCount, 'technical indicators'), end="\r")
+        self.initializeTechnicalIndicators(verbose=verbose-1)
+        stepCount += 1
+        if verbose == 1: print (stepStringInterim.format(stepCount, 'stock splits         '), end="\r")
+        self.initializeStockSplitsHandlers(windowData, refresh=True, verbose=verbose-1)
+        stepCount += 1
+        if verbose == 1: print (stepStringInterim.format(stepCount, 'earnings dates  '), end="\r")
+        self.initializeEarningsDateHandlers(windowData, refresh=True, verbose=verbose-1)
+        stepCount += 1
+        if verbose == 1: print (stepStringInterim.format(stepCount, 'Google interests'), end="\r")
+        self.initializeGoogleInterestsHandlers(windowData, refresh=True, verbose=verbose-1)
+        stepCount += 1
+        if verbose == 1: print (stepStringInterim.format(stepCount, 'data instances    '), end="\r")
+        self.initializeStockDataInstances(refresh=True, verbose=verbose-1)
+        stepCount += 1
+        if verbose == 1: print (stepStringInterim.format(stepCount, 'sets          '), end="\r")
+        self.setupSets(selectAll=True, verbose=verbose-1)
+        if verbose == 1: print (stepStringStart.format('done               '))
+
         self.initializedWindow = windowIndex
         gc.collect()
 
@@ -1139,7 +1160,7 @@ class DataManager():
 
         if self.useAllSets and self.useOptimizedSplitMethodForAllSets:
             if self.initializedWindow != slice:
-                self.initializeWindow(slice)
+                self.initializeWindow(slice, verbose)
             slice = None
 
         ## lazily ensure slice is not used if not setup for all sets
