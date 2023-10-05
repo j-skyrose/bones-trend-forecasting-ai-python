@@ -62,30 +62,6 @@ def multicore_getEarningsDateTickerTuples(ticker):
 ## not sure how new exchange/symbol handler setups would work with normalization info, if not initialized when datamanager is created
 
 class DataManager():
-    # stockDataManager: StockDataManager = None
-    stockDataHandlers: Dict[TickerKeyType, StockDataHandler] = {}
-    explicitValidationStockDataHandlers: Dict[TickerKeyType, StockDataHandler] = {}
-    financialDataHandlers: Dict[TickerKeyType, FinancialDataHandler] = {}
-    stockSplitsHandlers: Dict[TickerKeyType, StockSplitsHandler] = {}
-    earningsDateHandlers: Dict[TickerKeyType, StockEarningsDateHandler] = {}
-    googleInterestsHandlers: Dict[TickerKeyType, GoogleInterestsHandler] = {}
-    stockDataInstances: Dict[TickerDateKeyType, DataPointInstance] = {}
-    explicitValidationStockDataInstances: Dict[TickerDateKeyType, DataPointInstance] = {}
-    selectedInstances: List[DataPointInstance] = []
-    unselectedInstances: List[DataPointInstance] = []
-    setSplitTuple = None
-    trainingInstances: List[DataPointInstance] = []
-    validationInstances: List[DataPointInstance] = []
-    testingInstances: List[DataPointInstance] = []
-    trainingSet: List[DataPointInstance] = []
-    validationSet: List[DataPointInstance] = []
-    explicitValidationSet: List[DataPointInstance] = []
-    testingSet: List[DataPointInstance] = []
-    inputVectorFactory = None
-    setsSlidingWindowPercentage = 0
-    useAllSets = False
-    shouldNormalize = False
-    normalized = False
 
     def __init__(self,
         precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, threshold=0,
@@ -104,6 +80,21 @@ class DataManager():
         # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
         # neuralNetwork: NeuralNetworkInstance=None, exchange=[], excludeExchange=[], sectors=[], excludeSectors=[]
     ):
+        self.stockDataHandlers: Dict[TickerKeyType, StockDataHandler] = {}
+        self.explicitValidationStockDataHandlers: Dict[TickerKeyType, StockDataHandler] = {}        
+        self.financialDataHandlers: Dict[TickerKeyType, FinancialDataHandler] = {}
+        self.stockSplitsHandlers: Dict[TickerKeyType, StockSplitsHandler] = {}
+        self.earningsDateHandlers: Dict[TickerKeyType, StockEarningsDateHandler] = {}
+        self.googleInterestsHandlers: Dict[TickerKeyType, GoogleInterestsHandler] = {}
+        self.stockDataInstances: Dict[TickerDateKeyType, DataPointInstance] = {}
+        self.explicitValidationStockDataInstances: Dict[TickerDateKeyType, DataPointInstance] = {}
+        self.selectedInstances: List[DataPointInstance] = []
+        self.unselectedInstances: List[DataPointInstance] = []
+        self.trainingSet: List[DataPointInstance] = []
+        self.validationSet: List[DataPointInstance] = []
+        self.explicitValidationSet: List[DataPointInstance] = []
+        self.testingSet: List[DataPointInstance] = []
+
         self.config = inputVectorFactory.config
 
         ## check for inappropriate argument combinations, and other misconfigurations
