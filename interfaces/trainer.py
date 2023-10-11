@@ -24,7 +24,7 @@ from managers.inputVectorFactory import InputVectorFactory
 from structures.trainingInstance import TrainingInstance
 from managers.statsManager import StatsManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
-from constants.enums import AccuracyType, ChangeType, LossAccuracy, OperatorDict, SeriesType
+from constants.enums import AccuracyType, ChangeType, SetClassificationType, LossAccuracy, OperatorDict, SeriesType
 from constants.exceptions import SufficientlyUpdatedDataNotAvailable
 from utils.support import containsAllKeys, shortc, shortcdict
 from constants.values import tseNoCommissionSymbols
@@ -74,32 +74,30 @@ class Trainer:
 
     def _getSetKWParams(self, **kwargs):
         verbose = shortcdict(kwargs, 'verbose', 0)
-        omitValidation = shortcdict(kwargs, 'omitValidation', False)
 
-        if verbose >= 2: print('Building KWParams object')
-        sets = self.dm.getKerasSets(**kwargs)
-        if shortcdict(kwargs, 'validationDataOnly', False):
-            if omitValidation: raise ArgumentError
-            t = None
-            v = sets
-            ts = None
-            del kwargs['validationDataOnly']
-        else: 
-            t, v, ts = sets
-        if verbose >= 2: print('KWParams class sets')
+        ksetsGroup = self.dm.getKerasSets(validationSetClassification=[_ for _ in SetClassificationType], **kwargs)
+        
+        t = v = vc1 = vc2 = ts = None
+        if shortcdict(kwargs, 'validationSetOnly', False):
+            v, vc1, vc2 = ksetsGroup
 
-        class1set = None
-        class2set = None
-        if not omitValidation:
-            class1set = self.dm.getKerasSets(1, True, **kwargs)
-            class2set = self.dm.getKerasSets(2, True, **kwargs)
+        elif shortcdict(kwargs, 'excludeValidationSet', False):
+            t, ts = ksetsGroup
+            t = t[0]
+            ts = ts[0]
+        else:
+            t, v, ts = ksetsGroup
+            v, vc1, vc2 = v
+            t = t[0]
+            ts = ts[0]
+
         if verbose >= 2: print('Keras sets built')
         return {
             'trainingSet': t, 
             'validationSet': v, 
             'testingSet': ts, 
-            'validationPSet': class1set, 
-            'validationNSet': class2set
+            'validationPSet': vc1, 
+            'validationNSet': vc2
         }
 
     def train(self, **kwargs):
@@ -145,7 +143,7 @@ class Trainer:
                 if usePatienceGradient:
                     kwargs['patience'] = kwargs['initialPatience'] + int(s * (kwargs['finalPatience'] - kwargs['initialPatience']) / (maxIterations-1))
                     print('Patience:', kwargs['patience'])
-                self.instance.updateSets(**self._getSetKWParams(slice=s, omitValidation=True if explicitValidation and s > 0 else False))
+                self.instance.updateSets(**self._getSetKWParams(slice=s))
 
                 ## snapshot accuracy stats on the new validation set before training
                 prevaluateResults = self.instance.evaluate(updateAccuracyStats=False, verbose=verbose-1)
@@ -198,7 +196,7 @@ class Trainer:
                     startt = time.time()
 
                     printCurrentStatus(s)
-                    self.instance.updateSets(**self._getSetKWParams(slice=s, validationDataOnly=True))
+                    self.instance.updateSets(**self._getSetKWParams(slice=s, validationSetOnly=True))
                     self.instance.evaluate()
                     gc.collect()
 

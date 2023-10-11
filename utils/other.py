@@ -10,7 +10,7 @@ sys.path.append(path)
 import numpy, re, optparse
 from enum import Enum
 from math import ceil
-from typing import List, Tuple
+from typing import Dict, List, Tuple, Union
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 
@@ -19,7 +19,7 @@ from structures.inputVectorStats import InputVectorStats
 from structures.sqlArgumentObj import SQLArgumentObj
 from utils.support import asList, convertToSnakeCase, isNormalizationColumn, shortc, shortcdict
 from constants.values import stockOffset, canadaExchanges, usExchanges
-from constants.enums import InterestType, MarketType, NormalizationGroupings, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType
+from constants.enums import InterestType, MarketType, NormalizationGroupings, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType, SetClassificationType
 
 
 
@@ -76,16 +76,19 @@ def maxQuarters(precedingDays):
    
 loggedonce = False
 
-def getInstancesByClass(instances):
-    pclass = []
-    nclass = []
+def getInstancesByClass(instances, classification: SetClassificationType=None) -> Union[List, Dict[SetClassificationType, List]]:
+    classes = SetClassificationType.excludingAll()
+    classBuckets = {c: [] for c in classes}
+    classes = shortc(asList(classification), classes)
     for i in instances:
         try:
-            if i.outputClass == OutputClass.POSITIVE: pclass.append(i)
-            else: nclass.append(i)
+            for c in classes:
+                if i.outputClass == c.outputClass:
+                    classBuckets[c].append(i)
+                    break
         except:
-            print(i)
-    return pclass, nclass
+            print(f'Error while sorting {i}')
+    return list(classBuckets.values()) if len(classes) > 1 else classBuckets[classes[0]]
 
 def determinePrecedingRangeType(data):
     open = data[0].open

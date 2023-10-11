@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import random, math, numpy, tqdm, time, pickle, gc
+import random, math, numpy, tqdm, time, gc, itertools
 from tensorflow import keras
 from timeit import default_timer as timer
 from datetime import date
@@ -17,7 +17,7 @@ from functools import partial
 from argparse import ArgumentError
 
 from globalConfig import config as gconfig
-from constants.enums import DataFormType, Direction, NormalizationGroupings, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetType, DataManagerType, IndicatorType
+from constants.enums import DataFormType, Direction, NormalizationGroupings, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetClassificationType, SetType, DataManagerType, IndicatorType
 from utils.support import asList, generateFibonacciSequence, getAdjustedSlidingWindowPercentage, partition, recdotlist, shortc, multicore_poolIMap, shortcdict, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.other import getInstancesByClass, getMaxIndicatorPeriod, maxQuarters, getIndicatorPeriod, addAdditionalDefaultKWArgs
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
@@ -1144,20 +1144,47 @@ class DataManager():
         return ret
 
     def getKerasSets(self, 
-                     classification=0, ## 1 = positive, 2 = negative
-                     validationDataOnly=False, exchange=None, symbol=None, slice=None, omitValidation=False, verbose=1):
+                     classification: SetClassificationType=SetClassificationType.ALL,
+                     trainingSetOnly=False, excludeTrainingSet=False, trainingSetClassification=SetClassificationType.ALL,
+                     validationSetOnly=False, excludeValidationSet=False, validationSetClassification=SetClassificationType.ALL,
+                     testingSetOnly=False, excludeTestingSet=False, testingSetClassification=SetClassificationType.ALL,
+                     exchange=None, symbol=None, slice=None, verbose=None):
+        verbose = shortc(verbose, self.verbose)
+
         if self.useAllSets and not self.useOptimizedSplitMethodForAllSets and shortc(slice, 0) > self.getNumberOfWindowIterations() - 1: raise IndexError()
         # if self.setsSlidingWindowPercentage and slice is None: raise ValueError('Keras set setup will overload memory, useAllSets set but not slice indicated')
-
-        if self.useAllSets and self.useOptimizedSplitMethodForAllSets:
-            if self.initializedWindow != slice:
-                self.initializeWindow(slice, verbose)
-            slice = None
+        if [trainingSetOnly, validationSetOnly, testingSetOnly].count(True) > 1: raise ValueError('Only one set type can use the "only" argument')
+        if [excludeTrainingSet, excludeValidationSet, excludeTestingSet].count(True) == 3: raise ValueError('Cannot exclude all set types')
 
         ## lazily ensure slice is not used if not setup for all sets
         if not self.useAllSets:
             if shortc(slice,0) > 0: raise IndexError('Not setup to use all sets')
             else: slice = None
+
+        ## determine which set types are required
+        requiredSetTypes = [st for st in SetType]
+        if trainingSetOnly: requiredSetTypes = [SetType.TRAINING]
+        elif validationSetOnly: requiredSetTypes = [SetType.VALIDATION]
+        elif testingSetOnly: requiredSetTypes = [SetType.TESTING]
+        elif excludeTrainingSet: requiredSetTypes.remove(SetType.TRAINING)
+        elif excludeValidationSet: requiredSetTypes.remove(SetType.VALIDATION)
+        elif excludeTestingSet: requiredSetTypes.remove(SetType.TESTING)
+
+        ## setup classifications for each set type
+        setClassifications: Dict[SetType, List[SetClassificationType]] = {}
+        if classification != SetClassificationType.ALL: ## ie not default, apply to all
+            classification = asList(classification)
+            setClassifications = { st: classification for st in requiredSetTypes }
+        else:
+            if SetType.TRAINING in requiredSetTypes: setClassifications[SetType.TRAINING] = asList(trainingSetClassification)
+            if SetType.VALIDATION in requiredSetTypes: setClassifications[SetType.VALIDATION] = asList(validationSetClassification)
+            if SetType.TESTING in requiredSetTypes: setClassifications[SetType.TESTING] = asList(testingSetClassification)
+
+        ## initialize window if required
+        if self.useAllSets and self.useOptimizedSplitMethodForAllSets:
+            if self.initializedWindow != slice:
+                self.initializeWindow(slice, verbose)
+            slice = None
 
         ## "cache" values for constrList functions
         if self.config.network.recurrent:
@@ -1201,79 +1228,94 @@ class DataManager():
                 keras.utils.to_categorical(oup, num_classes=OutputClass.__len__()) if self.config.dataForm.outputVector == DataFormType.CATEGORICAL else oup
             ]
 
+        instanceSets = {}
+        if SetType.TRAINING in requiredSetTypes: instanceSets[SetType.TRAINING] = self.trainingSet
+        if SetType.VALIDATION in requiredSetTypes: instanceSets[SetType.VALIDATION] = shortc(self.explicitValidationSet, self.validationSet)
+        if SetType.TESTING in requiredSetTypes: instanceSets[SetType.TESTING] = self.testingSet
 
-        trainingSet = self.trainingSet
-        validationSet = shortc(self.explicitValidationSet, self.validationSet)
-        testingSet = self.testingSet
-
+        ## reduce instance sets according to exchange/symbol
         if exchange or symbol:
-            trainingSet = self._getSubset(self.trainingSet, exchange, symbol, verbose)
-            validationSet = self._getSubset(self.validationSet, exchange, symbol, verbose)
-            testingSet = self._getSubset(self.testingSet, exchange, symbol, verbose)
+            for setType, instanceSet in instanceSets.items():
+                instanceSets[setType] = self._getSubset(instanceSet, exchange, symbol, verbose)
 
         ## only select from certain class if specified
-        if classification:
-            trainingSet = self._getSetSlice(getInstancesByClass(trainingSet)[classification-1], slice)
-            validationSet = self._getSetSlice(getInstancesByClass(validationSet)[classification-1], slice)
-            testingSet = self._getSetSlice(getInstancesByClass(testingSet)[classification-1], slice)
-        elif slice is not None:
-            trainingSet = self._getSetSlice(trainingSet, slice)
-            validationSet = self._getSetSlice(validationSet, slice)
-            testingSet = self._getSetSlice(testingSet, slice)
+        for setType in requiredSetTypes:
+            setClassification = setClassifications[setType]
+            instanceSet = instanceSets[setType]
+            if len(setClassification) > 1 or setClassification[0] != SetClassificationType.ALL:
+                sortedSets = getInstancesByClass(instanceSet, setClassification)
+                instanceSets[setType] = sortedSets
+            else:
+                instanceSets[setType] = [instanceSet]
+
+        ## take slice of instance sets
+        if slice is not None:
+            for setType, instanceSet in instanceSets.items():
+                slicedSets = [self._getSetSlice(clsInstanceSet, slice) for clsInstanceSet in instanceSet]
+                instanceSets[setType] = slicedSets
 
         ## only initialize and maintain so many Google Interests handlers at a time to save on memory
         ## data set construction must run vertically by ticker instead of horizontally by set type
         if self.maxGoogleInterestHandlers:
-            if validationDataOnly:
-                todoSetDict = {
-                    SetType.VALIDATION: validationSet
-                }
-            else:
-                todoSetDict = {
-                    SetType.TRAINING: trainingSet,
-                    SetType.TESTING: testingSet
-                }
-                if not omitValidation:
-                    todoSetDict[SetType.VALIDATION] = validationSet
             
             ## gather tickers
             todoTickers: Set[TickerKeyType] = set()
             dpi: DataPointInstance
-            for tds in todoSetDict.values():
-                for dpi in tds:
-                    todoTickers.add(dpi.stockDataHandler.getTickerKey())
+            # for tds in todoSetDict.values():
+            for instanceSetGroup in instanceSets.values():
+                for instanceSet in instanceSetGroup:
+                    for dpi in instanceSet:
+                        todoTickers.add(dpi.stockDataHandler.getTickerKey())
             todoTickers = list(todoTickers)
             
             ## get input vectors
-            inputVectorTuplesDict = { s: [] for s in todoSetDict.keys() }
+            inputVectorTuplesDict = { s: [] for s in requiredSetTypes }
             t: TickerKeyType
             for tickerSplitIndex in tqdm.tqdm(range(math.ceil(len(todoTickers)/self.maxGoogleInterestHandlers)), desc='Compiling raw input vectors'):
                 tickers = todoTickers[tickerSplitIndex*self.maxGoogleInterestHandlers:(tickerSplitIndex+1)*self.maxGoogleInterestHandlers]
-                self.initializeGoogleInterestsHandlers(tickers, queryLimit=self.queryLimit, refresh=True, leaveProgressBar=False)
+                self.initializeGoogleInterestsHandlers(tickers, queryLimit=self.queryLimit, refresh=True, verbose=0.5)
 
-                for stype,ticker,dpi in tqdm.tqdm([(s,t,d) for s in todoSetDict.keys() for t in tickers for d in todoSetDict[s]], desc='Generating vectors', leave=False):
+                for stype,ticker,dpi in tqdm.tqdm([(s,t,d) for s in requiredSetTypes for t in tickers for instanceSet in instanceSets[s] for d in instanceSet], desc='Generating vectors', leave=False):
                     if dpi.stockDataHandler.getTickerKey() == ticker:
                         inputVectorTuplesDict[stype].append(dpi.getInputVector())
 
             ## process input vectors to data sets
-            if SetType.TRAINING in todoSetDict.keys():
-                trainingDataLambda = lambda: constructDataSet(trainingSet, inputVectorTuplesDict[SetType.TRAINING])
-            if SetType.VALIDATION in todoSetDict.keys():
-                validationDataLambda = lambda: constructDataSet(validationSet, inputVectorTuplesDict[SetType.VALIDATION])
-            if SetType.TESTING in todoSetDict.keys():
-                testingDataLambda = lambda: constructDataSet(testingSet, inputVectorTuplesDict[SetType.TESTING])
+            generatedData = [
+                constructDataSet(instanceSet, inputVectorTuplesDict[setType]) for instanceSet in instanceSets[setType] for setType in requiredSetTypes
+            ]
 
         else:
-            validationDataLambda = lambda: constructDataSet(validationSet)
-            trainingDataLambda = lambda: constructDataSet(trainingSet)
-            testingDataLambda = lambda: constructDataSet(testingSet)
+            generatedData = []
+            for setType in requiredSetTypes:
+                generatedDataSets = [constructDataSet(instanceSet) for instanceSet in instanceSets[setType]]
+                if len(setClassifications[setType]) > 1 and SetClassificationType.ALL in setClassifications[setType]:
+                    ## combine data sets for each individual classification to satisfy ALL class
+                    '''
+                        [ class1, class2
+                            [ input, output
+                                [ static, semi, series
+                                    [
+                                        len(classX instances)  
+                                    ]
+                                ],
+                                [ 
+                                    len(classX instances)  
+                                ]
+                            ]
+                        ]
+                    '''
+                    combinedSet = [[
+                        [
+                            ## recurrent, TODO: non
+                            numpy.array(list(itertools.chain(*[s[0][f] for s in generatedDataSets]))) for f in range(sum([
+                                staticSize > 0, semiseriesSize > 0, seriesSize > 0
+                            ]))
+                        ],
+                        numpy.array(list(itertools.chain(*[s[1] for s in generatedDataSets])))
+                    ]]
 
-
-        if omitValidation:  validationData = None
-        else:               validationData = validationDataLambda()
-        if validationDataOnly: return validationData
-        trainingData = trainingDataLambda()
-        testingData = testingDataLambda()
+                    generatedDataSets = combinedSet + generatedDataSets
+                generatedData.append(generatedDataSets)
 
         if gconfig.testing.enabled and verbose > 0.5:
             print('Stock data handler build time', self.getprecstocktime)
@@ -1281,7 +1323,7 @@ class DataManager():
             print('Financial reports build time', self.getprecfintime)
             print('Total vector build time', self.actualbuildtime)
 
-        return [trainingData, validationData, testingData]
+        return generatedData
 
     def normalize(self):
         if not self.normalized:

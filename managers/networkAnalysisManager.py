@@ -210,7 +210,7 @@ class NetworkAnalysisManager(Singleton):
                             lastsymbol = symbol
                         continue
                     if acctype == AccuracyAnalysisTypes.STOCK:
-                        validationSet = dm.getKerasSets(exchange=exchange, symbol=symbol, validationDataOnly=True, verbose=0.5)
+                        validationSet = dm.getKerasSets(exchange=exchange, symbol=symbol, validationSetOnly=True, verbose=0.5)
                         if len(validationSet) > 0:
                             vhandler: EvaluationDataHandler = EvaluationDataHandler(overallValidationSet=validationSet)
 
@@ -243,7 +243,7 @@ class NetworkAnalysisManager(Singleton):
                         # ## predict end
                         pass
                         # ## evaluate method-2 >> ~2900% slower than method-3
-                        # ksets = dm.getKerasSets(validationDataOnly=True, exchange=exchange, symbol=symbol, verbose=0.5)
+                        # ksets = dm.getKerasSets(validationSetOnly=True, exchange=exchange, symbol=symbol, verbose=0.5)
                         # for dindex in trange(len(ksets[1]), desc='Evaluating ' + exchange + ':' + symbol, leave=False):
                         #     prectype = determinePrecedingRangeType(sdh.data[dindex:dindex + self.nn.stats.precedingRange])
                 
@@ -257,7 +257,7 @@ class NetworkAnalysisManager(Singleton):
                         # ## evaluate2 end
                         pass
                         ## evaluate method-3
-                        ksets = dm.getKerasSets(validationDataOnly=True, exchange=exchange, symbol=symbol, verbose=0.5)
+                        ksets = dm.getKerasSets(validationSetOnly=True, exchange=exchange, symbol=symbol, verbose=0.5)
                         indexgroups = recdotdict({ e: [] for e in PrecedingRangeType })
                         for dindex in trange(len(ksets[1]), desc='Evaluating ' + exchange + ':' + symbol, leave=False):
                             prectype = determinePrecedingRangeType(sdh.data[dindex:dindex + self.nn.stats.precedingRange])

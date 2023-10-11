@@ -187,8 +187,8 @@ class TrainingInstance():
 # batchSize = config.training.batchSize
 
 # training, validation, testing = sm.getKerasSets()
-# validationP = sm.getKerasSets(1, validationDataOnly=True)
-# validationN = sm.getKerasSets(2, validationDataOnly=True)
+# validationP = sm.getKerasSets(1, validationSetOnly=True)
+# validationN = sm.getKerasSets(2, validationSetOnly=True)
 # validationData = [
 #     [validation[0], validationP[0], validationN[0]],
 #     [validation[1], validationP[1], validationN[1]]

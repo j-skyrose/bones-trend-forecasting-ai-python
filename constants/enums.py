@@ -122,6 +122,19 @@ class OutputClass(Enum):
     POSITIVE = 'POSITIVE'
     NEGATIVE = 'NEGATIVE'
 
+class SetClassificationType(Enum):
+    def __init__(self, _, index=None, outputClass: OutputClass=None):
+        self.index = index
+        self.outputClass = outputClass
+
+    @classmethod
+    def excludingAll(cls):
+        return [e for e in cls if e != cls.ALL]
+    ALL = 'ALL'
+    ## should be kept in sync with OutputClass enum
+    CLASS1 = 'CLASS1', 0, OutputClass.POSITIVE
+    CLASS2 = 'CLASS2', 1, OutputClass.NEGATIVE
+
 class TimespanType(Enum):
     MINUTE = 'MINUTE'
     HOUR = 'HOUR'
