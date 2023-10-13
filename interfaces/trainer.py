@@ -75,12 +75,15 @@ class Trainer:
     def _getSetKWParams(self, **kwargs):
         verbose = shortcdict(kwargs, 'verbose', 0)
 
-        ksetsGroup = self.dm.getKerasSets(validationSetClassification=[_ for _ in SetClassificationType], **kwargs)
+        validationSetOnly = shortcdict(kwargs, 'validationSetOnly', False)
+        if not validationSetOnly:
+            kwargs['validationSetClassification'] = [_ for _ in SetClassificationType]
+
+        ksetsGroup = self.dm.getKerasSets(**kwargs)
         
         t = v = vc1 = vc2 = ts = None
-        if shortcdict(kwargs, 'validationSetOnly', False):
-            v, vc1, vc2 = ksetsGroup
-
+        if validationSetOnly:
+            v = ksetsGroup[0][0]
         elif shortcdict(kwargs, 'excludeValidationSet', False):
             t, ts = ksetsGroup
             t = t[0]

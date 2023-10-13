@@ -329,7 +329,7 @@ class NeuralNetworkInstance:
         if updateAccuracyStats and evaluationDataHandler.accuracyTypesCount() == 3:
             self.updateAccuracyStats(results)
             if verbose > 0:
-                if self.useAllSets: print('Iterations:', len(self.useAllSetsAccumulator[AccuracyType.OVERALL]) + 1)
+                # if self.useAllSets: print('Iterations:', len(self.useAllSetsAccumulator[AccuracyType.OVERALL]) + 1)
                 if not self.reEvaluating: self.printAllAccuracyStats()
 
         return results
