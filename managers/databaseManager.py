@@ -755,7 +755,7 @@ class DatabaseManager(Singleton):
         res = self.dbc.execute(stmt).fetchall()
         return [e for e in res]
     
-    def getVectorSimilarity(self, exchange, symbol, seriesType: SeriesType=None, dt=None, vclass: OutputClass=None, precedingRange=None, followingRange=None, threshold=None, orderBy='date') -> List[VectorSimilaritiesCRow]:
+    def getVectorSimilarity(self, exchange, symbol, seriesType: SeriesType=None, dt=None, vclass: OutputClass=None, precedingRange=None, followingRange=None, changeType=None, changeValue=None, orderBy='date') -> List[VectorSimilaritiesCRow]:
         stmt = f'SELECT * FROM {self.getTableString("vector_similarities_c")} WHERE exchange=? and symbol=? '
         args = [exchange, symbol]
 
@@ -774,9 +774,12 @@ class DatabaseManager(Singleton):
         if followingRange:
             stmt += 'AND following_range=? '
             args.append(followingRange)
-        if threshold:
-            stmt += 'AND change_threshold=? '
-            args.append(threshold)
+        if changeType:
+            stmt += 'AND change_type=? '
+            args.append(changeType)
+        if changeValue:
+            stmt += 'AND change_value=? '
+            args.append(changeValue)
         
         stmt += f' ORDER BY {orderBy} ASC'
 

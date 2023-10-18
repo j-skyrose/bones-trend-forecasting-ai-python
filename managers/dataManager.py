@@ -17,9 +17,9 @@ from functools import partial
 from argparse import ArgumentError
 
 from globalConfig import config as gconfig
-from constants.enums import DataFormType, Direction, NormalizationGroupings, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetClassificationType, SetType, DataManagerType, IndicatorType
+from constants.enums import ChangeType, DataFormType, Direction, NormalizationGroupings, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetClassificationType, SetType, DataManagerType, IndicatorType
 from utils.support import asList, generateFibonacciSequence, getAdjustedSlidingWindowPercentage, partition, recdotlist, shortc, multicore_poolIMap, shortcdict, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
-from utils.other import getInstancesByClass, getMaxIndicatorPeriod, maxQuarters, getIndicatorPeriod, addAdditionalDefaultKWArgs
+from utils.other import getInstancesByClass, getMaxIndicatorPeriod, getOutputClass, maxQuarters, getIndicatorPeriod, addAdditionalDefaultKWArgs
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
 from constants.values import unusableSymbols, indicatorsKey
 from managers.stockDataManager import StockDataManager
@@ -64,7 +64,7 @@ def multicore_getEarningsDateTickerTuples(ticker):
 class DataManager():
 
     def __init__(self,
-        precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, threshold=0,
+        precedingRange=0, followingRange=0, seriesType: SeriesType=SeriesType.DAILY, changeType: ChangeType=ChangeType.PERCENTAGE, changeValue=0,
         setCount=None, setSplitTuple=None, minimumSetsPerSymbol=0, useAllSets=False,
         inputVectorFactory=InputVectorFactory(), normalizationData=NormalizationDataHandler(), indicatorConfig=gconfig.defaultIndicatorFormulaConfig, symbolList:List=[], symbol:List=[],
         analysis=False, skips: SkipsObj=SkipsObj(), saveSkips=False,
@@ -124,7 +124,8 @@ class DataManager():
         self.precedingRange = precedingRange
         self.followingRange = followingRange
         self.seriesType = seriesType
-        self.threshold = threshold
+        self.changeType = changeType
+        self.changeValue = changeValue
         self.minDate = minDate
         self.normalizationData = normalizationData
         self.indicatorConfig = indicatorConfig
@@ -604,11 +605,7 @@ class DataManager():
         for h in tqdmLoopHandleWrapper(stockDataHandlers, verbose, desc='Initializing stock instances'):
             availableIndexes = { o: [] for o in OutputClass }
             for sindex in h.getAvailableSelections():
-                try:
-                    change = (h.data[sindex + self.followingRange].low / h.data[sindex - 1].high) - 1
-                except ZeroDivisionError:
-                    change = 0
-                oupclass = OutputClass.POSITIVE if change >= self.threshold else OutputClass.NEGATIVE
+                oupclass = getOutputClass(h.data, sindex, self.followingRange, self.changeType, self.changeValue)
 
                 if collectOutputClassesOnly:
                     outputClassCounts[oupclass] += 1
@@ -622,7 +619,7 @@ class DataManager():
                 if verbose>=2: printInstanceCounts()
                 oupclass = self.config.sets.instanceReduction.classType
 
-                similarities = dbm.getVectorSimilarity(*h.getTickerTuple(), seriesType=self.seriesType, vclass=oupclass, precedingRange=self.precedingRange, followingRange=self.followingRange, threshold=self.threshold, orderBy='value')
+                similarities = dbm.getVectorSimilarity(*h.getTickerTuple(), seriesType=self.seriesType, vclass=oupclass, precedingRange=self.precedingRange, followingRange=self.followingRange, changeType=self.changeType, changeValue=self.changeValue, orderBy='value')
 
                 if len(similarities) == 0: 
                     if verbose>=1: print('Similarities not present for', h.getTickerTuple())

@@ -19,7 +19,7 @@ from structures.inputVectorStats import InputVectorStats
 from structures.sqlArgumentObj import SQLArgumentObj
 from utils.support import asList, convertToSnakeCase, isNormalizationColumn, shortc, shortcdict
 from constants.values import stockOffset, canadaExchanges, usExchanges
-from constants.enums import InterestType, MarketType, NormalizationGroupings, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType, SetClassificationType
+from constants.enums import ChangeType, InterestType, MarketType, NormalizationGroupings, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType, SetClassificationType
 
 
 
@@ -89,6 +89,18 @@ def getInstancesByClass(instances, classification: SetClassificationType=None) -
         except:
             print(f'Error while sorting {i}')
     return list(classBuckets.values()) if len(classes) > 1 else classBuckets[classes[0]]
+
+def getOutputClass(data, index, followingRange, changeType, changeValue):
+    try:
+        previousDayHigh = data[index - 1].high
+        finalDayLow = data[index + followingRange].low
+        if changeType == ChangeType.PERCENTAGE:
+            change = (finalDayLow / previousDayHigh) - 1
+        else:
+            change = finalDayLow - previousDayHigh
+    except ZeroDivisionError:
+        change = 0
+    return OutputClass.POSITIVE if change >= changeValue else OutputClass.NEGATIVE
 
 def determinePrecedingRangeType(data):
     open = data[0].open
