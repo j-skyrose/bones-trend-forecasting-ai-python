@@ -137,9 +137,10 @@ def buildCommaSeparatedTickerPairString(tupleList: List):
     return returnstr
 
 def getMarketType(exchange):
-    if exchange in canadaExchanges: return MarketType.CANADA
-    elif exchange in usExchanges: return MarketType.US    
-    else: raise ValueError(f'Exchange {exchange} not found in exchange lists')
+    exchange = asList(exchange)
+    if all(e in canadaExchanges for e in exchange): return MarketType.CANADA
+    elif all(e in usExchanges for e in exchange): return MarketType.US    
+    else: raise ValueError(f'Exchange(s) {exchange} could not be mapped to any exchange lists')
 
 def getIndicatorPeriod(i: IndicatorType, indicatorConfig=gconfig.defaultIndicatorFormulaConfig):
     if i.isEMA():
