@@ -322,7 +322,7 @@ class NeuralNetworkInstance:
     
     def evaluate(self, evaluationDataHandler: EvaluationDataHandler, updateAccuracyStats=True, verbose=1, **kwargs) -> EvaluationResultsObj:
         if not self.model: raise BufferError('Model not loaded')
-        if verbose > 0: print('{}valuating... (overall > positive > negative)'.format('Re-e' if self.reEvaluating else 'E'))
+        if verbose > 0: print(f"{'Re-e' if self.reEvaluating else 'E'}valuating... (overall > positive > negative)")
         
         results = evaluationDataHandler.evaluateAll(self.model, verbose=verbose, **kwargs)
 
