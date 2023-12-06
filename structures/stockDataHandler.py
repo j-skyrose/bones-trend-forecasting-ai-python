@@ -13,11 +13,12 @@ from typing import List, Tuple
 from globalConfig import config as gconfig
 from constants.values import stockOffset
 from constants.enums import IndicatorType, SeriesType
+from managers._generatedDatabaseAnnotations.databaseRowObjects import SymbolsRow
 from structures.normalizationDataHandler import NormalizationDataHandler
-from utils.types import TickerKeyType
-from utils.support import GetMemoryUsage, asISOFormat, asList, getItem, recdotdict, recdotobj, shortc
 from utils.other import normalizeStockData, denormalizeStockData, getIndicatorPeriod
+from utils.support import GetMemoryUsage, asISOFormat, asList, getItem, recdotdict, recdotobj, shortc
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends, generateVolumeBars
+from utils.types import TickerKeyType
 
 '''
 maintains the time series data from the DB, in normalized and raw forms
@@ -28,7 +29,7 @@ data should be in date ascending order, where each item is one row from DB table
 '''
 class StockDataHandler(GetMemoryUsage):
 
-    def __init__(self, symbolData, seriesType, data, normalizationData: NormalizationDataHandler=None, precedingRange=None, followingRange=None, normalize=False, offset=stockOffset,
+    def __init__(self, data=None, symbolData: SymbolsRow={}, seriesType: SeriesType=SeriesType.DAILY, normalizationData: NormalizationDataHandler=None, precedingRange=None, followingRange=None, normalize=False, offset=stockOffset,
         maxIndicatorPeriod=0
     ):
         self.symbolData = symbolData
@@ -182,7 +183,7 @@ class StockDataHandler(GetMemoryUsage):
         return retIndcDict
 
 if __name__ == '__main__':
-    sdh: StockDataHandler = StockDataHandler({}, SeriesType.DAILY, recdotobj([{'close':x} for x in range(10000)]), precedingRange=5, followingRange=2, maxIndicatorPeriod=20)
+    sdh: StockDataHandler = StockDataHandler(recdotobj([{'close':x} for x in range(10000)]), precedingRange=5, followingRange=2, maxIndicatorPeriod=20)
     print(sdh._getMemorySize())
     print(sdh.generateTechnicalIndicators([IndicatorType.RSI]))
     print(sdh.getPrecedingIndicators(1))

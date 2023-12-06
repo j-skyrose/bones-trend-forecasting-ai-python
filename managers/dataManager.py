@@ -550,12 +550,8 @@ class DataManager():
             elif not indicatorPeriodShortfallCheck(data): indicatorPeriodShortfallSkips += 1
 
 
-        sdhArgLambda = lambda ticker, data: [
-            ticker,
-            self.seriesType,
-            data
-        ]
         sdhKWArgs = {
+            'seriesType': self.seriesType,
             'precedingRange': self.precedingRange,
             'followingRange': self.followingRange,
             'maxIndicatorPeriod': maxIndicatorPeriod,
@@ -565,16 +561,16 @@ class DataManager():
             sdhKWArgs['normalizationData'] = self.normalizationData.get(NormalizationGroupings.HISTORICAL)
 
         if gconfig.multicore:
-            for ticker, data in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate, queryLimit=queryLimit), symbolList, verbose, desc='Getting stock data'), verbose, desc='Creating stock handlers'):
+            for symdata, data in tqdmLoopHandleWrapper(tqdmProcessMapHandlerWrapper(partial(multicore_getStockDataTickerTuples, seriesType=self.seriesType, minDate=self.minDate, queryLimit=queryLimit), symbolList, verbose, desc='Getting stock data'), verbose, desc='Creating stock handlers'):
                 if dataLengthCheck(data):
-                    self.__getattribute__(dmProperty)[TickerKeyType(ticker.exchange, ticker.symbol)] = StockDataHandler(*sdhArgLambda(ticker, data), **sdhKWArgs)
+                    self.__getattribute__(dmProperty)[TickerKeyType(symdata.exchange, symdata.symbol)] = StockDataHandler(data, symbolData=symdata, **sdhKWArgs)
                 else:
                     updateSkipCounts(data)
         else:
-            for s in tqdmLoopHandleWrapper(symbolList, verbose, desc='Creating stock handlers'):
-                data = dbm.getStockData(s.exchange, s.symbol, self.seriesType, minDate=self.minDate, queryLimit=queryLimit)
+            for symdata in tqdmLoopHandleWrapper(symbolList, verbose, desc='Creating stock handlers'):
+                data = dbm.getStockData(symdata.exchange, symdata.symbol, self.seriesType, minDate=self.minDate, queryLimit=queryLimit)
                 if dataLengthCheck(data):
-                    self.__getattribute__(dmProperty)[TickerKeyType(s.exchange, s.symbol)] = StockDataHandler(*sdhArgLambda(s, data), **sdhKWArgs)
+                    self.__getattribute__(dmProperty)[TickerKeyType(symdata.exchange, symdata.symbol)] = StockDataHandler(data, symbolData=symdata **sdhKWArgs)
                 else:
                     updateSkipCounts(data)
 
