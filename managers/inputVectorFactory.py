@@ -389,11 +389,13 @@ class InputVectorFactory(Singleton):
                 if collectStats: startt = time.time()
                 if foundedDate:
                     year = month = day = None
-                    year, *datesplit = foundedDate.split('-')
-                    if len(datesplit) > 0:
-                        month = int(datesplit[0])
-                        if type(datesplit) is list and len(datesplit) > 1:
-                            day = int(datesplit[1])
+                    fdatesplit = foundedDate.split('-')
+                    if len(fdatesplit) > 0:
+                        year = int(fdatesplit[0])
+                        if len(fdatesplit) > 1:
+                            month = int(fdatesplit[1])
+                            if len(fdatesplit) > 2:
+                                day = int(fdatesplit[2])
                     
                     if not month: month = 1
                     if not day: day = 1
