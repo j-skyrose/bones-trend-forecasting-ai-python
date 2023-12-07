@@ -7,8 +7,8 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import operator
-from enum import Enum
+import operator, numpy
+from enum import Enum, auto
 from constants.values import indicatorsKey
 from utils.support import parseCSVFloatsIntoTuple, shortc
 
@@ -118,6 +118,9 @@ class InputVectorDataType(Enum):
     SEMISERIES = 'SEMISERIES'
     SERIES = 'SERIES'
 
+## for numba
+InputVectorDataTypeSimplified = Enum('InputVectorDataTypeSimplified', [k.name for k in InputVectorDataType])    
+
 class OutputClass(Enum):
     POSITIVE = 'POSITIVE'
     NEGATIVE = 'NEGATIVE'
@@ -134,6 +137,11 @@ class SetClassificationType(Enum):
     ## should be kept in sync with OutputClass enum
     CLASS1 = 'CLASS1', 0, OutputClass.POSITIVE
     CLASS2 = 'CLASS2', 1, OutputClass.NEGATIVE
+
+# SetClassificationType = SetClassificationTypeBase('SetClassificationType', [
+#     ('ALL', (auto(),)), 
+#     *[( f'CLASS{indx+1}', (auto(), indx, oupcls) ) for indx, oupcls in enumerate(OutputClass)]
+# ])
 
 class TimespanType(Enum):
     MINUTE = 'MINUTE'
@@ -246,6 +254,9 @@ class IndicatorType(Enum):
     ST = 'ST', 'superTrend', FeatureExtraType.MULTIPLE
     RGVB = 'RGVB', 'redGreenVolumeBars', FeatureExtraType.SINGLE
 
+## for numba
+IndicatorTypeSimplified = Enum('IndicatorTypeSimplified', [k.name for k in IndicatorType])
+
 class CalculationMethod(Enum):
     SMA = 'SMA'
     EMA = 'EMA'
@@ -264,6 +275,11 @@ class SuperTrendDirection(Enum):
     UP = 'UP'
     DOWN = 'DOWN'
     NONE = 'NONE'
+
+SuperTrendDirectionList = numpy.array([_ for _ in SuperTrendDirection])
+
+# print(SuperTrendDirection.__members__.values())
+# print([k for k in SuperTrendDirection])
 
 class ReductionMethod(Enum):
     NONE = 'NONE'

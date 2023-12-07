@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import numpy, re, math, calendar, json, pickle, tqdm, zlib, hashlib, base64
+import numpy, re, math, calendar, json, pickle, tqdm, zlib, hashlib, base64, numba
 from enum import Enum
 from datetime import date, datetime, timedelta
 from multiprocessing import Pool, cpu_count
@@ -137,6 +137,27 @@ def _flattenGen(li: list):
     else:
         yield li
 
+## must be generated in python for ultimate use in njit
+timedelta1D=numpy.timedelta64(1, 'D')
+@numba.njit
+def getTimedeltaInDays(dt1, dt2):
+    '''return timedelta of two numpy.datetime64 dates, in days (int)'''
+    # return (dt1 - dt2) / timedelta1D
+    return dt1 - dt2
+
+# t1 = numpy.datetime64('1970-10-01').view('int64')
+# t2 = numpy.datetime64('1970-11-01').view('int64')
+# tv = getTimedeltaInDays(t1, t2)
+# print(tv)
+
+@numba.njit
+def datetime64Weekday(dt: numpy.datetime64):
+    '''returns weekday 0-6 of a numpy.datetime64; where 0 = Monday'''
+    # if type(dt) != numpy.datetime64: dt = numpy.datetime64(dt)
+    # return (dt.view('int64') - 4) % 7 ## should already be in [D] format
+    return (dt - 4) % 7
+    # return (int(dt) - 4) % 7
+
 ## used on rows from historical_data table
 def _isoformatd(d) -> date:
     return date.fromisoformat(d.period_date)
@@ -161,15 +182,21 @@ def asISOFormat(dt: Union[date, datetime, str]):
     elif type(dt) == str:
         return datetime.fromisoformat(dt).date().isoformat()
     
+    print(dt, type(dt))
     raise ValueError('Unrecognized type')
 
-def asDate(dt: Union[date, datetime, str]):
+def asDate(dt: Union[date, datetime, str, numpy.datetime64, int]):
+    numpyDatetime64ToTimestampFactor = 86400
     if type(dt) == date:
         return dt
     elif type(dt) == datetime:
         return dt.date()
     elif type(dt) == str:
         return date.fromisoformat(dt)
+    elif type(dt) == numpy.datetime64:
+        return date.fromtimestamp(dt.astype('int64') * numpyDatetime64ToTimestampFactor)
+    elif type(dt) == int:
+        return date.fromtimestamp(dt * numpyDatetime64ToTimestampFactor)
     
     raise ValueError('Unrecognized type')
 

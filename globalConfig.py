@@ -131,6 +131,7 @@ config = recdotdict({
         'recurrent': True
     },
     'inputVectorFactory': {
+        'numba': False
     },
     'trainer': {
         'customValidationClassValueRatio': 0.15, ## positive : negative

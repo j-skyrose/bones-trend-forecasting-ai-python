@@ -26,7 +26,10 @@ from managers.stockDataManager import StockDataManager
 from managers.databaseManager import DatabaseManager
 from managers.vixManager import VIXManager
 from managers.neuralNetworkManager import NeuralNetworkManager
-from managers.inputVectorFactory import InputVectorFactory
+if gconfig.inputVectorFactory.numba:
+    from managers.inputVectorFactory_numba import InputVectorFactory
+else:
+    from managers.inputVectorFactory import InputVectorFactory
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.financialDataHandler import FinancialDataHandler
 from structures.stockDataHandler import StockDataHandler
@@ -1192,7 +1195,7 @@ class DataManager():
         def constrList(set: List, isInput: bool) -> numpy.array:
             return numpy.asarray(constrList_helper(set, isInput))
 
-        def constrList_recurrent(dpiList: List[DataPointInstance]=[], vectorList: List=[], showProgress=True) -> List:
+        def _constrList_recurrent(dpiList: List[DataPointInstance]=[], vectorList: List=[], showProgress=True) -> List:
             iterateList = shortc(vectorList, dpiList)
             staticList = []
             semiseriesList = []
@@ -1208,6 +1211,25 @@ class DataManager():
                 *([numpy.array(semiseriesList)] if self.config.feature.financials.enabled else []),
                 numpy.array(seriesList)
             ]
+
+        def _constrList_recurrent_numba(dpiList: List[DataPointInstance]=[], vectorList: List=[], showProgress=True) -> List:
+            _,_, staticArrays, semiSeriesArrays, seriesArrays = self.inputVectorFactory.buildAll(
+                dataPointInstances=dpiList,
+                vixData=self.vixDataHandler,
+                financialDataHandlers=self.financialDataHandlers,
+                googleInterestsHandlers=self.googleInterestsHandlers,
+                stockSplitsHandlers=self.stockSplitsHandlers,
+                earningsDateHandlers=self.earningsDateHandlers)
+
+        def constrList_recurrent(dpiList: List[DataPointInstance]=[], vectorList: List=[], showProgress=True) -> List:
+            ## vectorList is used if "maxGoogleInterestHandlers"
+            startt = time.time()
+            if self.config.inputVectorFactory.numba:
+                ret = _constrList_recurrent_numba(dpiList, vectorList, showProgress)
+            else:
+                ret = _constrList_recurrent(dpiList, vectorList, showProgress)
+            print('TIME TAKEN:', time.time() - startt)
+            return ret
 
         def constructDataSet(dpiList=[], vectorList=[]):
             if self.config.network.recurrent:

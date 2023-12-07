@@ -7,6 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
+from globalConfig import config as gconfig
 from constants.enums import OutputClass
 from utils.support import GetMemoryUsage
 from structures.stockDataHandler import StockDataHandler
@@ -20,7 +21,12 @@ class DataPointInstance(GetMemoryUsage):
         self.outputClass = outputClass
 
     def getInputVector(self):
-        return self.buildInputVectorFunc(self.stockDataHandler, self.index)
+        res = self.buildInputVectorFunc(self.stockDataHandler, self.index)
+        if gconfig.inputVectorFactory.numba:
+            _,_,staticArr,semiSeriesArr,seriesArr = res
+            return staticArr, semiSeriesArr, seriesArr
+        else:
+            return res
 
     def getOutputVector(self):
         return 0 if self.outputClass == OutputClass.NEGATIVE else 1
