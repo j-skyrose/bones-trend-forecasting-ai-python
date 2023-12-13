@@ -8,8 +8,9 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 from constants.enums import OutputClass
-from utils.support import GetMemoryUsage
 from structures.stockDataHandler import StockDataHandler
+from utils.other import denormalizeValue
+from utils.support import GetMemoryUsage
 
 class DataPointInstance(GetMemoryUsage):
     ## index is the anchor point, between preceding and following, so total length will always be +1
@@ -24,3 +25,11 @@ class DataPointInstance(GetMemoryUsage):
 
     def getOutputVector(self):
         return 0 if self.outputClass == OutputClass.NEGATIVE else 1
+    
+    def print(self):
+        fromValue = self.stockDataHandler.data[self.index].close
+        toValue = self.stockDataHandler.data[self.index + self.stockDataHandler.followingRange].low
+        if self.stockDataHandler.normalized:
+            fromValue = denormalizeValue(fromValue, self.stockDataHandler.stockPriceNormalizationMax, self.stockDataHandler.dataOffset)
+            toValue = denormalizeValue(toValue, self.stockDataHandler.stockPriceNormalizationMax, self.stockDataHandler.dataOffset)
+        print(f'{self.outputClass.name} class, price will change from {fromValue:.2f} to {toValue:.2f}')
