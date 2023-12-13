@@ -14,7 +14,7 @@ from numpy.core import _exceptions as numpy_exceptions
 from typing import Dict, List
 
 from globalConfig import config as gconfig
-from constants.enums import EarningsCollectionAPI, FeatureExtraType, IndicatorType, OutputClass, SeriesType
+from constants.enums import ChangeType, EarningsCollectionAPI, FeatureExtraType, IndicatorType, OutputClass, SeriesType
 from constants.exceptions import InsufficientDataAvailable
 from constants.values import indicatorsKey, unusableSymbols
 from managers.databaseManager import DatabaseManager
@@ -52,7 +52,7 @@ def similarityCalculationAndInsertion(exchange=None, **kwargs):
     cf = gconfig
     for ind in IndicatorType.getActuals():
         cf.feature[indicatorsKey][ind].enabled = False
-    cf.feature[indicatorsKey][IndicatorType.EMA200].enabled = True
+    # cf.feature[indicatorsKey][IndicatorType.EMA200].enabled = True
 
     cf.feature.dayOfWeek.enabled = False
     cf.feature.dayOfMonth.enabled = False
@@ -61,10 +61,13 @@ def similarityCalculationAndInsertion(exchange=None, **kwargs):
     ## prevent instance reduction
     cf.sets.instanceReduction.enabled = False
 
+    cf.data.normalize = True
+
     props = {
         'precedingRange': 60,
         'followingRange': 10,
-        'threshold': 0.05
+        'changeType': ChangeType.ABSOLUTE,
+        'changeValue': 2
     }
 
     dm: DataManager = DataManager.forAnalysis(

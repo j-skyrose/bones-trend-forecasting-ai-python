@@ -173,6 +173,7 @@ class DataManager():
         self.useOptimizedSplitMethodForAllSets = useOptimizedSplitMethodForAllSets
         self.initializedWindow = None
         self.shouldNormalize = self.config.data.normalize
+        self.normalized = False
         ##
 
         ## default setSplitTuple determination
@@ -503,6 +504,10 @@ class DataManager():
         else:
             precfinset = []
 
+        kwargs = {}
+        if self.normalized:
+            kwargs['earningsDateNormalizationMax'] = 700
+
         startt = time.time()
         ret = self.inputVectorFactory.build(
             stockDataSet=precset,
@@ -516,7 +521,8 @@ class DataManager():
             ipoDate='todo',
             sector=symbolData.sector,
             exchange=symbolData.exchange,
-            etfFlag=symbolData.asset_type == 'ETF'
+            etfFlag=symbolData.asset_type == 'ETF',
+            **kwargs
         )
         self.actualbuildtime += time.time() - startt
 
@@ -570,7 +576,7 @@ class DataManager():
             for symdata in tqdmLoopHandleWrapper(symbolList, verbose, desc='Creating stock handlers'):
                 data = dbm.getStockData(symdata.exchange, symdata.symbol, self.seriesType, minDate=self.minDate, queryLimit=queryLimit)
                 if dataLengthCheck(data):
-                    self.__getattribute__(dmProperty)[TickerKeyType(symdata.exchange, symdata.symbol)] = StockDataHandler(data, symbolData=symdata **sdhKWArgs)
+                    self.__getattribute__(dmProperty)[TickerKeyType(symdata.exchange, symdata.symbol)] = StockDataHandler(data, symbolData=symdata, **sdhKWArgs)
                 else:
                     updateSkipCounts(data)
 

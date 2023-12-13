@@ -16,7 +16,7 @@ from globalConfig import config as gconfig
 from constants.enums import DataFormType, FeatureExtraType, IndicatorType, InputVectorDataType, SuperTrendDirection
 from constants.values import standardExchanges, minGoogleDate, indicatorsKey
 from utils.support import Singleton, flatten, recdotdict, _isoformatd, shortc, _edgarformatd, shortcdict
-from utils.other import maxQuarters
+from utils.other import maxQuarters, normalizeValue
 from structures.stockEarningsDateHandler import StockEarningsDateHandler
 from managers.statsManager import StatsManager
 
@@ -92,7 +92,7 @@ class InputVectorFactory(Singleton):
               ## symbol/static type data
               foundedDate=None, ipoDate=None, sector=None, exchange=None, etfFlag=None,
               ## other
-              getSplitStat=False, **kwargs):
+              getSplitStat=False, earningsDateNormalizationMax=None, **kwargs):
         global loggedonce
         global warnedonce
         if len(kwargs) and not warnedonce:
@@ -244,6 +244,8 @@ class InputVectorFactory(Singleton):
                             # 1 if earningsDate and daydiff > 0 else 0, ## value is days until current (i.e. most recent) earnings date
                             # abs(daydiff) if earningsDate else 0 ## distance (in days) from current earnings date
 
+                        if earningsDateNormalizationMax:
+                            itlist[-1] = normalizeValue(itlist[-1], earningsDateNormalizationMax)
                         vectorAsList.extend(itlist)
                 else:
                     if self.config.dataForm.earningsDate.vectorSize2:

@@ -44,24 +44,30 @@ def convertListToCSV(lst, excludeColumns=[]):
     content = '\n'.join(content)
     return header + '\n' + content
 
+def normalizeValue(value, max, offset=0):
+    return (value / max) - offset
+
+def denormalizeValue(value, max, offset=0):
+    return (value + offset) * max
+
 def normalizeStockData(data, priceMax=None, volumeMax=None, offset=0):
     for r in data:
         if priceMax:
-            r.open = (r.open / priceMax) - offset
-            r.high = (r.high / priceMax) - offset
-            r.low = (r.low / priceMax) - offset
-            r.close = (r.close / priceMax) - offset
-        if volumeMax: r.volume = (r.volume / volumeMax) - offset
+            r.open = normalizeValue(r.open, priceMax, offset)
+            r.high = normalizeValue(r.high, priceMax, offset)
+            r.low = normalizeValue(r.low, priceMax, offset)
+            r.close = normalizeValue(r.close, priceMax, offset)
+        if volumeMax: r.volume = normalizeValue(r.volume, volumeMax, offset)
     return data
 
 def denormalizeStockData(data, priceMax, volumeMax=None, offset=0):
     for r in data:
         if priceMax:
-            r.open = (r.open + offset) * priceMax
-            r.high = (r.high + offset) * priceMax
-            r.low = (r.low + offset) * priceMax
-            r.close = (r.close + offset) * priceMax
-        if volumeMax: r.volume = (r.volume + offset) * volumeMax
+            r.open = denormalizeValue(r.open, priceMax, offset)
+            r.high = denormalizeValue(r.high, priceMax, offset)
+            r.low = denormalizeValue(r.low, priceMax, offset)
+            r.close = denormalizeValue(r.close, priceMax, offset)
+        if volumeMax: r.volume = denormalizeValue(r.volume, volumeMax, offset)
     return data
 
 def normalizeFinancials(data, generalMax):
