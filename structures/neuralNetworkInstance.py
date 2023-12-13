@@ -55,7 +55,7 @@ os.environ["TF_MIN_GPU_MULTIPROCESSOR_COUNT"]= "8" if gconfig.useMainGPU else "5
 
 class NeuralNetworkInstance:
 
-    def __init__(self, id=None, model: tf.keras.Model=None, inputVectorFactory: InputVectorFactory=None, factoryConfig=gconfig, filepath=None, stats: NetworkStats=None):
+    def __init__(self, id=None, model: tf.keras.Model=None, inputVectorFactory: InputVectorFactory=None, factoryConfig=gconfig, recurrent=None, filepath=None, stats: NetworkStats=None):
         self.model = model
         if inputVectorFactory:
             self.inputVectorFactory = inputVectorFactory(factoryConfig)
@@ -70,7 +70,8 @@ class NeuralNetworkInstance:
             self.stats = stats
         else:
             self.id = id
-            if self.config.network.recurrent: 
+            self.recurrent = shortc(recurrent, self.config.network.recurrent)
+            if self.recurrent: 
                 precedingRange = model.input_shape[-1][1] ## last input layer is series one, e.g. [(None, 9), (None, 60, 34)]
             else: ## sequential
                 precedingRange = model.input_shape[-1]
@@ -84,14 +85,14 @@ class NeuralNetworkInstance:
     @classmethod
     def new(
         cls, id, optimizer, layers, precedingRange=1, activation='selu', verbose=1,
+        factoryConfig=gconfig,
         ## sequential only
         inputSize=None
     ):
-
         def _getActivationString(layer):
             return shortcdict(layer, 'activation', activation)
 
-        if gconfig.network.recurrent:
+        if factoryConfig.network.recurrent:
             static_features, semiseries_features, series_features = InputVectorFactory().getInputSize()
 
             static_input = Input(shape=(static_features,))
@@ -147,7 +148,7 @@ class NeuralNetworkInstance:
 
             x_combined = Concatenate()([
                 static_x, 
-                *([semiseries_x] if gconfig.feature.financials.enabled else []),
+                *([semiseries_x] if factoryConfig.feature.financials.enabled else []),
                 series_x
             ])
 
@@ -158,7 +159,7 @@ class NeuralNetworkInstance:
                     kernel_initializer='lecun_normal'
                 )(x_combined)
 
-            if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL:
+            if factoryConfig.dataForm.outputVector == DataFormType.CATEGORICAL:
                 xc_units = 2
                 xc_activation = 'softmax'
             else:
@@ -172,7 +173,7 @@ class NeuralNetworkInstance:
 
             model = Model([
                 static_input,
-                *([semiseries_input] if gconfig.feature.financials.enabled else []),
+                *([semiseries_input] if factoryConfig.feature.financials.enabled else []),
                 series_input
             ], x_combined)
 
@@ -194,12 +195,12 @@ class NeuralNetworkInstance:
 
             model.add(
                 Dense(2, activation='softmax')
-                if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL else
+                if factoryConfig.dataForm.outputVector == DataFormType.CATEGORICAL else
                 Dense(1, activation='sigmoid')
             )
 
         model.compile(
-            loss='categorical_crossentropy' if gconfig.dataForm.outputVector == DataFormType.CATEGORICAL else 
+            loss='categorical_crossentropy' if factoryConfig.dataForm.outputVector == DataFormType.CATEGORICAL else 
             # 'binary_crossentropy',
             'binary_focal_crossentropy', ## helps to apply a "focal factor" to down-weight easy examples and focus more on hard examples
                     # optimizer=SGD(optimizer['learningRate'], optimizer['momentum'], optimizer['decay'], optimizer['nesterov']),
@@ -210,7 +211,7 @@ class NeuralNetworkInstance:
             print('Input size:', inputSize)
             model.summary()
 
-        return cls(id=id, model=model)
+        return cls(id=id, model=model, factoryConfig=factoryConfig)
 
     @classmethod
     def fromSave(cls, factoryFile, factoryConfig, modelpath, rawDBStats):
@@ -337,7 +338,7 @@ class NeuralNetworkInstance:
     def predict(self, inputData, raw=False, batchInput=False, **kwargs):
         if not self.model: raise BufferError('Model not loaded')
 
-        if not batchInput and not gconfig.network.recurrent:
+        if not batchInput and not self.recurrent:
             inputData = inputData.reshape(-1, inputData.size)
         else:
             inputData = [tf.experimental.numpy.vstack(inputData[0]), tf.experimental.numpy.vstack(inputData[1])]
@@ -427,9 +428,13 @@ if __name__ == '__main__':
             # { 'units': 200, 'dropout': True, 'dropoutRate':0.0025 },
             # { 'units': 100, 'dropout': False, 'dropoutRate':0.0025 }
         ],
-        (2, 2) ## teimsteps, features, 
+        # (2, 2), ## teimsteps, features, 
+        inputSize=4,
+        recurrent=False
         # inp.shape
     )
+
+    n.printAllAccuracyStats()
 
     n.fit(inp, oup, epochs=5, batch_size=1, verbose=1)
 

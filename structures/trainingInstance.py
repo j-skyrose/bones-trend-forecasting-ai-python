@@ -19,7 +19,7 @@ from structures.callbacks.TimeBasedEarlyStoppingCallback import TimeBasedEarlySt
 from structures.callbacks.DeviationFromBasedEarlyStoppingCallback import DeviationFromBasedEarlyStopping
 from constants.enums import SeriesType, AccuracyType
 from utils.support import recdotdict, shortc
-from globalConfig import trainingConfig, config as gconfig
+from globalConfig import trainingConfig
 
 
 class TrainingInstance():
@@ -40,10 +40,10 @@ class TrainingInstance():
         self.validationSet = shortc(validationSet, self.validationSet)
         self.testingSet = shortc(testingSet, self.testingSet)
 
-        if (type(validationSet) is list and (len(validationSet[0][0] if gconfig.network.recurrent else validationSet[0]))) or (validationPSet and validationNSet):
+        if (type(validationSet) is list and (len(validationSet[0][0] if self.network.config.network.recurrent else validationSet[0]))) or (validationPSet and validationNSet):
             self.validationDataHandler: EvaluationDataHandler = EvaluationDataHandler(validationSet, validationPSet, validationNSet)
 
-        if (type(testingSet) is list and (len(testingSet[0][0] if gconfig.network.recurrent else testingSet[0]))) or (testingPSet and testingNSet):
+        if (type(testingSet) is list and (len(testingSet[0][0] if self.network.config.network.recurrent else testingSet[0]))) or (testingPSet and testingNSet):
             self.testingDataHandler: EvaluationDataHandler = EvaluationDataHandler(testingSet, testingPSet, testingNSet)
 
     def setTrainingConfig(self, config=None, epochs=None, batchSize=None):
@@ -70,7 +70,7 @@ class TrainingInstance():
     def train(self, epochs=None, minEpochs=5, validationType: AccuracyType=AccuracyType.OVERALL, patience=None, stopTime=None, timeDuration=None, verbose=1, **kwargs):
         pos = self.validationDataHandler[AccuracyType.POSITIVE][0]
         neg = self.validationDataHandler[AccuracyType.NEGATIVE][0]
-        if verbose > 0: print('split:', len(pos[0] if gconfig.network.recurrent else pos), ':', len(neg[0] if gconfig.network.recurrent else pos))
+        if verbose > 0: print('split:', len(pos[0] if self.network.config.network.recurrent else pos), ':', len(neg[0] if self.network.config.network.recurrent else pos))
 
         try:
             if not epochs:
@@ -109,10 +109,10 @@ class TrainingInstance():
                         self.validationDataHandler.getTuple(AccuracyType.POSITIVE),
                         self.validationDataHandler.getTuple(AccuracyType.NEGATIVE)
                     ],
-                    custom_validation_data_values=[gconfig.trainer.customValidationClassValueRatio, 1 - gconfig.trainer.customValidationClassValueRatio] if validationType != AccuracyType.OVERALL else None,
+                    custom_validation_data_values=[self.network.config.trainer.customValidationClassValueRatio, 1 - self.network.config.trainer.customValidationClassValueRatio] if validationType != AccuracyType.OVERALL else None,
                     monitor='val_accuracy', mode='max',
                     # monitor='val_loss', mode='min',
-                    override_stops_on_value=(1-gconfig.trainer.customValidationClassValueRatio),
+                    override_stops_on_value=(1-self.network.config.trainer.customValidationClassValueRatio),
 
                     patience=patience
                 ))
