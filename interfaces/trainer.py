@@ -26,6 +26,7 @@ from managers.statsManager import StatsManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from constants.enums import AccuracyType, ChangeType, SetClassificationType, LossAccuracy, OperatorDict, SeriesType
 from constants.exceptions import SufficientlyUpdatedDataNotAvailable
+from utils.other import getCustomAccuracy
 from utils.support import containsAllKeys, shortc, shortcdict
 from constants.values import tseNoCommissionSymbols
 
@@ -37,7 +38,6 @@ def getTimestamp(year=datetime.now().year, month=datetime.now().month, day=datet
 
 accuracyStatsHeaderLine1 = ['','Curr Accum Acc', 'Future Accum Acc','Future Accum Acc']
 accuracyStatsHeaderLine2 = ['','', 'bef-Training-acc', 'aft-Training-acc']
-def getCustomAccuracy(statsObj): return statsObj[AccuracyType.POSITIVE.name].current*gconfig.trainer.customValidationClassValueRatio + statsObj[AccuracyType.NEGATIVE.name].current*(1 - gconfig.trainer.customValidationClassValueRatio)
 def getAccDiffStr(forwardAccuracy, currentAccuracy):
     return f"{ '+' if forwardAccuracy > currentAccuracy else '' }{forwardAccuracy - currentAccuracy:.5f}"
 

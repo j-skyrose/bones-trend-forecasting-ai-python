@@ -19,7 +19,7 @@ from structures.inputVectorStats import InputVectorStats
 from structures.sqlArgumentObj import SQLArgumentObj
 from utils.support import asList, convertToSnakeCase, isNormalizationColumn, shortc, shortcdict
 from constants.values import stockOffset, canadaExchanges, usExchanges
-from constants.enums import ChangeType, InterestType, MarketType, NormalizationGroupings, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType, SetClassificationType
+from constants.enums import AccuracyType, ChangeType, InterestType, MarketType, NormalizationGroupings, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType, SetClassificationType
 
 
 
@@ -266,6 +266,13 @@ def generateSQLAdditionalStatementAndArguments(**kwargs):
         return f" WHERE {' AND '.join(additions)}", args
     else:
         return '', []
+
+
+def getCustomAccuracy(statsObj=None, positiveAccuracy=None, negativeAccuracy=None, classValueRatio=gconfig.trainer.customValidationClassValueRatio): 
+    positiveAccuracy = shortc(positiveAccuracy, statsObj[AccuracyType.POSITIVE.name].current) 
+    negativeAccuracy = shortc(negativeAccuracy, statsObj[AccuracyType.NEGATIVE.name].current)
+    return (positiveAccuracy * classValueRatio) + (negativeAccuracy * (1 - classValueRatio))
+    
 
 if __name__ == '__main__':
     # print(getMarketHolidays(2020))

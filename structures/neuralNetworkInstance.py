@@ -22,7 +22,7 @@ from structures.EvaluationResultsObj import EvaluationResultsObj
 from constants.exceptions import LocationNotSpecificed
 from constants.enums import AccuracyType, ChangeType, DataFormType, LossAccuracy, SeriesType
 from utils.support import asBytes, recdotdict, shortc, shortcdict
-from utils.other import maxQuarters
+from utils.other import getCustomAccuracy, maxQuarters
 from managers.inputVectorFactory import InputVectorFactory
 from structures.EvaluationDataHandler import EvaluationDataHandler
 from globalConfig import config as gconfig
@@ -355,13 +355,27 @@ class NeuralNetworkInstance:
         return self._generateAccuracyStatsObj()
 
     @classmethod
-    def prettyPrintAccuracyStat(cls, name, stats):
-        print(f'{name} accuracy:'.ljust(19) + f'{stats.current}'.ljust(22) + f"({'+' if stats.current >= stats.last else '-'} {f'{abs(stats.current - stats.last):.20f}'})")
+    def prettyPrintAccuracyStat(cls, name, stats=None, current=None, last=None):
+        current = shortc(current, shortcdict(stats, 'current'))
+        last = shortc(last, shortcdict(stats, 'last'))
+        print(
+            f'{name} accuracy:'.ljust(19) + 
+            f'{current}'.ljust(22) + 
+            (f"({'+' if current >= last else '-'} {f'{abs(current - last):.20f}'})" if last else '')
+        )
 
     @classmethod
-    def printAccuracyStats(cls, statsDict):
+    def printAccuracyStats(cls, statsDict, classValueRatio=None, config=None):
+        if config:
+            pass ## config already set
+        elif hasattr(cls, 'inputVectorFactory'):
+            config = cls.inputVectorFactory.config
+        else:
+            config = gconfig
+        classValueRatio = shortc(classValueRatio, config.trainer.customValidationClassValueRatio)
         for name, stats in statsDict.items():
             cls.prettyPrintAccuracyStat(name, stats)
+        cls.prettyPrintAccuracyStat('CUSTOM', current=getCustomAccuracy(statsDict, classValueRatio=classValueRatio))
         print()
 
     def printAllAccuracyStats(self):
