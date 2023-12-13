@@ -1198,12 +1198,12 @@ class DataManager():
         def constrList(set: List, isInput: bool) -> numpy.array:
             return numpy.asarray(constrList_helper(set, isInput))
 
-        def constrList_recurrent(dpiList: List[DataPointInstance]=[], vectorList: List=[], showProgress=True) -> List:
+        def constrList_recurrent(dpiList: List[DataPointInstance]=[], vectorList: List=[], showProgress=True, label='') -> List:
             iterateList = shortc(vectorList, dpiList)
             staticList = []
             semiseriesList = []
             seriesList = []
-            for i in tqdm.tqdm(iterateList, desc='Building input vector array', leave=(verbose > 0.5)) if showProgress and verbose != 0 else iterateList:
+            for i in tqdm.tqdm(iterateList, desc=f'Building input vector array{f" for {label}" if label else ""}', leave=(verbose > 0.5)) if showProgress and verbose != 0 else iterateList:
                 staticArr, semiseriesArr, seriesArr = i.getInputVector() if not vectorList else i
                 staticList.append(staticArr)
                 semiseriesList.append(numpy.reshape(semiseriesArr, (maxQuarters(self.precedingRange), semiseriesSize)))
@@ -1215,9 +1215,9 @@ class DataManager():
                 numpy.array(seriesList)
             ]
 
-        def constructDataSet(dpiList=[], vectorList=[]):
+        def constructDataSet(dpiList=[], vectorList=[], label=''):
             if self.config.network.recurrent:
-                inp = constrList_recurrent(dpiList, vectorList)
+                inp = constrList_recurrent(dpiList, vectorList, label=label)
             else:
                 if vectorList: inp = vectorList
                 else: inp = constrList(dpiList, True)
@@ -1280,13 +1280,13 @@ class DataManager():
 
             ## process input vectors to data sets
             generatedData = [
-                constructDataSet(instanceSet, inputVectorTuplesDict[setType]) for instanceSet in instanceSets[setType] for setType in requiredSetTypes
+                constructDataSet(instanceSet, inputVectorTuplesDict[setType], setType.name) for instanceSet in instanceSets[setType] for setType in requiredSetTypes
             ]
 
         else:
             generatedData = []
             for setType in requiredSetTypes:
-                generatedDataSets = [constructDataSet(instanceSet) for instanceSet in instanceSets[setType]]
+                generatedDataSets = [constructDataSet(instanceSet, label=setType.name) for instanceSet in instanceSets[setType]]
                 if len(setClassifications[setType]) > 1 and SetClassificationType.ALL in setClassifications[setType]:
                     ## combine data sets for each individual classification to satisfy ALL class
                     '''
@@ -1316,7 +1316,7 @@ class DataManager():
                     generatedDataSets = combinedSet + generatedDataSets
                 generatedData.append(generatedDataSets)
 
-        if gconfig.testing.enabled and verbose > 0.5:
+        if gconfig.testing.enabled and verbose > 1:
             print('Stock data handler build time', self.getprecstocktime)
             print('Stock indicator build time', self.getprecindctime)
             print('Financial reports build time', self.getprecfintime)
