@@ -7,22 +7,23 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
+import atexit, time
+from datetime import date
+
+from constants.exceptions import APILimitReached, APITimeout
+from constants.enums import FinancialStatementType, LimitType, TimespanType
+from managers.configManager import StaticConfigManager, SavedStateManager
 from structures.api.alphavantage import Alphavantage
 from structures.api.polygon import Polygon
 from structures.api.fmp import FMP
 from structures.api.neo import NEO
-from managers.configManager import StaticConfigManager, SavedStateManager
-from datetime import date
-import atexit
-import time as timer
-
-from constants.exceptions import APILimitReached, APITimeout, APIError
-from constants.enums import FinancialReportType, FinancialStatementType, LimitType, TimespanType
 from utils.support import Singleton, asDate, recdotdict, recdotobj, shortc
 
 class APIManager(Singleton):
 
     def __init__(self, currentDate=date.today()):
+        atexit.register(self.saveConfig)
+
         self.currentDate = asDate(currentDate)
         self.config = StaticConfigManager()
         self.savedState = SavedStateManager()
@@ -51,11 +52,11 @@ class APIManager(Singleton):
 
         self.apis[apiName] = recdotdict({
             'api': apiClass(url, key=apiKey),
-            'limit': int(self.config.get(apiName, 'limit', defaultValue=-1)),
-            'limitType': LimitType[self.config.get(apiName, 'limittype', defaultValue='NONE').upper()],
-            'priority': int(self.config.get(apiName, 'priority', defaultValue=1)),
-            'remaining': int(self.savedState.get(apiName, 'remaining', defaultValue=-1)),
-            'updatedOn': date.fromisoformat(self.savedState.get(apiName, 'updated', defaultValue='1970-01-01'))
+            'limit': self.config.get(apiName, 'limit'),
+            'limitType': self.config.get(apiName, 'limittype'),
+            'priority': self.config.get(apiName, 'priority'),
+            'remaining': self.savedState.get(apiName, 'remaining'),
+            'updatedOn': date.fromisoformat(self.savedState.get(apiName, 'updated'))
         })
 
 
@@ -94,7 +95,7 @@ class APIManager(Singleton):
                 break
             except APITimeout:
                 if verbose == 1: print('API timed out')
-                timer.sleep(60)
+                time.sleep(60)
                 if verbose == 1: print('Retrying...')
         if ret is None:
             if apih.limitType != LimitType.NONE: apih.remaining = 0

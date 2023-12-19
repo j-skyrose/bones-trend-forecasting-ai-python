@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import tqdm, queue, atexit, traceback, math, requests, csv, codecs, copy, sqlite3
+import tqdm, traceback, math, requests, csv, codecs, copy, sqlite3
 import time as timer
 from random import random
 from datetime import date, datetime, timedelta
@@ -34,8 +34,6 @@ DEBUG = True
 
 class Collector:
     def __init__(self, currentDate=date.today()):
-        atexit.register(self.close)
-
         currentDatetime = asDatetime(currentDate)
         currentDate = asDate(currentDate)
         self.currentDatetime = currentDatetime
@@ -43,10 +41,6 @@ class Collector:
 
         self.apiManager: APIManager = APIManager(self.currentDate)
         self.apiErrors = []
-
-    def close(self):
-        self.apiManager.saveConfig()
-        print('collector shutting down')
 
     def __updateSymbolsAPIField(self, api, exchange, symbol, val):
         dbm.dbc.execute('UPDATE symbols SET api_'+api+'=? WHERE exchange=? AND symbol=?',(val, exchange, symbol))
@@ -253,7 +247,6 @@ class Collector:
 
         except (KeyboardInterrupt, APIError):
             print('keyboard interrupt')
-            if api != 'polygon': self.close()
 
         print('API Errors:',self.apiErrors)
 

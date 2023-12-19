@@ -7,45 +7,46 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import warnings
+import validate
 from configobj import ConfigObj
 
+from constants.enums import LimitType
 from constants.values import defaultConfigFileSection
 from utils.support import Singleton, shortc
 
 ## see below for actual classes
 class _ConfigManager():
-    def __init__(self, configFilepath=None, static: bool=True):
+    def __init__(self, configFilepath=None, configSpec=None, static: bool=True):
         if not configFilepath: raise ValueError('Missing config path')
 
         self.filepath = configFilepath
         self.static = static
-        self.config = ConfigObj(self.filepath, create_empty=(not self.static))
+        self.config = ConfigObj(self.filepath, configspec=configSpec, create_empty=(not self.static))
 
-    def get(self, arg1, arg2=None, defaultValue=None, required=False):
-        try:
-            if (arg2):
-                return self.config[arg1][arg2]
-            else:
-                return self.config[defaultConfigFileSection][arg1]
-        except KeyError as e:
-            if required:
-                raise e
-            if arg2 is not None and arg1 == e.args[0]:
-                if self.static: ## savedState auto-creates anything missing
-                    raise KeyError(f'\'{arg1}\' section is missing from the config')
-            
-            autoval = shortc(defaultValue, "")
-            warnings.warn(f'\'{shortc(arg2, arg1)}\' config value missing from \'{arg1 if arg2 else defaultConfigFileSection}\' section, defaulting to \'{autoval}\'')
-            self.set(
-                arg1 if arg2 else defaultConfigFileSection,
-                shortc(arg2, arg1),
-                autoval
-            )
-            return autoval
+        initialComment = self.config.initial_comment
+
+        validated = self.config.validate(validate.Validator(), preserve_errors=True, copy=True)
+        if validated != True:
+            raise ValueError(validated)
+        
+        ## values can be cleared/overridden by validation
+        self.config.initial_comment = initialComment
+
+    def get(self, arg1, arg2=None, required=False):
+        section = arg1 if arg2 else defaultConfigFileSection
+        key = arg2 if arg2 else arg1
+        retval = self.config[section][key]
+
+        if required and type(retval) is str and len(retval) == 0:
+            raise ValueError(f'{section}:{key} is required but has no value')
+
+        if key == 'limitType': retval = LimitType[retval.upper()]
+        return retval
 
     def set(self, arg1, arg2, arg3=None):
         if arg3 is not None:
+            if not self.config[arg1]:
+                self.config[arg1] = {}
             self.config[arg1][arg2] = str(arg3)
         else:
             self.config[defaultConfigFileSection][arg1] = str(arg2)
@@ -53,23 +54,45 @@ class _ConfigManager():
     def save(self):
         self.config.write()
 
-
+staticConfigSpec = f'''
+[DEFAULT]
+__many__ = string(default=None)
+[__many__]
+__many__ = string(default=None)
+url = string(default=None)
+apikey = string(default=None)
+priority = integer(1, default=100)
+limit = integer(default=-1)
+limittype = option({",".join([stype.name for stype in LimitType])}, default={LimitType.NONE.name})
+'''
 class StaticConfigManager(Singleton, _ConfigManager):
     filepath = os.path.join(path, 'sp2StaticConfig.ini')
 
     def __init__(self):
-        _ConfigManager.__init__(self, self.filepath)
+        _ConfigManager.__init__(self, self.filepath, staticConfigSpec.split('\n'))
 
+savedStateSpec = '''
+[__many__]
+remaining = integer(default=-1)
+updated = string(default="1970-01-01")
+[update]
+lastupdateddate = string(default="1970-01-01")
+laststockindex = integer(default=-1)
+totaladded = integer(0, default=0)
+updated = string(default="1970-01-01")
+[google]
+lastprocessedrowid = integer(default=-1)
+'''
 class SavedStateManager(Singleton, _ConfigManager):
     filepath = os.path.join(path, 'sp2SavedState.ini')
 
     def __init__(self):
-        _ConfigManager.__init__(self, self.filepath, static=False)
+        _ConfigManager.__init__(self, self.filepath, savedStateSpec.split('\n'), static=False)
 
 
 if __name__ == '__main__':
     c = StaticConfigManager()
-    p = c.get('primarydatabase')
+    p = c.get('propertiesdatabase')
     print(p)
     print(os.path.exists(p))
     p = c.get('dumpdatabase')
