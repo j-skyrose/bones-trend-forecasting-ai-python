@@ -174,7 +174,8 @@ class DatabaseManager(Singleton):
     def getMaxRowID(self, table='google_interests_d') -> int:
         return self.dbc.execute(f'SELECT MAX(rowid) FROM {self.getTableString(table)}').fetchone()['MAX(rowid)']
 
-
+    def getRowCount(self, table) -> int:
+        return self.dbc.execute(f'SELECT count(*) as rowcount FROM {self.getTableString(table)}').fetchone()['rowcount']
 
     def getLoadedQuarters(self):
         qrts = self.dbc.execute(f'SELECT period FROM {self.getTableString("financial_stmts_loaded_periods_d")} WHERE type=\'quarter\'').fetchall()
@@ -852,28 +853,20 @@ class DatabaseManager(Singleton):
     ####################################################################################################################################################################
     ## sets ####################################################################################################################################################################
 
+    ## ensures there are corresponding rows in the last_updates table for each series type
+    def addLastUpdatesRows(self, exchange, symbol):
+        for e in SeriesType:
+            self.dbc.execute('INSERT OR IGNORE INTO last_updates(exchange, symbol, type, date) VALUES (?,?,?,?)', (exchange, symbol, e.name, '1970-01-01'))
+
     ## ensures there are corresponding rows in the last_updates table for each ticker in the symbols table
     def addLastUpdatesRowsForAllSymbols(self, exchange=None, verbose=1):
-        stmt = 'SELECT exchange, symbol FROM symbols'
-        args = []
-        if exchange:
-            stmt += ' WHERE exchange=?'
-            args.append(exchange)
-        tickers = self.dbc.execute(stmt, tuple(args)).fetchall()
-        # tickers = self.dbc.execute("SELECT exchange, symbol FROM symbols WHERE exchange='TSX'").fetchall()
-        if verbose > 0: print(len(tickers),'tickers found')
+        tickers = self.getSymbols(exchange=exchange)
+        if verbose: print(len(tickers),'tickers found')
 
-        tot = 0
+        if verbose: rowcount = self.getRowCount('last_updates')
         for t in tickers:
-            exchange, symbol = t.values()
-
-            for e in SeriesType:
-                try:
-                    self.dbc.execute('INSERT INTO last_updates(exchange, symbol, type, date) VALUES (?,?,?,?)', (exchange, symbol, e.name, '1970-01-01'))
-                    tot += self.dbc.rowcount
-                except sqlite3.IntegrityError:
-                    pass
-        if verbose > 0: print(tot, 'rows added')
+            self.addLastUpdatesRows(t.exchange, t.symbol)
+        if verbose: print(self.getRowCount('last_updates') - rowcount, 'rows added')
 
     ## add a new API option with data retrieval capabilities
     ## adds new column to symbols table for new API and can set for supported symbols
