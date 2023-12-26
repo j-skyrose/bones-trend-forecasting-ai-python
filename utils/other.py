@@ -19,7 +19,7 @@ from structures.inputVectorStats import InputVectorStats
 from structures.sqlArgumentObj import SQLArgumentObj
 from utils.support import asList, convertToSnakeCase, isNormalizationColumn, shortc, shortcdict
 from constants.values import stockOffset, canadaExchanges, usExchanges
-from constants.enums import AccuracyType, ChangeType, InterestType, MarketType, NormalizationGroupings, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType, SetClassificationType
+from constants.enums import AccuracyType, ChangeType, InterestType, MarketRegion, NormalizationGroupings, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType, SetClassificationType
 
 
 
@@ -142,10 +142,10 @@ def buildCommaSeparatedTickerPairString(tupleList: List):
         returnstr += ',(\'' + d[0] + '\',\'' + d[1] + '\')'
     return returnstr
 
-def getMarketType(exchange):
+def getMarketRegion(exchange):
     exchange = asList(exchange)
-    if all(e in canadaExchanges for e in exchange): return MarketType.CANADA
-    elif all(e in usExchanges for e in exchange): return MarketType.US    
+    if all(e in canadaExchanges for e in exchange): return MarketRegion.CANADA
+    elif all(e in usExchanges for e in exchange): return MarketRegion.US    
     else: raise ValueError(f'Exchange(s) {exchange} could not be mapped to any exchange lists')
 
 def getIndicatorPeriod(i: IndicatorType, indicatorConfig=gconfig.defaultIndicatorFormulaConfig):

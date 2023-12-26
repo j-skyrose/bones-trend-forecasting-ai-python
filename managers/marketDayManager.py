@@ -12,16 +12,16 @@ from typing import List
 from datetime import date, datetime, timedelta
 
 from globalConfig import config as gconfig
-from constants.enums import MarketType
+from constants.enums import MarketRegion
 from constants.exceptions import ArgumentError
 from utils.support import Singleton, asDatetime, getIndex
-from utils.other import getMarketType
+from utils.other import getMarketRegion
 
 # http://www.market-holidays.com/2022
 # https://www.workingdays.ca/workingdays_holidays_2010_Toronto%20Stock%20Exchange.htm#
 
 class MarketDayManager(Singleton):
-    marketHolidays: dict = {MarketType.CANADA_US_SHARED: {}}
+    marketHolidays: dict = {MarketRegion.CANADA_US_SHARED: {}}
     marketHalfDays: dict = {}
     marketDays: dict = {}
 
@@ -29,19 +29,19 @@ class MarketDayManager(Singleton):
     def getMarketHolidays(cls, yr, exchange='NYSE', **kwargs):
         yr = str(yr)
 
-        market = getMarketType(exchange)
-        if market not in cls.marketHolidays:
-            cls.marketHolidays[market] = {}
+        region = getMarketRegion(exchange)
+        if region not in cls.marketHolidays:
+            cls.marketHolidays[region] = {}
 
-        if yr not in cls.marketHolidays[market]:
-            cls.marketHolidays[market][yr] = cls._getMarketHolidays(yr, market)
+        if yr not in cls.marketHolidays[region]:
+            cls.marketHolidays[region][yr] = cls._getMarketHolidays(yr, region)
 
-        if market == MarketType.CANADA or market == MarketType.US:
-            if yr not in cls.marketHolidays[MarketType.CANADA_US_SHARED]:
-                cls.marketHolidays[MarketType.CANADA_US_SHARED][yr] = cls._getMarketHolidays(yr, MarketType.CANADA_US_SHARED)
-            return cls.marketHolidays[MarketType.CANADA_US_SHARED][yr] + cls.marketHolidays[market][yr]
+        if region == MarketRegion.CANADA or region == MarketRegion.US:
+            if yr not in cls.marketHolidays[MarketRegion.CANADA_US_SHARED]:
+                cls.marketHolidays[MarketRegion.CANADA_US_SHARED][yr] = cls._getMarketHolidays(yr, MarketRegion.CANADA_US_SHARED)
+            return cls.marketHolidays[MarketRegion.CANADA_US_SHARED][yr] + cls.marketHolidays[region][yr]
 
-        return cls.marketHolidays[market][yr]
+        return cls.marketHolidays[region][yr]
 
     @classmethod
     def getMarketHalfdays(cls, yr):
@@ -146,19 +146,19 @@ class MarketDayManager(Singleton):
         return days
 
     @classmethod
-    def _getMarketHolidays(cls, yr, market:MarketType):
+    def _getMarketHolidays(cls, yr, region:MarketRegion):
         holidays = []
         yr = int(yr)
 
         # new years day
-        if market != MarketType.CANADA_US_SHARED:
+        if region != MarketRegion.CANADA_US_SHARED:
             dt = date(yr, 1, 1)
-            if market == MarketType.CANADA and dt.weekday() == 5: dt = dt + timedelta(days=2)
+            if region == MarketRegion.CANADA and dt.weekday() == 5: dt = dt + timedelta(days=2)
             elif dt.weekday() == 6: dt = dt + timedelta(days=1)
             holidays.append(dt)
 
         # martin luther king jr day (third monday of jan)
-        if market == MarketType.US:
+        if region == MarketRegion.US:
             if yr > 1997:
                 mondaycounter = 0
                 dt = date(yr-1, 12, 31)
@@ -170,7 +170,7 @@ class MarketDayManager(Singleton):
         # family day for Canadian markets
         # presidents day (third monday of feb) for US markets
         familydaystartyear = 2008
-        if (market == MarketType.CANADA_US_SHARED and yr >= familydaystartyear) or (market == MarketType.US and yr <= familydaystartyear):
+        if (region == MarketRegion.CANADA_US_SHARED and yr >= familydaystartyear) or (region == MarketRegion.US and yr <= familydaystartyear):
             mondaycounter = 0
             dt = date(yr, 1, 31)
             while mondaycounter < 3:
@@ -179,7 +179,7 @@ class MarketDayManager(Singleton):
             holidays.append(dt)
 
         # good Friday
-        if market == MarketType.CANADA_US_SHARED:
+        if region == MarketRegion.CANADA_US_SHARED:
             a = yr % 19
             b = yr // 100
             c = yr % 100
@@ -192,20 +192,20 @@ class MarketDayManager(Singleton):
 
         # victoria day canada (second last monday of may)
         # memorial day us (last monday of may)
-        if market == MarketType.CANADA or market == MarketType.US:
+        if region == MarketRegion.CANADA or region == MarketRegion.US:
             lastmonday = date(yr, 5, 20)
             dt = lastmonday
             while dt.month == 5:
                 if dt.weekday() == 0: lastmonday = dt
                 dt = dt + timedelta(days=1)
 
-            if market == MarketType.CANADA:
+            if region == MarketRegion.CANADA:
                 holidays.append(lastmonday - timedelta(days=7))
             else:
                 holidays.append(lastmonday)
 
         # juneteenth day US
-        if market == MarketType.US:
+        if region == MarketRegion.US:
             if yr >= 2022:
                 dt = date(yr, 6, 19)
                 if dt.weekday() == 5: dt = dt - timedelta(days=1)
@@ -213,21 +213,21 @@ class MarketDayManager(Singleton):
                 holidays.append(dt)
 
         # canada day (july 1)
-        if market == MarketType.CANADA:
+        if region == MarketRegion.CANADA:
             dt = date(yr, 7, 1)
             if dt.weekday() == 5: dt = dt + timedelta(days=2)
             elif dt.weekday() == 6: dt = dt + timedelta(days=1)
             holidays.append(dt)
 
         # independence day (july 4)
-        if market == MarketType.US:
+        if region == MarketRegion.US:
             dt = date(yr, 7, 4)
             if dt.weekday() == 5: dt = dt - timedelta(days=1)
             elif dt.weekday() == 6: dt = dt + timedelta(days=1)
             holidays.append(dt)
 
         # civic holiday (first monday in august)
-        if market == MarketType.CANADA:
+        if region == MarketRegion.CANADA:
             dt = date(yr, 8, 1)
             for i in range(8):
                 if dt.weekday() == 0: break
@@ -235,7 +235,7 @@ class MarketDayManager(Singleton):
             holidays.append(dt)
 
         # labor day (first monday in sept)
-        if market == MarketType.CANADA_US_SHARED:
+        if region == MarketRegion.CANADA_US_SHARED:
             dt = date(yr, 9, 1)
             for i in range(8):
                 if dt.weekday() == 0: break
@@ -243,22 +243,22 @@ class MarketDayManager(Singleton):
             holidays.append(dt)
 
         # national day for trust/reconcil (last day of sept)
-        if market == MarketType.CANADA:
+        if region == MarketRegion.CANADA:
             if yr > 2022:
                 dt = date(yr, 9, 30)
                 if dt.weekday() == 5: dt = dt + timedelta(days=2)
                 elif dt.weekday() == 6: dt = dt + timedelta(days=1)
                 holidays.append(dt)
 
-        if market != MarketType.CANADA_US_SHARED:
-            holidays.append(cls._getThanksgivingDay(yr, market))
+        if region != MarketRegion.CANADA_US_SHARED:
+            holidays.append(cls._getThanksgivingDay(yr, region))
 
-        if market != MarketType.CANADA_US_SHARED:
-            xmasdt = cls._getChristmasDay(yr, market)
+        if region != MarketRegion.CANADA_US_SHARED:
+            xmasdt = cls._getChristmasDay(yr, region)
             holidays.append(xmasdt)
 
         # boxing day
-        if market == MarketType.CANADA:
+        if region == MarketRegion.CANADA:
             dt = date(yr, 12, 26)
             if dt.weekday() == 5 or dt.weekday() == 6: dt += timedelta(days=2)
             elif dt.weekday() == 0: dt += timedelta(days=1) ## xmas day already pushed forward from sunday
@@ -267,9 +267,9 @@ class MarketDayManager(Singleton):
         return holidays
 
     @staticmethod
-    def _getThanksgivingDay(yr, market:MarketType=MarketType.US):
+    def _getThanksgivingDay(yr, region:MarketRegion=MarketRegion.US):
         # canada - second monday of oct
-        if market == MarketType.CANADA:
+        if region == MarketRegion.CANADA:
             mondaycounter = 0
             dt = date(yr, 10, 1) - timedelta(days=1)
             while mondaycounter < 2:
@@ -277,7 +277,7 @@ class MarketDayManager(Singleton):
                 if dt.weekday() == 0: mondaycounter += 1
             return dt
         # us - fourth thursday of nov
-        if market == MarketType.US:
+        if region == MarketRegion.US:
             dt = date(yr, 10, 31)
             thursdaycounter = 0
             while thursdaycounter < 4:
@@ -286,10 +286,10 @@ class MarketDayManager(Singleton):
             return dt
 
     @staticmethod
-    def _getChristmasDay(yr, market:MarketType=MarketType.US):
+    def _getChristmasDay(yr, region:MarketRegion=MarketRegion.US):
         dt = date(yr, 12, 25)
-        if market == MarketType.CANADA and dt.weekday() == 5:   dt = dt + timedelta(days=2)
-        elif market == MarketType.US and dt.weekday() == 5:       dt = dt - timedelta(days=1)
+        if region == MarketRegion.CANADA and dt.weekday() == 5:   dt = dt + timedelta(days=2)
+        elif region == MarketRegion.US and dt.weekday() == 5:       dt = dt - timedelta(days=1)
         elif dt.weekday() == 6: dt = dt + timedelta(days=1)
         return dt
 

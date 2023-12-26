@@ -185,7 +185,7 @@ class OperatorDict(Enum):
     GREATERTHANOREQUAL= operator.ge, '<=', None, 'gte'
     GREATERTHAN =       operator.gt, '<', None, 'gt'
 
-class MarketType(Enum):
+class MarketRegion(Enum):
     CANADA = 'CANADA'
     US = 'US'
     CANADA_US_SHARED = 'CANADA_US_SHARED'
