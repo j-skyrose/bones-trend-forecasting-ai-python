@@ -26,7 +26,7 @@ from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, EarningsC
 from structures.normalizationColumnObj import NormalizationColumnObj
 from structures.normalizationDataHandler import NormalizationDataHandler
 from structures.sqlArgumentObj import SQLArgumentObj
-from utils.support import asDate, asISOFormat, asList, convertToCamelCase, convertToSnakeCase, flatten, generateCommaSeparatedQuestionMarkString, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, tqdmLoopHandleWrapper, unixToDatetime
+from utils.support import asDate, asISOFormat, asList, convertToCamelCase, convertToSnakeCase, flatten, generateCommaSeparatedQuestionMarkString, keySortedValues, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, sortedKeys, tqdmLoopHandleWrapper, unixToDatetime
 from utils.other import buildCommaSeparatedTickerPairString, generateSQLAdditionalStatementAndArguments, parseCommandLineOptions
 from constants.values import unusableSymbols, apiList, standardExchanges
 
@@ -164,6 +164,13 @@ class DatabaseManager(Singleton):
         if tablename.endswith('_d'): return self.dumpDBAlias
         elif tablename.endswith('_c'): return self.computedDBAlias
         return 'main'
+    
+    def _addColumn(self, table, columnName, columnType='TEXT', notnull=None, default=None):
+        stmt = f'ALTER TABLE {self.getTableString(table)} ADD COLUMN {columnName}'
+        if columnType: stmt += f' {columnType.upper()} '
+        if notnull: stmt += ' NOT NULL '
+        if default is not None: stmt += f' DEFAULT {default} '
+        self.dbc.execute(stmt)
 
     ####################################################################################################################################################################
     ## gets ####################################################################################################################################################################
@@ -176,6 +183,9 @@ class DatabaseManager(Singleton):
 
     def getRowCount(self, table) -> int:
         return self.dbc.execute(f'SELECT count(*) as rowcount FROM {self.getTableString(table)}').fetchone()['rowcount']
+
+    def getTableColumns(self, table) -> List[str]:
+        return self.dbc.execute(f'PRAGMA {self._getDBAliasForTable(table)}.table_info({table})').fetchall()
 
     def getLoadedQuarters(self):
         qrts = self.dbc.execute(f'SELECT period FROM {self.getTableString("financial_stmts_loaded_periods_d")} WHERE type=\'quarter\'').fetchall()
@@ -414,10 +424,6 @@ class DatabaseManager(Singleton):
             tuple += (symbol, )
         stmt += 'GROUP BY exchange, symbol'
         return self.dbc.execute(stmt, tuple).fetchall()
-    
-    ## gets columns, including ones that are normalization associated, i.e. columns beginning with 'highest' of the form 'highest_<grouping name>_<table column>'
-    def getNetworkTrainingConfigColumns(self):
-        return self.dbc.execute('PRAGMA table_info(network_training_config)').fetchall()
 
     ## performs imperfect calculation of maxes, using column averages grouped by ticker rather than the raw values across all tickers (allows filtering out of unusable tickers while possibly saving memory/cpu time)
     def getNormalizationData(self, seriesType: SeriesType=None, standardDeviationCount=2.5, normalizationGrouping: Union[NormalizationGroupings, List[NormalizationGroupings]]=None, **kwargs) -> NormalizationDataHandler:
@@ -430,7 +436,7 @@ class DatabaseManager(Singleton):
             if seriesType: ngroups.append(NormalizationGroupings.HISTORICAL)
             if False: ngroups.append(NormalizationGroupings.FINANCIAL) ## TODO
 
-        normalizationData = NormalizationDataHandler.buildFromDBColumns(self.getNetworkTrainingConfigColumns())
+        normalizationData = NormalizationDataHandler.buildFromDBColumns(self.getTableColumns('network_training_config'))
         ## get averages for each normalization data column
         for c in normalizationData:
             stmt = f'SELECT *, avg({c.columnName}) FROM {c.normalizationGrouping.tableName} '
@@ -846,6 +852,11 @@ class DatabaseManager(Singleton):
     def getEarningsDate(self, exchange=None, symbol=None, inputDate=None, earningsDate=None):
         additionalStmt, arguments = generateSQLAdditionalStatementAndArguments(**locals())
         stmt = f'SELECT * FROM {self.getTableString("earnings_dates_c")}'
+        return self.dbc.execute(stmt + additionalStmt, arguments).fetchall()
+
+    def getDumpTickers_polygon(self, exchange=None, primary_exchange=None, ticker=None, cik=None, active=None, delisted_utc=None, ticker_root=None):
+        additionalStmt, arguments = generateSQLAdditionalStatementAndArguments(**locals())
+        stmt = f'SELECT * FROM {self.getTableString("symbol_info_polygon_d")}'
         return self.dbc.execute(stmt + additionalStmt, arguments).fetchall()
 
 
@@ -1359,6 +1370,28 @@ class DatabaseManager(Singleton):
     def insertEarningsDate(self, exchange, symbol, inputDate, earningsDate):
         self.dbc.execute(f'INSERT INTO {self.getTableString("earnings_dates_c")} VALUES ({generateCommaSeparatedQuestionMarkString(4)})', (exchange, symbol, inputDate, earningsDate))
 
+    def insertTickersDump_polygon(self, data: List[Dict], upsert=True):
+        data = asList(data)
+        exchangeDict = self.getAliasesDictionary()
+        stmtGenerator = lambda rowObj: f"INSERT {'OR IGNORE' if upsert else ''} INTO {self.getTableString('symbol_info_polygon_d')}(exchange_alias,{','.join(sortedKeys(rowObj))}) VALUES (?,{generateCommaSeparatedQuestionMarkString(rowObj.keys())})"
+        for d in data:
+            try: exchange = exchangeDict[d['primary_exchange']]
+            except KeyError: exchange = None
+            stmt = stmtGenerator(d)
+            args = [exchange] + keySortedValues(d)
+            self.dbc.execute(stmt, args)
+
+        if upsert:
+            possiblePKCols = sorted(['primary_exchange', 'ticker', 'delisted_utc'])
+            actualPKColsGenerator = lambda rowObj: [pk for pk in possiblePKCols if pk in sortedKeys(rowObj)]
+            stmtGenerator = lambda rowObj: f"UPDATE {self.getTableString('symbol_info_polygon_d')} SET {','.join([c + '=?' for c in sortedKeys(rowObj) if c not in actualPKColsGenerator(rowObj)])} WHERE {' AND '.join([c + '=?' for c in actualPKColsGenerator(rowObj)])}"
+            for d in data:
+                if d['active'] and 'delisted_utc' not in d:
+                    d['delisted_utc'] = 'NA' ## ensure inactives are not updated as well
+                stmt = stmtGenerator(d)
+                args = [d[k] for k in sortedKeys(d) if k not in actualPKColsGenerator(d)] + [d[k] for k in sortedKeys(d) if k in actualPKColsGenerator(d)]
+                self.dbc.execute(stmt, args)
+
     ## end sets ####################################################################################################################################################################
     ####################################################################################################################################################################
     ## deletes ####################################################################################################################################################################
@@ -1426,6 +1459,11 @@ class DatabaseManager(Singleton):
             args.append(str(threshold))
 
         self.dbc.execute(stmt, tuple(args))
+
+    def deleteDumpTicker_polygon(self, primary_exchange, ticker, delisted_utc):
+        additionalStmt, arguments = generateSQLAdditionalStatementAndArguments(**locals())
+        stmt = f'DELETE FROM {self.getTableString("symbol_info_polygon_d")}'
+        return self.dbc.execute(stmt + additionalStmt, arguments).fetchall()
 
 
     ## end deletes ####################################################################################################################################################################

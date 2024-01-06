@@ -9,9 +9,10 @@ sys.path.append(path)
 
 import requests
 from requests.models import Response
+
 from constants.exceptions import APIError, APITimeout
-from constants.enums import FinancialReportType, OperatorDict, TimespanType
-from utils.support import shortcdict
+from constants.enums import FinancialReportType, MarketType, OperatorDict, TimespanType
+from utils.support import asISOFormat, shortcdict
 
 # import codecs
 # w=codecs.getwriter("utf-8")(sys.stdout.buffer)
@@ -21,30 +22,93 @@ class Polygon:
         self.url = url
         self.apiKey = key
 
-    def getSupportedTickers(self, page=1):
-        resp = requests.get(self.url + '/v2/reference/tickers', params={
-            'sort': 'ticker',
-            'page': page,
+    def getNextURL(self, url):
+        '''get next page of results from an API call'''
+        return self.__responseHandler(requests.get(url, params={
+            'apiKey': self.apiKey
+        }))
+
+    #region getTickers object
+    '''
+    "active": true,
+    "cik": "0001090872",
+    "composite_figi": "BBG000BWQYZ5",
+    "currency_name": "usd",
+    "last_updated_utc": "2021-04-25T00:00:00Z",
+    "locale": "us",
+    "market": "stocks",
+    "name": "Agilent Technologies Inc.",
+    "primary_exchange": "XNYS",
+    "share_class_figi": "BBG001SCTQY4",
+    "ticker": "A",
+    "type": "CS"
+    '''
+    #endregion
+    def getTickers(self, ticker=None, market:MarketType=None, cik=None, active=None, verbose=0):
+        '''https://polygon.io/docs/stocks/get_v3_reference_tickers'''
+
+        params = {
             'apiKey': self.apiKey,
-            'active': 'true'
-        })
-        rjson = resp.json()
+            'sort': 'ticker',
+            'limit': 1000
+        }
+        if ticker is not None: params['ticker'] = ticker
+        if market is not None: params['market'] = market.value.lower()
+        if cik is not None: params['cik'] = cik
+        if active is not None: params['active'] = active
 
-        if resp.ok:
-            print('got response')
-            try:
-                print (resp, rjson)
-            except Exception:
-                print('error while printing')
-            data = rjson['tickers']
+        return self.__responseHandler(
+            requests.get(f'{self.url}/v3/reference/tickers', params=params),
+            verbose=verbose
+        )
 
-            print(len(data),'symbols points retrieved')
+    #region getTickerDetails object
+    '''
+    "ticker": "A",
+    "name": "Agilent Technologies Inc.",
+    "market": "stocks",
+    "locale": "us",
+    "primary_exchange": "XNYS",
+    "type": "CS",
+    "active": true,
+    "currency_name": "usd",
+    "cik": "0001090872",
+    "composite_figi": "BBG000C2V3D6",
+    "share_class_figi": "BBG001SCTQY4",
+    "market_cap": 40967833541.64,
+    "phone_number": "(408) 345-8886",
+    "address": {
+        "address1": "5301 STEVENS CREEK BLVD",
+        "city": "SANTA CLARA",
+        "state": "CA",
+        "postal_code": "95051"
+    },
+    "description": "Originally spun out of Hewlett-Packard in 1999, Agilent has evolved into a leading life sciences and diagnostics firm. Today, Agilent's measurement technologies serve a broad base of customers with its three operating segments: life science and applied tools, cross lab (consisting of consumables and services related to life science and applied tools), and diagnostics and genomics. Over half of its sales are generated from the biopharmaceutical, chemical, and advanced materials end markets, but it also supports clinical lab, environmental, forensics, food, academic, and government-related organizations. The company is geographically diverse, with operations in the U.S. and China representing the largest country concentrations.",
+    "sic_code": "3826",
+    "sic_description": "LABORATORY ANALYTICAL INSTRUMENTS",
+    "ticker_root": "A",
+    "homepage_url": "https://www.agilent.com",
+    "total_employees": 18100,
+    "list_date": "1999-11-18",
+    "branding": {
+        "logo_url": "https://api.polygon.io/v1/reference/company-branding/YWdpbGVudC5jb20/images/2023-12-27_logo.svg",
+        "icon_url": "https://api.polygon.io/v1/reference/company-branding/YWdpbGVudC5jb20/images/2023-12-27_icon.jpeg"
+    },
+    "share_class_shares_outstanding": 293000000,
+    "weighted_shares_outstanding": 293004102,
+    "round_lot": 100
+    '''
+    #endregion
+    def getTickerDetails(self, ticker: str, asOfDate=None, verbose=0):
+        '''https://polygon.io/docs/stocks/get_v3_reference_tickers__ticker'''
 
-            return data
-        else:
-            print('APIError' ,resp)
-            raise APIError
+        params = { 'apiKey': self.apiKey }
+        if asOfDate: params['date'] = asISOFormat(asOfDate)
 
+        return self.__responseHandler(
+            requests.get(f'{self.url}/v3/reference/tickers/{ticker}', params=params),
+            verbose=verbose
+        )['results']
 
 # {
 #    "T": "PSTG",
@@ -140,13 +204,6 @@ class Polygon:
         else:
             print('APIError' ,resp)
             raise APIError
-
-    def getTickerDetails(self, symbol):
-        return self.__responseHandler(
-            requests.get(self.url + '/v1/meta/symbols/' + symbol + '/company', params={
-                'apikey': self.apiKey
-            })
-        )
 
     def getFinancials(self, symbol, ftype: FinancialReportType):
         return self.__responseHandler(

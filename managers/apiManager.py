@@ -10,8 +10,8 @@ sys.path.append(path)
 import atexit, time
 from datetime import date
 
-from constants.exceptions import APILimitReached, APITimeout
-from constants.enums import FinancialStatementType, LimitType, TimespanType
+from constants.exceptions import APILimitReached, APITimeout, NotSupportedYet
+from constants.enums import FinancialStatementType, LimitType, MarketType, TimespanType
 from managers.configManager import StaticConfigManager, SavedStateManager
 from structures.api.alphavantage import Alphavantage
 from structures.api.polygon import Polygon
@@ -94,9 +94,9 @@ class APIManager(Singleton):
                 ret = func()
                 break
             except APITimeout:
-                if verbose == 1: print('API timed out')
+                if verbose >= 1: print('API timed out')
                 time.sleep(60)
-                if verbose == 1: print('Retrying...')
+                if verbose >= 1: print('Retrying...')
         if ret is None:
             if apih.limitType != LimitType.NONE: apih.remaining = 0
             raise APILimitReached
@@ -134,12 +134,6 @@ class APIManager(Singleton):
             api,
             lambda apih: apih.api.getAggregates(symbol, shortc(multipler, 1), shortc(timespan, TimespanType.MINUTE), fromDate, toDate, limit, verbose),
             verbose=verbose
-        )
-
-    def getTickerDetails(self, api, symbol):
-        return self._executeRequestWrapper(
-            api,
-            lambda apih: apih.api.getTickerDetails(symbol)
         )
 
     ## polygon
@@ -203,34 +197,61 @@ class APIManager(Singleton):
 
     #     return recdotobj(ret) ## if type(ret) is not list else ret
 
-    def compileSupportedSymbols(self, api):
-        apih = self.apis[api]
+    def getTickers(self, api,  
+                   onlyPage=None, limit=None, ## debugging/throttling
+                   verbose=0, **kwargs):
+        '''Query all ticker symbols which are supported by the given API'''
 
-        if api == 'polygon':
-            tickers = []
-            try:
-                # for x in range (3000):
-                for x in range (2600):
-                    print ('page',x)
-                    list = self.__executeAPIRequest(lambda: apih.api.getSupportedTickers(x+1))
-                    tickers.extend(list)
-                    # print(len(tickers))
-            except APILimitReached:
-                print('limited')
-                pass
-            # except Exception:
-            #     print('other error',sys.exc_info()[0])
-            #     pass
-            return tickers
+        if api != 'polygon': raise NotSupportedYet()
+
+        apiHandle = self.apis[api]
+
+        pageIndex = 1
+        tickers = []
+        resp = self.__executeAPIRequest(apiHandle, lambda: apiHandle.api.getTickers(verbose=verbose, **kwargs), verbose=verbose)
+        while True:
+            data = resp['results']
+
+            if verbose: print(len(data),'tickers retrieved')
+            if onlyPage is None or pageIndex == onlyPage:
+                tickers.extend(data)
+
+            if (onlyPage is not None and pageIndex == onlyPage) or (limit is not None and len(tickers) >= limit):
+                if limit is not None: tickers = tickers[:limit]
+                break ## got required page/amount, no need to request further
+            if 'next_url' in resp.keys():
+                if verbose: print('has next url')
+                resp = self.__executeAPIRequest(apiHandle, lambda: apiHandle.api.getNextURL(resp['next_url']), verbose=verbose)
+            else:
+                if verbose: print('was last page')
+                break
+            pageIndex += 1
+        
+        return tickers
+
+    def getTickerDetails(self, api, ticker, asOfDate=None, verbose=0):
+        return self._executeRequestWrapper(
+            api,
+            lambda apih: apih.api.getTickerDetails(ticker, asOfDate=asOfDate, verbose=verbose),
+            verbose=verbose
+        )
 
 def getPolygonSymbols():
     from utils import convertListToCSV
 
     apim = APIManager()
-    tickers = apim.compileSupportedSymbols('polygon')
+    tickers = apim.getTickers('polygon')
     with open(os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'raw/symbol_dumps/polygon/reference_tickers.csv'), 'w', encoding='utf-8') as f:
         f.write(convertListToCSV(tickers, excludeColumns=['codes']))
     print('done with some data massaging requried (commas in company names, tickers with spaces, etc.)')
+
+
+if __name__ == '__main__':
+    apim = APIManager()
+    # res = apim.query('alphavantage', exchange='NASDAQ', symbol='HOL', seriesType=SeriesType.DAILY_ADJUSTED)
+    # print(res[-50:])
+    r = apim.getTickers('polygon', verbose=2, active=True, market=MarketType.STOCKS)
+    print(len(r))
 
 # with open(os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'raw/symbol_dumps/polygon/reference_tickers.csv'), 'r', encoding='utf-8') as f:
 #     f.readline()

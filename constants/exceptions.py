@@ -24,3 +24,6 @@ class InsufficientDataAvailable(Exception):
 
 class ArgumentError(Exception):
     pass
+
+class NotSupportedYet(Exception):
+    pass

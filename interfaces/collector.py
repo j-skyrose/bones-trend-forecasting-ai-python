@@ -21,11 +21,12 @@ from managers.apiManager import APIManager
 from managers.marketDayManager import MarketDayManager
 from structures.api.google import Google
 from structures.api.nasdaq import Nasdaq
+from structures.sqlArgumentObj import SQLArgumentObj
 
-from constants.exceptions import APILimitReached, APIError, APITimeout
+from constants.exceptions import APILimitReached, APIError, APITimeout, NotSupportedYet
 from utils.other import parseCommandLineOptions
 from utils.support import asDate, asDatetime, getIndex, recdotdict, shortcdict, tqdmLoopHandleWrapper
-from constants.enums import APIState, EarningsCollectionAPI, FinancialReportType, FinancialStatementType, InterestType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
+from constants.enums import APIState, EarningsCollectionAPI, FinancialReportType, FinancialStatementType, InterestType, MarketType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
 from constants.values import tseNoCommissionSymbols, minGoogleDate
 
 dbm: DatabaseManager = DatabaseManager()
@@ -349,6 +350,149 @@ class Collector:
 
             else:
                 print('Unable to get Friday data')
+
+    def _addMissingColumns(self, table, data, verbose=0):
+        '''adds missing columns to table based on the keys of the data objects'''
+        columnsAdded = []
+        currentColumns = dbm.getTableColumns(table)
+        currentColumnNames = [c['name'] for c in currentColumns]
+        tickerKeyNames = set()
+        boolTypeKeyNames = set()
+        numberTypeKeyNames = set()
+        for t in data:
+            for k,v in t.items():
+                tickerKeyNames.add(k)
+                if type(v) == bool: boolTypeKeyNames.add(k)
+                elif type(v) in [int, float]: numberTypeKeyNames.add(k)
+        ## check if any of the keys are not in the current column list
+        for k in tickerKeyNames:
+            if k not in currentColumnNames:
+                cargs = {}
+                if k in boolTypeKeyNames:
+                    cargs['columnType'] = None
+                    cargs['default'] = 0
+                elif k in numberTypeKeyNames:
+                    cargs['columnType'] = 'NUMERIC'
+                dbm._addColumn(table, k, **cargs)
+                columnsAdded.append(k)
+        if verbose > 0: print(f'Added {len(columnsAdded)} columns: {columnsAdded}')
+        return columnsAdded
+
+    def _verifyActiveTickerIntegrity(self, api, mock=False, verbose=1):
+        '''verifies all active tickers are still active by checking for any delisted entries that would supercede'''
+
+        if api != 'polygon': raise NotSupportedYet()
+
+        corrections = []
+        activeTickers = dbm.getDumpTickers_polygon(active=True, delisted_utc='NA')
+        for t in tqdmLoopHandleWrapper(activeTickers, verbose=verbose, desc='Verifying active statuses'):
+            otherTickerRows = dbm.getDumpTickers_polygon(primary_exchange=t.primary_exchange, ticker=t.ticker, active=False, delisted_utc=SQLArgumentObj('NA', OperatorDict.NOTEQUAL))
+            if len(otherTickerRows):
+                otherTickerRows.sort(key=lambda x: x['delisted_utc'])
+                latest = otherTickerRows[0]
+                if latest.delisted_utc > t.last_updated_utc: ## delisted after latest update to 'active' row
+                    if latest.cik == t.cik:
+                        if not mock: dbm.deleteDumpTicker_polygon(t.primary_exchange, t.ticker, t.delisted_utc)
+                        corrections.append(t.ticker)
+                    else:
+                        raise ValueError('CIK mismatch')
+        
+        if verbose: print(f'Corrected {len(corrections)} active tickers: {corrections}')
+
+    def startTickerCollection(self, api, active=True, limit=None, verbose=1, **kwargs):
+        '''collects all ticker symbols (basic info only) which are supported by the given API and inserts into the symbol_info_polygon_d table'''
+
+        if api != 'polygon': raise NotSupportedYet()
+
+        polygonTableName = 'symbol_info_polygon_d'
+
+        #region collect tickers
+        tickers = self.apiManager.getTickers(api, verbose=verbose, 
+                                            limit=limit,
+                                            active=active,
+                                             **kwargs)
+        if len(tickers) == 0:
+            if verbose > 0: print('No tickers collected')
+            return
+        elif verbose > 0:
+            print(f'{len(tickers)} total tickers collected')
+        #endregion
+
+        columnsAdded = self._addMissingColumns(polygonTableName, tickers, verbose)
+
+        #region insert data
+        rowCountBefore = dbm.getRowCount(polygonTableName)
+        dbm.insertTickersDump_polygon(tickers)
+        if verbose > 0:
+            insertCount = dbm.getRowCount(polygonTableName) - rowCountBefore
+            print(f'Inserted {insertCount} new tickers')
+            if columnsAdded: print(f'Updated {len(tickers) - insertCount} existing tickers')
+        #endregion
+
+        if not active:
+            self._verifyActiveTickerIntegrity(api, verbose=verbose)
+
+    def startTickerDetailsCollection(self, api, active=True, limit=None, verbose=1, **kwargs):
+        '''collects individual ticker details (extended) for those supported by the given API and updates the symbol_info_polygon_d table'''
+
+        if api != 'polygon': raise NotSupportedYet()
+
+        polygonTableName = 'symbol_info_polygon_d'
+
+        #region collect ticker details
+        tickerDetails = []
+        apiErrors = []
+        tickers = dbm.getDumpTickers_polygon(active=active, **kwargs, ticker_root=SQLHelpers.NULL)
+        if limit is not None:
+            tickers = tickers[:limit]
+        if len(tickers) == 0:
+            if verbose > 0: print('No queried tickers')
+            return
+        try:
+            for t in tqdmLoopHandleWrapper(tickers, verbose, desc='Collecting ticker details'):
+                try:
+                    asOfDate = (asDate(t.delisted_utc) - timedelta(days=1)) if not active else asDate(t.last_updated_utc)
+                    res = self.apiManager.getTickerDetails(api, t.ticker, asOfDate=asOfDate, verbose=verbose)
+                    if not active: 
+                        ## asOfDate means inactive ticker details come back as active
+                        res['active'] = False
+                        ## also needs to be matched back to the db row
+                        res['delisted_utc'] = t.delisted_utc
+                    tickerDetails.append(res)
+                except APIError:
+                    if verbose > 0: print(f'APIError on ticker {t.ticker}')
+                    apiErrors.append((t.primary_exchange, t.ticker))
+        except KeyboardInterrupt:
+            print('accepting keyboard interrupt')
+        if verbose > 0:
+            print(f'Details for {len(tickerDetails)} total tickers collected')
+            print(f'{len(apiErrors)} API errors: {apiErrors}')
+        #endregion
+
+        #region massage data objects
+        excludeKeys = ['branding']
+        flattenKeys = ['address']
+        for t in tqdmLoopHandleWrapper(tickerDetails, verbose, desc='Massaging result objects'):
+            for exk in excludeKeys:
+                if exk in t.keys(): 
+                    del t[exk]
+            for flk in flattenKeys:
+                if flk in t.keys():
+                    for k,v in t[flk].items():
+                        t[k] = v
+                    del t[flk]
+        #endregion
+
+        self._addMissingColumns(polygonTableName, tickerDetails, verbose)
+
+        #region update table with details
+        rowCountBefore = dbm.getRowCount(polygonTableName)
+        dbm.insertTickersDump_polygon(tickerDetails)
+        if verbose > 0:
+            insertCount = dbm.getRowCount(polygonTableName) - rowCountBefore
+            print(f'Inserted {insertCount} new tickers')
+            print(f'Updated {len(tickerDetails) - insertCount} existing tickers')
+        #endregion        
 
     def collectAPIDump_symbolInfo(self, api, **kwargs):
         substmt = f'SELECT * FROM {dbm.getTableString("symbol_info_polygon_d")} dsi WHERE dsi.exchange = ssi.exchange AND dsi.symbol = ssi.symbol AND ' + api + ' IS NOT NULL'
@@ -981,6 +1125,8 @@ if __name__ == '__main__':
             # c.startAPICollection('polygon', SeriesType.DAILY)
             # c.startGoogleInterestCollection(direction=Direction.DESCENDING)
             # c.startGoogleInterestCollection(direction=Direction.DESCENDING, collectStatsOnly=True)
+            # c.startTickerCollection('polygon', active=False, market=MarketType.STOCKS)
+            c.startTickerDetailsCollection('polygon', active=True)
             pass
         except KeyboardInterrupt:
             # dbm.staging_condenseFounded()

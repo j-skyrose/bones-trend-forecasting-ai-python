@@ -98,6 +98,12 @@ class GetMemoryUsage(object):
                 sz += sys.getsizeof(cls.__getattribute__(a))
         return sz + sys.getsizeof(cls)
 
+def sortedKeys(d):
+    return sorted(d.keys())
+
+def keySortedValues(d):
+    return [d[k] for k in sortedKeys(d)]
+
 def shortc(val, e):
     ## and (type(val) is not list or (type(val) is list and len(val) > 0))
     # try:
@@ -164,12 +170,17 @@ def asISOFormat(dt: Union[date, datetime, str]):
     raise ValueError('Unrecognized type')
 
 def asDate(dt: Union[date, datetime, str]):
+    if type(dt) == str:
+        try: 
+            return date.fromisoformat(dt)
+        except ValueError as e:
+            if not e.args[0].startswith('Invalid isoformat string'): raise e
+            dt = asDatetime(dt)
+
     if type(dt) == date:
         return dt
     elif type(dt) == datetime:
         return dt.date()
-    elif type(dt) == str:
-        return date.fromisoformat(dt)
     
     raise ValueError('Unrecognized type')
 
@@ -179,7 +190,12 @@ def asDatetime(dt: Union[date, datetime, str]):
     elif type(dt) == datetime:
         return dt
     elif type(dt) == str:
-        return datetime.fromisoformat(dt)
+        if len(dt) == 10: 
+            return datetime.fromisoformat(dt)
+        elif dt[-1] == 'Z':
+            return datetime.strptime(dt, '%Y-%m-%dT%XZ')
+        else:
+            return datetime.strptime(dt, '%Y-%m-%d %X')
     
     raise ValueError('Unrecognized type')
 

@@ -190,6 +190,13 @@ class MarketRegion(Enum):
     US = 'US'
     CANADA_US_SHARED = 'CANADA_US_SHARED'
 
+class MarketType(Enum):
+    STOCKS = 'STOCKS'
+    CRYPTO = 'CRYPTO'
+    FX = 'FX'
+    OTC = 'OTC'
+    INDICES = 'INDICES'
+
 class DataManagerType(Enum):
     ANALYSIS = 'ANALYSIS'
     PREDICTION = 'PREDICTION'
