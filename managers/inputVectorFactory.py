@@ -376,14 +376,14 @@ class InputVectorFactory(Singleton):
             elif k == 'exchange':
                 vectorListType = InputVectorDataType.STATIC
                 if collectStats: startt = time.time()
-                # vectorAsList = self._getCategoricalVector(exchange, lookupList=self.dbm.getExchanges(), topBuffer=3)
+                # vectorAsList = self._getCategoricalVector(exchange, lookupList=self.dbm.getExchanges_basic(orderBy='rowid'), topBuffer=3)
                 vectorAsList = self._getCategoricalVector(exchange, lookupList=standardExchanges)
 
                 if collectStats: sm.ktypeexchangetime += time.time() - startt
             elif k == 'sector':
                 vectorListType = InputVectorDataType.STATIC
                 if collectStats: startt = time.time()
-                vectorAsList = self._getCategoricalVector(sector, lookupList=self.dbm.getSectors(), topBuffer=3)
+                vectorAsList = self._getCategoricalVector(sector, lookupList=self.dbm.getSectors_basic(orderBy='rowid', onlyColumn_asList='sector'), topBuffer=3)
 
                 if collectStats: sm.ktypesectortime += time.time() - startt
             elif k == 'companyAge':

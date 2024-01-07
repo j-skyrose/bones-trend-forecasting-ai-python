@@ -7,8 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-from utils.other import parseNormalizationColumn
-from utils.support import convertToCamelCase
+from utils.dbSupport import convertToCamelCase, parseNormalizationColumn
 
 class NormalizationColumnObj:
     

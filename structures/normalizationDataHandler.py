@@ -12,7 +12,7 @@ from typing import List
 
 from constants.enums import NormalizationGroupings
 from structures.normalizationColumnObj import NormalizationColumnObj
-from utils.support import isNormalizationColumn
+from utils.dbSupport import isNormalizationColumn
 
 class NormalizationDataHandler:
     

@@ -10,11 +10,12 @@ sys.path.append(path)
 from enum import Enum
 from typing import Any, Dict, List
 
-from utils.support import convertToCamelCase, isNormalizationColumn, recdotdict
 from constants.enums import ChangeType, SeriesType, AccuracyType
-from managers._generatedDatabaseAnnotations.databaseRowObjects import networksSnakeCaseTableColumns, networksCamelCaseTableColumns, networkTrainingConfigSnakeCaseTableColumns, networkTrainingConfigCamelCaseTableColumns
+from managers._generatedDatabaseExtras.databaseRowObjects import networksSnakeCaseTableColumns, networksCamelCaseTableColumns, networkTrainingConfigSnakeCaseTableColumns, networkTrainingConfigCamelCaseTableColumns
 from structures.normalizationColumnObj import NormalizationColumnObj
 from structures.normalizationDataHandler import NormalizationDataHandler
+from utils.dbSupport import convertToCamelCase, isNormalizationColumn
+from utils.support import recdotdict
 
 class NetworkStats:
 

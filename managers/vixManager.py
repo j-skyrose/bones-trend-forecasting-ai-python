@@ -20,7 +20,7 @@ class VIXManager(Singleton):
         self.shouldNormalize = normalize
         dbm: DatabaseManager = DatabaseManager()
         
-        data = dbm.getVIXData()
+        data = dbm.getCboeVolatilityIndex_basic(orderBy='date')
         self.max = dbm.getVIXMax()
         self.dataOffset = dataOffset
 

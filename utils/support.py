@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import numpy, re, math, calendar, json, pickle, tqdm, zlib, hashlib, base64
+import numpy, re, math, calendar, json, tqdm, zlib, hashlib, base64
 from enum import Enum
 from datetime import date, datetime, timedelta
 from multiprocessing import Pool, cpu_count
@@ -15,7 +15,7 @@ from tqdm.contrib.concurrent import process_map
 from types import FunctionType
 from typing import Callable, Dict, Union
 
-from constants.values import months, foundedSynonyms, indicatorsKey, normalizationColumnPrefix
+from constants.values import months, foundedSynonyms, indicatorsKey
 
 class DotDict(dict):
     def __getattr__(self, item):
@@ -117,17 +117,6 @@ def shortcdict(dict, key, e=None, shortcValue=True):
         else: return dict[key]
     except (KeyError, TypeError):
         return e
-
-## for SQLite connect.row_factory
-def recdotdict_factory(cursor, row):
-    retdict = {}
-    for idx, col in enumerate(cursor.description):
-        if col[0] == 'timestamp' and re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}', shortc(row[idx], '')):
-            retdict[col[0]] = datetime.strptime(row[idx], '%Y-%m-%d %X')
-        elif col[0].startswith('pickled'):
-            retdict[col[0]] = pickle.loads(row[idx])
-        else: retdict[col[0]] = row[idx]
-    return recdotdict(retdict)
 
 def flatten(li: list):
     return list(_flattenGen(li))
@@ -282,20 +271,6 @@ def processRawValueToInsertValue(v):
     else:
         return '\'' + v + '\''
 
-def processDBQuartersToDicts(qlist):
-    createQuarterObj = lambda rw: { 'period': rw.period, 'quarter': rw.quarter, 'filed': rw.filed, 'nums': { rw.tag: rw.value }}
-    ret = []
-    curquarter = createQuarterObj(qlist[0])
-    for r in qlist[1:]:
-        if curquarter['period'] != r.period:
-            ret.append(curquarter)
-            curquarter = createQuarterObj(r)
-        else:
-            curquarter['nums'][r.tag] = r.value
-    ret.append(curquarter)
-
-    return recdotlist(ret)
-
 def multicore_poolIMap(func, iter, chuckSize=1):
     pool = Pool()
     ret = pool.imap(func, iter, chuckSize)
@@ -399,41 +374,6 @@ def someIndicatorEnabled(cf):
         if v.enabled: return True
     return False
 
-def convertToCamelCase(string, firstCapital=False):
-    ret = ''
-    capitalizeCurrent = False
-    for char in string:
-        if capitalizeCurrent: ret += str(char).capitalize()
-        elif char != '_': ret += char
-
-        capitalizeCurrent = char == '_'
-    if firstCapital: ret = str(ret[0]).capitalize() + ret[1:]
-    return ret
-
-def convertToSnakeCase(string):
-    ret = ''
-    char: str
-    for idx,char in enumerate(string):
-        if idx != 0 and char.isupper(): ret += '_'
-        ret += char.lower()
-    return ret
-
-def isNormalizationColumn(c):
-    return str(c).startswith(normalizationColumnPrefix)
-
-## for SQL queries
-def generateCommaSeparatedQuestionMarkString(val):
-    if hasattr(val, '__len__'): val = len(val)
-    if type(val) != int: raise ValueError('Must be an integer')
-    return ','.join(('?',) * val)
-
-## replaces '?'s with the actual argument values
-def combineSQLStatementAndArguments(stmt, args=[]):
-    if args:
-        for a in args:
-            stmt = stmt.replace('?', a, 1)
-    return stmt
-
 ## adds item to container at given key if it exists, otherwise adds a container with the item at that key
 def addItemToContainerAtDictKey(dct, key, item, pushFunctionName='append', containerType=list):
     try: getattr(dct[key], pushFunctionName)(item)
@@ -473,7 +413,5 @@ if __name__ == '__main__':
     # print(processRawValueToInsertValue(True))
     # print(flatten([1,[3,'dave',[6,[0,6,0],6],2],3,{'key':'value'}]))
     # print(getAdjustedSlidingWindowPercentage(5000, 600))
-    print(convertToCamelCase('test', True))
-    print(convertToCamelCase('test_not_camel', False))
     print(shortcdict(None, 't', 2))
     pass

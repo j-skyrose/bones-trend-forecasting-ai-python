@@ -13,7 +13,7 @@ from typing import List, Tuple
 from globalConfig import config as gconfig
 from constants.values import stockOffset
 from constants.enums import IndicatorType, SeriesType
-from managers._generatedDatabaseAnnotations.databaseRowObjects import SymbolsRow
+from managers._generatedDatabaseExtras.databaseRowObjects import SymbolsRow
 from structures.normalizationDataHandler import NormalizationDataHandler
 from utils.other import normalizeStockData, denormalizeStockData, getIndicatorPeriod
 from utils.support import GetMemoryUsage, asISOFormat, asList, getItem, recdotdict, recdotobj, shortc

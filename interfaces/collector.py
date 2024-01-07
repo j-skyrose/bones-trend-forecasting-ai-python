@@ -21,7 +21,7 @@ from managers.apiManager import APIManager
 from managers.marketDayManager import MarketDayManager
 from structures.api.google import Google
 from structures.api.nasdaq import Nasdaq
-from structures.sqlArgumentObj import SQLArgumentObj
+from structures.sql.sqlArgumentObj import SQLArgumentObj
 
 from constants.exceptions import APILimitReached, APIError, APITimeout, NotSupportedYet
 from utils.other import parseCommandLineOptions
@@ -384,9 +384,9 @@ class Collector:
         if api != 'polygon': raise NotSupportedYet()
 
         corrections = []
-        activeTickers = dbm.getDumpTickers_polygon(active=True, delisted_utc='NA')
+        activeTickers = dbm.getDumpSymbolInfoPolygon_basic(active=True, delistedUtc='NA')
         for t in tqdmLoopHandleWrapper(activeTickers, verbose=verbose, desc='Verifying active statuses'):
-            otherTickerRows = dbm.getDumpTickers_polygon(primary_exchange=t.primary_exchange, ticker=t.ticker, active=False, delisted_utc=SQLArgumentObj('NA', OperatorDict.NOTEQUAL))
+            otherTickerRows = dbm.getDumpSymbolInfoPolygon_basic(primaryExchange=t.primary_exchange, ticker=t.ticker, active=False, delistedUtc=SQLArgumentObj('NA', OperatorDict.NOTEQUAL))
             if len(otherTickerRows):
                 otherTickerRows.sort(key=lambda x: x['delisted_utc'])
                 latest = otherTickerRows[0]
@@ -442,7 +442,7 @@ class Collector:
         #region collect ticker details
         tickerDetails = []
         apiErrors = []
-        tickers = dbm.getDumpTickers_polygon(active=active, **kwargs, ticker_root=SQLHelpers.NULL)
+        tickers = dbm.getDumpSymbolInfoPolygon_basic(active=active, **kwargs, tickerRoot=SQLHelpers.NULL)
         if limit is not None:
             tickers = tickers[:limit]
         if len(tickers) == 0:

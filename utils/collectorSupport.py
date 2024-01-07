@@ -12,9 +12,10 @@ from typing import Tuple, Union
 
 from constants.values import usExchanges, multiExchangeSymbols
 from managers.databaseManager import DatabaseManager
-from managers._generatedDatabaseAnnotations.databaseRowObjects import symbolInfoYahooDCamelCaseTableColumns
+from managers._generatedDatabaseExtras.databaseRowObjects import symbolInfoYahooDCamelCaseTableColumns
 from structures.api.yahoo import Yahoo
-from utils.support import generateCommaSeparatedQuestionMarkString, getItem, shortcdict, tqdmLoopHandleWrapper
+from utils.dbSupport import generateCommaSeparatedQuestionMarkString
+from utils.support import getItem, shortcdict, tqdmLoopHandleWrapper
 
 dbm: DatabaseManager = DatabaseManager()
 yapi = Yahoo()
@@ -46,7 +47,7 @@ def getYahooExchangeForSymbolWithDetails(symbol, companyName, verbose=1) -> Tupl
     except: pass
     
     ## check if Yahoo symbol info API (or cache) has a record
-    yahooSymbol = dbm.getYahooSymbolInfo(symbol)
+    yahooSymbol = dbm.getDumpSymbolInfoYahoo_basic(symbol=symbol)
     if not yahooSymbol:
         ## nothing cached (i.e. in DB), retrieve
         yahooSymbol = yapi.getSymbol(symbol)

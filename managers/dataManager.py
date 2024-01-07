@@ -22,7 +22,6 @@ from utils.support import asList, generateFibonacciSequence, getAdjustedSlidingW
 from utils.other import getInstancesByClass, getMaxIndicatorPeriod, getOutputClass, maxQuarters, getIndicatorPeriod, addAdditionalDefaultKWArgs
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
 from constants.values import unusableSymbols, indicatorsKey
-from managers.stockDataManager import StockDataManager
 from managers.databaseManager import DatabaseManager
 from managers.vixManager import VIXManager
 from managers.neuralNetworkManager import NeuralNetworkManager
@@ -50,13 +49,13 @@ def multicore_getStockDataTickerTuples(ticker, seriesType, minDate, queryLimit):
     return (ticker, DatabaseManager().getStockData(ticker.exchange, ticker.symbol, seriesType, minDate, queryLimit=queryLimit))
 
 def multicore_getStockSplitsTickerTuples(ticker):
-    return (ticker, DatabaseManager().getStockSplits(ticker.exchange, ticker.symbol))
+    return (ticker, DatabaseManager().getDumpStockSplitsPolygon_basic(ticker.exchange, ticker.symbol))
 
 def multicore_getGoogleInterestsTickerTuples(ticker, queryLimit):
     return (ticker, DatabaseManager().getGoogleInterests(ticker.exchange, ticker.symbol, queryLimit=queryLimit))
 
 def multicore_getEarningsDateTickerTuples(ticker):
-    return (ticker, DatabaseManager().getEarningsDate(ticker.exchange, ticker.symbol))
+    return (ticker, DatabaseManager().getEarningsDates_basic(ticker.exchange, ticker.symbol))
 
 ## each session should only rely on one (precedingRange, followingRange) combination due to the way the handlers are setup
 ## not sure how new exchange/symbol handler setups would work with normalization info, if not initialized when datamanager is created
@@ -621,7 +620,7 @@ class DataManager():
                 if verbose>=2: printInstanceCounts()
                 oupclass = self.config.sets.instanceReduction.classType
 
-                similarities = dbm.getVectorSimilarity(*h.getTickerTuple(), seriesType=self.seriesType, vclass=oupclass, precedingRange=self.precedingRange, followingRange=self.followingRange, changeType=self.changeType, changeValue=self.changeValue, orderBy='value')
+                similarities = dbm.getVectorSimilarity(*h.getTickerTuple(), dateType=self.seriesType, vectorClass=oupclass, precedingRange=self.precedingRange, followingRange=self.followingRange, changeType=self.changeType, changeValue=self.changeValue, orderBy='value')
 
                 if len(similarities) == 0: 
                     if verbose>=1: print('Similarities not present for', h.getTickerTuple())
@@ -815,7 +814,7 @@ class DataManager():
                     
         else:
             for s in tqdmLoopHandleWrapper(symbolList, verbose, desc='Creating stock splits handlers'):
-                self.stockSplitsHandlers[TickerKeyType(s.exchange, s.symbol)] = StockSplitsHandler(s.exchange, s.symbol, dbm.getStockSplits(s.exchange, s.symbol))
+                self.stockSplitsHandlers[TickerKeyType(s.exchange, s.symbol)] = StockSplitsHandler(s.exchange, s.symbol, dbm.getDumpStockSplitsPolygon_basic(s.exchange, s.symbol))
 
     def initializeTechnicalIndicators(self, verbose=None):
         verbose = shortc(verbose, self.verbose)
@@ -926,7 +925,7 @@ class DataManager():
         else:
             for s in tqdmLoopHandleWrapper(symbolList, verbose, desc='Creating earnings date handlers'):
                 key = TickerKeyType(s.exchange, s.symbol)
-                self.earningsDateHandlers[key] = StockEarningsDateHandler(*key.getTuple(), dbData=dbm.getEarningsDate(s.exchange, s.symbol))
+                self.earningsDateHandlers[key] = StockEarningsDateHandler(*key.getTuple(), dbData=dbm.getEarningsDates_basic(s.exchange, s.symbol))
         if verbose >= 1: print('Initialized earnings date handlers of which', len([1 for v in self.earningsDateHandlers.values() if len(v.data) > 0]), '/', len(self.earningsDateHandlers), 'have data')
 
     def initializeWindow(self, windowIndex, verbose=None):
@@ -1072,14 +1071,6 @@ class DataManager():
         random.shuffle(self.validationSet)
         random.shuffle(self.testingSet)
         if verbose>=2: print('Sets split into', len(self.trainingSet), '/', len(self.validationSet), '/', len(self.testingSet))
-
-        # return trainingSet, validationSet, testingSet
-
-    def setupSetsFromSave(self, id, setid=1):
-        dataset = dbm.getDataSet(id, setid)
-        self.trainingSet = [s for s in dataset if s.set_type == SetType.TRAINING.name]
-        self.validationSet = [s for s in dataset if s.set_type == SetType.VALIDATION.name]
-        self.testingSet = [s for s in dataset if s.set_type == SetType.TESTING.name]
 
         # return trainingSet, validationSet, testingSet
 

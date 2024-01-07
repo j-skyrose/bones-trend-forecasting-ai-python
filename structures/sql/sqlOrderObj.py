@@ -7,9 +7,9 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-from constants.enums import OperatorDict
+from constants.enums import Direction
 
-class SQLArgumentObj:
-    def __init__(self, value, modifier: OperatorDict=OperatorDict.EQUAL):
-        self.value = value
+class SQLOrderObj:
+    def __init__(self, column, modifier: Direction=Direction.ASCENDING):
+        self.column = column
         self.modifier = modifier

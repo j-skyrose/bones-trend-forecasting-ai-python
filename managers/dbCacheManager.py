@@ -12,7 +12,7 @@ from typing import Dict
 
 from managers.base.cacheManagerBase import CacheManagerBase
 from structures.dbCacheInstance import DBCacheInstance
-from utils.support import combineSQLStatementAndArguments
+from utils.dbSupport import combineSQLStatementAndArguments
 
 class DBCacheManager(CacheManagerBase):
     def __init__(self, folder='db', **kwargs):

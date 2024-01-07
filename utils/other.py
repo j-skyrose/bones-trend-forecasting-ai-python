@@ -7,20 +7,16 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import numpy, re, optparse
-from enum import Enum
+import re, optparse
 from math import ceil
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Union
 from calendar import monthrange
-from datetime import date, datetime, timedelta
+from datetime import date
 
 from globalConfig import config as gconfig
-from structures.inputVectorStats import InputVectorStats
-from structures.sqlArgumentObj import SQLArgumentObj
-from utils.support import asList, convertToSnakeCase, isNormalizationColumn, shortc, shortcdict
-from constants.values import stockOffset, canadaExchanges, usExchanges
-from constants.enums import AccuracyType, ChangeType, InterestType, MarketRegion, NormalizationGroupings, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType, SetClassificationType
-
+from constants.values import canadaExchanges, usExchanges
+from constants.enums import AccuracyType, ChangeType, InterestType, MarketRegion, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType, SetClassificationType
+from utils.support import asList, shortc, shortcdict
 
 
 def convertListToCSV(lst, excludeColumns=[]):
@@ -217,62 +213,6 @@ def addAdditionalDefaultKWArgs(kwargs, config):
         kwargs['sector'] = shortcdict(kwargs, 'sector', SQLHelpers.NOTNULL)
     
     return kwargs
-
-## splits a raw normalization column into its grouping enum and snake-case column name
-def parseNormalizationColumn(c) -> Tuple[NormalizationGroupings, str]:
-    csplit = c.split('_')
-    if not isNormalizationColumn(csplit[0]): raise ValueError('Not a normalization column')
-
-    normalizationGrouping = NormalizationGroupings[str(csplit[1]).upper()]
-    columnName = '_'.join(csplit[2:])
-
-    return normalizationGrouping, columnName
-
-
-## converts arguments (passed to a DBM SQL GET function) into the appropriate WHERE statement
-def generateSQLAdditionalStatementAndArguments(**kwargs):
-    processedkwargs = {}
-    for k,v in kwargs.items():
-        k = convertToSnakeCase(k)
-        if k not in ['self', 'kwargs'] and v is not None:
-            processedkwargs[k] = v
-
-    additions = []
-    args = []
-
-    ## add all column-keyword args to the query
-    for argKey, argVal in processedkwargs.items():
-        # if argKey == 'api':
-        #     if type(argVal) is list:
-        #         apiAdds = []
-        #         for a in argVal:
-        #             apiAdds.append(f's.api_{a} = 1')
-        #         additions.append(f'( {" OR ".join(apiAdds)} )')
-        #     else:
-        #         additions.append(f's.api_{api} = 1')
-        # else:
-            # col = 's'
-            # if argKey in onlyHistoricalDataSnakeCaseTableColumns:
-            #     col = 'h'
-            # col += f'.{argKey}'
-
-        if type(argVal) == SQLHelpers:
-            additions.append(f' {argKey} is {argVal.value} ')
-        elif type(argVal) == SQLArgumentObj:
-            argVal: SQLArgumentObj
-            additions.append(f' ? {argVal.modifier.sqlsymbol} {argKey} ')
-            args.append(argVal.value)
-        else:
-            if issubclass(argVal.__class__, Enum): argVal = argVal.name
-            vlist = asList(argVal)
-            additions.append(f' {argKey} in ({",".join(["?" for x in range(len(vlist))])}) ')
-            args.extend(vlist)
-
-    if additions:
-        return f" WHERE {' AND '.join(additions)}", args
-    else:
-        return '', []
-
 
 def getCustomAccuracy(statsObj=None, positiveAccuracy=None, negativeAccuracy=None, classValueRatio=gconfig.trainer.customValidationClassValueRatio): 
     positiveAccuracy = shortc(positiveAccuracy, statsObj[AccuracyType.POSITIVE.name].current) 

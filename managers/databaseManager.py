@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import math, re, dill, operator, shutil, json, time, pickle
+import math, re, dill, operator, shutil, json, time, pickle, calendar
 from typing import Dict, List, Union
 import sqlite3, atexit, numpy as np, xlrd
 from datetime import date, timedelta, datetime
@@ -16,90 +16,33 @@ from multiprocessing import current_process
 from decimal import Decimal
 from enum import Enum
 
-from managers.dbCacheManager import DBCacheManager
-from structures.api.googleTrends.request import GoogleAPI
-
 from globalConfig import config as gconfig
+from constants.enums import APIState, AccuracyAnalysisTypes, AdvancedOrdering, CorrBool, EarningsCollectionAPI, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, SetType, Direction
+from constants.values import unusableSymbols, apiList, standardExchanges
 from managers.configManager import StaticConfigManager
+from managers.dbCacheManager import DBCacheManager
 from managers.marketDayManager import MarketDayManager
-from constants.enums import APIState, AccuracyAnalysisTypes, CorrBool, EarningsCollectionAPI, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, AccuracyType, SetType, Direction
+from structures.api.googleTrends.request import GoogleAPI
+from structures.api.yahoo import Yahoo
 from structures.normalizationColumnObj import NormalizationColumnObj
 from structures.normalizationDataHandler import NormalizationDataHandler
-from structures.sqlArgumentObj import SQLArgumentObj
-from utils.support import asDate, asISOFormat, asList, convertToCamelCase, convertToSnakeCase, flatten, generateCommaSeparatedQuestionMarkString, keySortedValues, recdotdict_factory, processDBQuartersToDicts, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotlist, recdotobj, shortc, shortcdict, sortedKeys, tqdmLoopHandleWrapper, unixToDatetime
-from utils.other import buildCommaSeparatedTickerPairString, generateSQLAdditionalStatementAndArguments, parseCommandLineOptions
-from constants.values import unusableSymbols, apiList, standardExchanges
+from structures.sql.sqlArgumentObj import SQLArgumentObj
+from utils.dbSupport import convertToSnakeCase, dumpDBAlias, generateCommaSeparatedQuestionMarkString, generateSQLSuffixStatementAndArguments, getTableColumns, getTableString, processDBQuartersToDicts, _dbGetter, generateDatabaseAnnotationObjectsFile, generateCompleteDBConnectionAndCursor, getDBConnectionAndCursor
+from utils.other import buildCommaSeparatedTickerPairString, parseCommandLineOptions
+from utils.support import asDate, asISOFormat, asList, flatten, keySortedValues, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotobj, shortc, shortcdict, sortedKeys, tqdmLoopHandleWrapper, unixToDatetime
 
 configManager: StaticConfigManager = StaticConfigManager()
 
-def _getDBHandles(dbpath, row_factory=recdotdict_factory):
-    dbconnect = sqlite3.connect(dbpath, timeout=15)
-    dbconnect.row_factory = row_factory
-    return dbconnect, dbconnect.cursor()
-
-def _attachDB(dbc: sqlite3.Cursor, dbpath, alias):
-    dbc.execute(f'ATTACH ? AS {alias}', (dbpath,))
-
-## auto-generate a file full of annotation objects for the rows of each table in the database: _generatedDatabaseAnnotations/databaseRowObjects.py
-def _generateDatabaseAnnotationObjectsFile(propertiesDatabasePath=None, computedDatabasePath=None, dumpDatabasePath=None):
-    connect, dbc = _getDBHandles(shortc(propertiesDatabasePath, configManager.get('propertiesdatabase', required=True)))
-    computedDBAlias = 'computeddbalias'
-    _attachDB(dbc, shortc(computedDatabasePath, configManager.get('computeddatabase', required=True)), computedDBAlias)
-    dumpDBAlias = 'dumpdb'
-    _attachDB(dbc, shortc(dumpDatabasePath, configManager.get('dumpdatabase', required=True)), dumpDBAlias)
-
-    def __generateArgTypeString(cname, t):
-        if t in ['TEXT', 'STRING']: return ': str'
-        elif t in ['', 'NUMERIC', 'INTEGER'] and cname in ['artificial', 'migrated', 'fmp_isetf', 'duplicate', 'wksi', 'prevrpt', 'detail', 'custom', 'abstract', 'tradeable', 'crypto_tradeable']: return ': bool'
-        elif t in ['REAL', 'BIGDOUBLE', 'NUMERIC']: return ': float'
-        elif t in ['NUM', 'NUMBER', 'INTEGER', 'INT', 'BIGINT']: return ': int'
-        elif t in ['BYTE', 'BLOB']: return ': bytes'
-        elif t in ['DATETIME']: return ': datetime'
-        return ''
-
-    filestring = 'from datetime import datetime\n\n'
-    for dbalias, tables in [(dbalias, [r.tbl_name for r in dbc.execute(f'SELECT * FROM {dbalias}.sqlite_master WHERE type=?', ('table',)).fetchall()]) for dbalias in ['main', computedDBAlias, dumpDBAlias]]:
-        for t in tables:
-            columns = dbc.execute(f'PRAGMA {dbalias}.table_info({t})').fetchall()
-
-
-            commaSeparatedSnakeCaseColumnNames = ', '.join([f"'{c['name']}'" for c in columns])
-            commaSeparatedCamelCaseColumnNames = ', '.join([f"'{convertToCamelCase(c['name'])}'" for c in columns])
-
-            initargsList = []
-            initfuncString = ''
-            for c in columns:
-                cname = convertToCamelCase(c.name)
-                initargsList.append(f"{cname}Value{__generateArgTypeString(c['name'], c['type'])}")
-                initfuncString += f'\t\tself.{cname} = {cname}Value\n'
-
-            filestring += f'## TABLE: {t} ######################################\n'
-            filestring += f'{convertToCamelCase(t)}SnakeCaseTableColumns = [{commaSeparatedSnakeCaseColumnNames}]\n'
-            filestring += f'{convertToCamelCase(t)}CamelCaseTableColumns = [{commaSeparatedCamelCaseColumnNames}]\n'
-            filestring += f'class {convertToCamelCase(t, firstCapital=True)}Row():\n'
-            filestring += f"\tdef __init__(self, {', '.join(initargsList)}):\n"
-            filestring += initfuncString
-            filestring += '\n'
-
-    with open(os.path.join(path, 'managers', '_generatedDatabaseAnnotations', 'databaseRowObjects.py'), 'w') as f:
-        f.write(filestring)
-
-    connect.close()
-
 ## generate before import to ensure things are up-to-date for the current execution
-_generateDatabaseAnnotationObjectsFile()
-from managers._generatedDatabaseAnnotations.databaseRowObjects import AccuracyLastUpdatesRow, CboeVolatilityIndexRow, HistoricalDataRow, StagingSymbolInfoDRow, StockSplitsPolygonDRow, VectorSimilaritiesCRow, NetworkAccuraciesRow, NetworksRow, SymbolsRow, symbolsSnakeCaseTableColumns, historicalDataSnakeCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns
+generateDatabaseAnnotationObjectsFile()
+from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, CboeVolatilityIndexRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow
+from managers._generatedDatabaseExtras.databaseRowObjects import symbolsSnakeCaseTableColumns, historicalDataSnakeCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns
 
 class DatabaseManager(Singleton):
 
     def init(self, propertiesDatabasePath=None, computedDatabasePath=None, dumpDatabasePath=None):
         atexit.register(self.close)
-        self.connect, self.dbc = _getDBHandles(shortc(propertiesDatabasePath, configManager.get('propertiesdatabase', required=True)))
-
-        self.computedDBAlias = 'computeddbalias'
-        _attachDB(self.dbc, shortc(computedDatabasePath, configManager.get('computeddatabase', required=True)), self.computedDBAlias)
-        self.dumpDBAlias = 'dumpdbalias'
-        _attachDB(self.dbc, shortc(dumpDatabasePath, configManager.get('dumpdatabase', required=True)), self.dumpDBAlias)
+        self.connect, self.dbc = generateCompleteDBConnectionAndCursor(propertiesDatabasePath, computedDatabasePath, dumpDatabasePath)
 
         ## caching
         self.cacheManager = DBCacheManager()
@@ -160,11 +103,6 @@ class DatabaseManager(Singleton):
         if raw: return data
         return [d for d in data if (d.exchange, d.symbol) not in unusableSymbols]
     
-    def _getDBAliasForTable(self, tablename: str):
-        if tablename.endswith('_d'): return self.dumpDBAlias
-        elif tablename.endswith('_c'): return self.computedDBAlias
-        return 'main'
-    
     def _addColumn(self, table, columnName, columnType='TEXT', notnull=None, default=None):
         stmt = f'ALTER TABLE {self.getTableString(table)} ADD COLUMN {columnName}'
         if columnType: stmt += f' {columnType.upper()} '
@@ -173,19 +111,280 @@ class DatabaseManager(Singleton):
         self.dbc.execute(stmt)
 
     ####################################################################################################################################################################
-    ## gets ####################################################################################################################################################################
+    #region basic generic gets - AUTO-GENERATED SECTION
+    ## MANUALLY TRIGGERED, AUTO-GENERATED BY generateDatabaseGeneralizedGettersForDBM() FROM utils/dbSupport.py ##
 
-    def getTableString(self, table) -> str:
-        return f'{self._getDBAliasForTable(table)}.{table}'
+    def getExchanges_basic(self,
+            code=None,
+            name=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[ExchangesRow]:
+        return _dbGetter("exchanges", **locals())
+
+    def getExchangeAliases_basic(self,
+            exchange=None, alias=None, api=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[ExchangeAliasesRow]:
+        return _dbGetter("exchange_aliases", **locals())
+
+    def getAssetTypes_basic(self,
+            type=None,
+            description=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[AssetTypesRow]:
+        return _dbGetter("asset_types", **locals())
+
+    def getCboeVolatilityIndex_basic(self,
+            date=None,
+            open=None, high=None, low=None, close=None, artificial=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[CboeVolatilityIndexRow]:
+        return _dbGetter("cboe_volatility_index", **locals())
+
+    def getSymbols_basic(self,
+            exchange=None, symbol=None,
+            name=None, assetType=None, apiAlphavantage=None, apiPolygon=None, googleTopicId=None, sector=None, industry=None, founded=None, apiFmp=None, apiNeo=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[SymbolsRow]:
+        return _dbGetter("symbols", **locals())
+
+    def getSectors_basic(self,
+            sector=None,
+            icbIndustry=None, gicsSector=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[SectorsRow]:
+        return _dbGetter("sectors", **locals())
+
+    def getInputVectorFactories_basic(self,
+            id=None,
+            factory=None, config=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[InputVectorFactoriesRow]:
+        return _dbGetter("input_vector_factories", **locals())
+
+    def getEdgarSubBalanceStatus_basic(self,
+            adsh=None, ddate=None,
+            status=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[EdgarSubBalanceStatusRow]:
+        return _dbGetter("edgar_sub_balance_status", **locals())
+
+    def getVwtbEdgarQuarters_basic(self,
+            exchange=None, symbol=None, period=None,
+            quarter=None, filed=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[VwtbEdgarQuartersRow]:
+        return _dbGetter("vwtb_edgar_quarters", **locals())
+
+    def getVwtbEdgarFinancialNums_basic(self,
+            exchange=None, symbol=None, tag=None, ddate=None,
+            qtrs=None, uom=None, value=None, duplicate=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[VwtbEdgarFinancialNumsRow]:
+        return _dbGetter("vwtb_edgar_financial_nums", **locals())
+
+    def getSqliteStat1_basic(self,
+            tbl=None, idx=None, stat=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[SqliteStat1Row]:
+        return _dbGetter("sqlite_stat1", **locals())
+
+    def getNetworkAccuracies_basic(self,
+            networkId=None, accuracyType=None, subtype1=None, subtype2=None,
+            sum=None, count=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[NetworkAccuraciesRow]:
+        return _dbGetter("network_accuracies", **locals())
+
+    def getTickerSplits_basic(self,
+            networkId=None, setCount=None, tickerCount=None,
+            pickledSplit=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[TickerSplitsRow]:
+        return _dbGetter("ticker_splits", **locals())
+
+    def getAssetSubtypes_basic(self,
+            assetType=None, subType=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[AssetSubtypesRow]:
+        return _dbGetter("asset_subtypes", **locals())
+
+    def getStatusKey_basic(self,
+            status=None,
+            description=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[StatusKeyRow]:
+        return _dbGetter("status_key", **locals())
+
+    def getHistoricalData_basic(self,
+            exchange=None, symbol=None, seriesType=None, periodDate=None,
+            open=None, high=None, low=None, close=None, volume=None, artificial=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[HistoricalDataRow]:
+        return _dbGetter("historical_data", **locals())
+
+    def getLastUpdates_basic(self,
+            exchange=None, symbol=None, type=None,
+            api=None, date=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[LastUpdatesRow]:
+        return _dbGetter("last_updates", **locals())
+
+    def getNetworksTemp_basic(self,
+            id=None, factoryId=None, accuracyType=None, overallAccuracy=None, negativeAccuracy=None, positiveAccuracy=None, changeThreshold=None, precedingRange=None, followingRange=None, seriesType=None, highMax=None, volumeMax=None, epochs=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[NetworksTempRow]:
+        return _dbGetter("networks_temp", **locals())
+
+    def getNetworks_basic(self,
+            id=None,
+            factoryId=None, accuracyType=None, overallAccuracy=None, negativeAccuracy=None, positiveAccuracy=None, epochs=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[NetworksRow]:
+        return _dbGetter("networks", **locals())
+
+    def getNetworkTrainingConfig_basic(self,
+            id=None,
+            precedingRange=None, followingRange=None, changeValue=None, changeType=None, seriesType=None, highestHistoricalHigh=None, highestHistoricalVolume=None, minimumHistoricalCloseAllowed=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[NetworkTrainingConfigRow]:
+        return _dbGetter("network_training_config", **locals())
+
+    def getHistoricalDataMinute_basic(self,
+            exchange=None, symbol=None, timestamp=None,
+            open=None, high=None, low=None, close=None, volumeWeightedAverage=None, volume=None, transactions=None, artificial=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[HistoricalDataMinuteRow]:
+        return _dbGetter("historical_data_minute", **locals())
+
+    def getAccuracyLastUpdates_basic(self,
+            networkId=None, accuracyType=None, dataCount=None, minDate=None, lastExchange=None, lastSymbol=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[AccuracyLastUpdatesRow]:
+        return _dbGetter("accuracy_last_updates", **locals())
+
+    def getTechnicalIndicatorData_basic(self,
+            exchange=None, symbol=None, dateType=None, date=None, indicator=None, period=None,
+            value=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[TechnicalIndicatorDataCRow]:
+        return _dbGetter("technical_indicator_data_c", **locals())
+
+    def getEarningsDates_basic(self,
+            exchange=None, symbol=None, inputDate=None, earningsDate=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[EarningsDatesCRow]:
+        return _dbGetter("earnings_dates_c", **locals())
+
+    def getGoogleInterests_basic(self,
+            exchange=None, symbol=None, date=None,
+            relativeInterest=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[GoogleInterestsCRow]:
+        return _dbGetter("google_interests_c", **locals())
+
+    def getVectorSimilarities_basic(self,
+            exchange=None, symbol=None, dateType=None, date=None, vectorClass=None, precedingRange=None, followingRange=None, changeValue=None, changeType=None,
+            value=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[VectorSimilaritiesCRow]:
+        return _dbGetter("vector_similarities_c", **locals())
+
+    def getSqliteStat1_basic(self,
+            tbl=None, idx=None, stat=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[SqliteStat1Row]:
+        return _dbGetter("sqlite_stat1", **locals())
+
+    def getDumpFinancialStmtsTagDataSetEdgar_basic(self,
+            tag=None, version=None,
+            custom=None, abstract=None, datatype=None, iord=None, crdr=None, tlabel=None, doc=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[FinancialStmtsTagDataSetEdgarDRow]:
+        return _dbGetter("financial_stmts_tag_data_set_edgar_d", **locals())
+
+    def getDumpFinancialStmtsSubDataSetEdgar_basic(self,
+            exchange=None, symbol=None, adsh=None,
+            cik=None, name=None, sic=None, countryba=None, stprba=None, cityba=None, zipba=None, bas1=None, bas2=None, baph=None, countryma=None, stprma=None, cityma=None, zipma=None, mas1=None, mas2=None, countryinc=None, stprinc=None, ein=None, former=None, changed=None, afs=None, wksi=None, fye=None, form=None, period=None, fy=None, fp=None, filed=None, accepted=None, prevrpt=None, detail=None, instance=None, nciks=None, aciks=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[FinancialStmtsSubDataSetEdgarDRow]:
+        return _dbGetter("financial_stmts_sub_data_set_edgar_d", **locals())
+
+    def getDumpFinancialStmtsLoadedPeriods_basic(self,
+            type=None, period=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[FinancialStmtsLoadedPeriodsDRow]:
+        return _dbGetter("financial_stmts_loaded_periods_d", **locals())
+
+    def getDumpFinancialStmtsNumDataSetEdgar_basic(self,
+            adsh=None, tag=None, version=None, coreg=None, ddate=None, qtrs=None, uom=None, duplicate=None,
+            value=None, footnote=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[FinancialStmtsNumDataSetEdgarDRow]:
+        return _dbGetter("financial_stmts_num_data_set_edgar_d", **locals())
+
+    def getDumpStockSplitsPolygon_basic(self,
+            exchange=None, symbol=None, date=None,
+            splitFrom=None, splitTo=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[StockSplitsPolygonDRow]:
+        return _dbGetter("stock_splits_polygon_d", **locals())
+
+    def getDumpGoogleInterests_basic(self,
+            exchange=None, symbol=None, date=None, type=None, stream=None,
+            relativeInterest=None, artificial=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[GoogleInterestsDRow]:
+        return _dbGetter("google_interests_d", **locals())
+
+    def getDumpStagingFinancials_basic(self,
+            exchange=None, symbol=None, period=None, calendarDate=None,
+            polygonReportPeriod=None, polygonUpdated=None, polygonDateKey=None, polygonAccumulatedOtherComprehensiveIncome=None, polygonAssets=None, polygonAssetsAverage=None, polygonAssetsCurrent=None, polygonAssetsNonCurrent=None, polygonAssetTurnover=None, polygonBookValuePerShare=None, polygonCapitalExpenditure=None, polygonCashAndEquivalents=None, polygonCashAndEquivalentsUSD=None, polygonCostOfRevenue=None, polygonConsolidatedIncome=None, polygonCurrentRatio=None, polygonDebtToEquityRatio=None, polygonDebt=None, polygonDebtCurrent=None, polygonDebtNonCurrent=None, polygonDebtUSD=None, polygonDeferredRevenue=None, polygonDepreciationAmortizationAndAccretion=None, polygonDeposits=None, polygonDividendYield=None, polygonDividendsPerBasicCommonShare=None, polygonEarningBeforeInterestTaxes=None, polygonEarningsBeforeInterestTaxesDepreciationAmortization=None, polygonEBITDAMargin=None, polygonEarningsBeforeInterestTaxesDepreciationAmortizationUSD=None, polygonEarningBeforeInterestTaxesUSD=None, polygonEarningsBeforeTax=None, polygonEarningsPerBasicShare=None, polygonEarningsPerDilutedShare=None, polygonEarningsPerBasicShareUSD=None, polygonShareholdersEquity=None, polygonAverageEquity=None, polygonShareholdersEquityUSD=None, polygonEnterpriseValue=None, polygonEnterpriseValueOverEBIT=None, polygonEnterpriseValueOverEBITDA=None, polygonFreeCashFlow=None, polygonFreeCashFlowPerShare=None, polygonForeignCurrencyUSDExchangeRate=None, polygonGrossProfit=None, polygonGrossMargin=None, polygonGoodwillAndIntangibleAssets=None, polygonInterestExpense=None, polygonInvestedCapital=None, polygonInvestedCapitalAverage=None, polygonInventory=None, polygonInvestments=None, polygonInvestmentsCurrent=None, polygonInvestmentsNonCurrent=None, polygonTotalLiabilities=None, polygonCurrentLiabilities=None, polygonLiabilitiesNonCurrent=None, polygonMarketCapitalization=None, polygonNetCashFlow=None, polygonNetCashFlowBusinessAcquisitionsDisposals=None, polygonIssuanceEquityShares=None, polygonIssuanceDebtSecurities=None, polygonPaymentDividendsOtherCashDistributions=None, polygonNetCashFlowFromFinancing=None, polygonNetCashFlowFromInvesting=None, polygonNetCashFlowInvestmentAcquisitionsDisposals=None, polygonNetCashFlowFromOperations=None, polygonEffectOfExchangeRateChangesOnCash=None, polygonNetIncome=None, polygonNetIncomeCommonStock=None, polygonNetIncomeCommonStockUSD=None, polygonNetLossIncomeFromDiscontinuedOperations=None, polygonNetIncomeToNonControllingInterests=None, polygonProfitMargin=None, polygonOperatingExpenses=None, polygonOperatingIncome=None, polygonTradeAndNonTradePayables=None, polygonPayoutRatio=None, polygonPriceToBookValue=None, polygonPriceEarnings=None, polygonPriceToEarningsRatio=None, polygonPropertyPlantEquipmentNet=None, polygonPreferredDividendsIncomeStatementImpact=None, polygonSharePriceAdjustedClose=None, polygonPriceSales=None, polygonPriceToSalesRatio=None, polygonTradeAndNonTradeReceivables=None, polygonAccumulatedRetainedEarningsDeficit=None, polygonRevenues=None, polygonRevenuesUSD=None, polygonResearchAndDevelopmentExpense=None, polygonReturnOnAverageAssets=None, polygonReturnOnAverageEquity=None, polygonReturnOnInvestedCapital=None, polygonReturnOnSales=None, polygonShareBasedCompensation=None, polygonSellingGeneralAndAdministrativeExpense=None, polygonShareFactor=None, polygonShares=None, polygonWeightedAverageShares=None, polygonSalesPerShare=None, polygonTangibleAssetValue=None, polygonTaxAssets=None, polygonIncomeTaxExpense=None, polygonTaxLiabilities=None, polygonTangibleAssetsBookValuePerShare=None, polygonWorkingCapital=None, polygonWeightedAverageSharesDiluted=None, fmp=None, alphavantage=None, polygon=None, alphavantageFiscalDateEnding=None, alphavantageReportedCurrency=None, alphavantageGrossProfit=None, alphavantageTotalRevenue=None, alphavantageCostOfRevenue=None, alphavantageCostofGoodsAndServicesSold=None, alphavantageOperatingIncome=None, alphavantageSellingGeneralAndAdministrative=None, alphavantageResearchAndDevelopment=None, alphavantageOperatingExpenses=None, alphavantageInvestmentIncomeNet=None, alphavantageNetInterestIncome=None, alphavantageInterestIncome=None, alphavantageInterestExpense=None, alphavantageNonInterestIncome=None, alphavantageOtherNonOperatingIncome=None, alphavantageDepreciation=None, alphavantageDepreciationAndAmortization=None, alphavantageIncomeBeforeTax=None, alphavantageIncomeTaxExpense=None, alphavantageInterestAndDebtExpense=None, alphavantageNetIncomeFromContinuingOperations=None, alphavantageComprehensiveIncomeNetOfTax=None, alphavantageEbit=None, alphavantageEbitda=None, alphavantageNetIncome=None, alphavantageTotalAssets=None, alphavantageTotalCurrentAssets=None, alphavantageCashAndCashEquivalentsAtCarryingValue=None, alphavantageCashAndShortTermInvestments=None, alphavantageInventory=None, alphavantageCurrentNetReceivables=None, alphavantageTotalNonCurrentAssets=None, alphavantagePropertyPlantEquipment=None, alphavantageAccumulatedDepreciationAmortizationPPE=None, alphavantageIntangibleAssets=None, alphavantageIntangibleAssetsExcludingGoodwill=None, alphavantageGoodwill=None, alphavantageInvestments=None, alphavantageLongTermInvestments=None, alphavantageShortTermInvestments=None, alphavantageOtherCurrentAssets=None, alphavantageOtherNonCurrrentAssets=None, alphavantageTotalLiabilities=None, alphavantageTotalCurrentLiabilities=None, alphavantageCurrentAccountsPayable=None, alphavantageDeferredRevenue=None, alphavantageCurrentDebt=None, alphavantageShortTermDebt=None, alphavantageTotalNonCurrentLiabilities=None, alphavantageCapitalLeaseObligations=None, alphavantageLongTermDebt=None, alphavantageCurrentLongTermDebt=None, alphavantageLongTermDebtNoncurrent=None, alphavantageShortLongTermDebtTotal=None, alphavantageOtherCurrentLiabilities=None, alphavantageOtherNonCurrentLiabilities=None, alphavantageTotalShareholderEquity=None, alphavantageTreasuryStock=None, alphavantageRetainedEarnings=None, alphavantageCommonStock=None, alphavantageCommonStockSharesOutstanding=None, alphavantageOperatingCashflow=None, alphavantagePaymentsForOperatingActivities=None, alphavantageProceedsFromOperatingActivities=None, alphavantageChangeInOperatingLiabilities=None, alphavantageChangeInOperatingAssets=None, alphavantageDepreciationDepletionAndAmortization=None, alphavantageCapitalExpenditures=None, alphavantageChangeInReceivables=None, alphavantageChangeInInventory=None, alphavantageProfitLoss=None, alphavantageCashflowFromInvestment=None, alphavantageCashflowFromFinancing=None, alphavantageProceedsFromRepaymentsOfShortTermDebt=None, alphavantagePaymentsForRepurchaseOfCommonStock=None, alphavantagePaymentsForRepurchaseOfEquity=None, alphavantagePaymentsForRepurchaseOfPreferredStock=None, alphavantageDividendPayout=None, alphavantageDividendPayoutCommonStock=None, alphavantageDividendPayoutPreferredStock=None, alphavantageProceedsFromIssuanceOfCommonStock=None, alphavantageProceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNet=None, alphavantageProceedsFromIssuanceOfPreferredStock=None, alphavantageProceedsFromRepurchaseOfEquity=None, alphavantageProceedsFromSaleOfTreasuryStock=None, alphavantageChangeInCashAndCashEquivalents=None, alphavantageChangeInExchangeRate=None, polygonLogo=None, polygonListdate=None, polygonCik=None, polygonBloomberg=None, polygonFigi=None, polygonLei=None, polygonSic=None, polygonCountry=None, polygonIndustry=None, polygonSector=None, polygonMarketcap=None, polygonEmployees=None, polygonPhone=None, polygonCeo=None, polygonUrl=None, polygonDescription=None, polygonName=None, polygonExchangeSymbol=None, polygonHqAddress=None, polygonHqState=None, polygonHqCountry=None, polygonType=None, polygonTags=None, polygonSimilar=None, polygonActive=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[StagingFinancialsDRow]:
+        return _dbGetter("staging_financials_d", **locals())
+
+    def getDumpEarningsDatesNasdaq_basic(self,
+            symbol=None, inputDate=None, earningsDate=None,
+            eps=None, surprisePercentage=None, time=None, name=None, lastYearReportDate=None, lastYearEps=None, marketCap=None, fiscalQuarterEnding=None, epsForecast=None, numberOfEstimates=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[EarningsDatesNasdaqDRow]:
+        return _dbGetter("earnings_dates_nasdaq_d", **locals())
+
+    def getDumpSymbolStatisticsYahoo_basic(self,
+            exchange=None, symbol=None, inputDate=None,
+            quoteType=None, currency=None, sharesOutstanding=None, marketCap=None, fullExchangeName=None, firstTradeDateMilliseconds=None, tradeable=None, cryptoTradeable=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[SymbolStatisticsYahooDRow]:
+        return _dbGetter("symbol_statistics_yahoo_d", **locals())
+
+    def getDumpShortInterestFinra_basic(self,
+            marketClassCode=None, symbolCode=None, settlementDate=None, revisionFlag=None,
+            issueName=None, currentShortPositionQuantity=None, daysToCoverQuantity=None, previousShortPositionQuantity=None, issuerServicesGroupExchangeCode=None, stockSplitFlag=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[ShortInterestFinraDRow]:
+        return _dbGetter("short_interest_finra_d", **locals())
+
+    def getDumpEarningsDatesMarketwatch_basic(self,
+            exchange=None, symbol=None, inputDate=None, earningsDate=None,
+            name=None, fiscalQuarterEnding=None, epsForecast=None, eps=None, surprisePercentage=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[EarningsDatesMarketwatchDRow]:
+        return _dbGetter("earnings_dates_marketwatch_d", **locals())
+
+    def getDumpEarningsDatesYahoo_basic(self,
+            exchange=None, symbol=None, inputDate=None, earningsDate=None,
+            name=None, eventName=None, epsForecast=None, eps=None, surprisePercentage=None, startDateTime=None, startDateTimeType=None, timeZoneShortName=None, gmtOffsetMilliSeconds=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[EarningsDatesYahooDRow]:
+        return _dbGetter("earnings_dates_yahoo_d", **locals())
+
+    def getDumpSymbolInfoYahoo_basic(self,
+            exchange=None, symbol=None,
+            quoteType=None, shortName=None, longName=None, messageBoardId=None, exchangeTimezoneName=None, exchangeTimezoneShortName=None, gmtOffSetMilliseconds=None, market=None, isEsgPopulated=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[SymbolInfoYahooDRow]:
+        return _dbGetter("symbol_info_yahoo_d", **locals())
+
+    def getDumpStagingSymbolInfo_basic(self,
+            exchange=None, symbol=None,
+            migrated=None, founded=None, ipo=None, sector=None, polygonSector=None, fmpSector=None, alphavantageSector=None, polygonIndustry=None, fmpIndustry=None, alphavantageIndustry=None, polygonDescription=None, fmpDescription=None, alphavantageDescription=None, polygonIpo=None, fmpIpo=None, alphavantageAssettype=None, fmpIsetf=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[StagingSymbolInfoDRow]:
+        return _dbGetter("staging_symbol_info_d", **locals())
+
+    def getSymbolInfoPolygonDOld_basic(self,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[SymbolInfoPolygonDOldRow]:
+        return _dbGetter("symbol_info_polygon_d_old", **locals())
+
+    def getDumpSymbolInfoPolygon_basic(self,
+            ticker=None, primaryExchange=None, delistedUtc=None,
+            exchangeAlias=None, name=None, market=None, locale=None, type=None, active=None, currencyName=None, cik=None, compositeFigi=None, shareClassFigi=None, lastUpdatedUtc=None, postalCode=None, roundLot=None, marketCap=None, city=None, homepageUrl=None, state=None, description=None, address1=None, listDate=None, shareClassSharesOutstanding=None, weightedSharesOutstanding=None, sicCode=None, sicDescription=None, tickerRoot=None, totalEmployees=None, phoneNumber=None, tickerSuffix=None, address2=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[SymbolInfoPolygonDRow]:
+        return _dbGetter("symbol_info_polygon_d", **locals())
+
+    def getSymbolInfoPolygonDBkActivesonly_basic(self,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[SymbolInfoPolygonDBkActivesonlyRow]:
+        return _dbGetter("symbol_info_polygon_d_bk_activesonly", **locals())
+
+    def getSymbolInfoPolygonDBkInactivesonly_basic(self,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[SymbolInfoPolygonDBkInactivesonlyRow]:
+        return _dbGetter("symbol_info_polygon_d_bk_inactivesonly", **locals())
+
+    #endregion basic generic gets - AUTO-GENERATED SECTION
+    ####################################################################################################################################################################
+    #region non-basic gets
     
+    def getTableString(self, tableName) -> str:
+        return getTableString(tableName)
+
     def getMaxRowID(self, table='google_interests_d') -> int:
         return self.dbc.execute(f'SELECT MAX(rowid) FROM {self.getTableString(table)}').fetchone()['MAX(rowid)']
 
     def getRowCount(self, table) -> int:
         return self.dbc.execute(f'SELECT count(*) as rowcount FROM {self.getTableString(table)}').fetchone()['rowcount']
 
-    def getTableColumns(self, table) -> List[str]:
-        return self.dbc.execute(f'PRAGMA {self._getDBAliasForTable(table)}.table_info({table})').fetchall()
+    def getTableColumns(self, tableName) -> List[str]:
+        return getTableColumns(self.dbc, tableName)
 
     def getLoadedQuarters(self):
         qrts = self.dbc.execute(f'SELECT period FROM {self.getTableString("financial_stmts_loaded_periods_d")} WHERE type=\'quarter\'').fetchall()
@@ -301,9 +500,6 @@ class DatabaseManager(Singleton):
 
         return self.dbc.execute(stmt).fetchall()
 
-    def getStagedSymbolRows(self) -> List[StagingSymbolInfoDRow]:
-        return self.dbc.execute(f'SELECT * FROM {self.getTableString("staging_symbol_info_d")}').fetchall()
-
     ## get symbols of which financials retrieval has not already been attempted
     def getSymbols_forFinancialStaging(self, api, ftype: FinancialReportType=None) -> List[SymbolsRow]:
         # stmt = 'SELECT s.exchange, s.symbol FROM symbols s LEFT JOIN {self.getTableString("staging_financials_d")} sf ON s.exchange = sf.exchange AND s.symbol = sf.symbol WHERE sf.exchange IS NULL AND sf.symbol IS NULL AND s.api_' + api + ' = 1'
@@ -383,12 +579,6 @@ class DatabaseManager(Singleton):
 
         return self.dbc.execute(stmt, tuple(args))
 
-    ## get network stats
-    ## used by setManager when getting a saved data set
-    def getSetInfo(self, id) -> NetworksRow:
-        stmt = 'SELECT * FROM networks WHERE id = ?'
-        return self.dbc.execute(stmt, (id,)).fetchone()
-
     ## get all historical data for ticker and seriesType
     ## sorted date ascending
     def getStockData(self, exchange: str, symbol: str, seriesType: SeriesType, minDate=None, fillGaps=False, queryLimit=None) -> List[HistoricalDataRow]:
@@ -401,11 +591,6 @@ class DatabaseManager(Singleton):
         data = self.dbc.execute(stmt, (exchange.upper(), symbol.upper(), seriesType.name)).fetchall()
 
         return data
-
-    ## get saved data set for network
-    def getDataSet(self, id, setid) -> List:
-        stmt = 'SELECT * FROM data_sets WHERE network_id = ? AND network_set_id = ?'
-        return self.dbc.execute(stmt, (id, setid)).fetchall()
 
     ## get all neural networks including factories and training config
     def getNetworks(self):
@@ -462,106 +647,6 @@ class DatabaseManager(Singleton):
 
         return normalizationData
 
-    ## returns normalizationColumns, normalizationMaxes, symbolList
-    def getNormalizationData_old(self, seriesType, normalizationInfo=None, exchange=None, excludeExchange=None, sectors=[], excludeSectors=[], assetTypes=[], **kwargs):
-        DEBUG = True
-        normalizationColumns = ['high', 'volume']
-
-        if normalizationInfo:
-            normalizationMaxes = [normalizationInfo[x + 'Max'] for x in normalizationColumns]
-        else:
-            print('Getting symbols and averages')
-            normalizationLists = []
-            stmt = ('SELECT exchange, symbol' + ', avg({})' * len(normalizationColumns) + ' FROM historical_data WHERE series_type=? GROUP BY exchange, symbol').format(*normalizationColumns)
-            if gconfig.testing.enabled and gconfig.testing.GET_SYMBOLS_LIMIT > 0: stmt += ' LIMIT ' + str(gconfig.testing.GET_SYMBOLS_LIMIT)
-
-            data = self._queryOrGetCache(stmt, (seriesType.name,), self._getHistoricalDataCount(), 'getsandavg')
-
-            for c in normalizationColumns:
-                normalizationLists.append(
-                    [x['avg(%s)' % c] for x in
-                        [y for y in data if (y.exchange, y.symbol) not in unusableSymbols]
-                    ]
-                )
-
-            sdc = 2.5
-            normalizationMaxes = []
-            for i in range(len(normalizationColumns)):
-                std = np.std(normalizationLists[i])
-                avg = np.mean(normalizationLists[i])
-                lowerlimit = max(0, avg - std * sdc)
-                upperlimit = avg + std * sdc
-                normalizationMaxes.append(upperlimit)
-
-                if DEBUG:
-                    print(normalizationColumns[i], '\nstd', std, '\navg', avg, '\nmax', max(normalizationLists[i]))
-                    pinside = 0
-                    for d in normalizationLists[i]:
-                        if lowerlimit <= d and d <= upperlimit:
-                            pinside += 1
-                    if DEBUG: print(sdc, 'standard deviations of range will include', pinside / len(normalizationLists[i]) * 100, '% of symbols')
-
-
-        ## get symbols data that meet normalization and other criteria        
-        stmt = '''SELECT s.exchange, s.symbol, s.sector, s.industry, s.founded, s.asset_type, s.google_topic_id 
-            FROM historical_data h JOIN symbols s'''
-        stmt2 = ' ON h.exchange=s.exchange AND h.symbol=s.symbol '
-        stmt3 = 'WHERE h.series_type=?'
-        # stmt = f'SELECT * FROM historical_data h JOIN symbols s, {self.getTableString("staging_symbol_info_d")} st ON h.exchange=s.exchange AND h.symbol=s.symbol and h.exchange = st.exchange and h.symbol = st.symbol WHERE h.series_type=?'
-        # stmt = 'SELECT h.exchange as exchange, h.symbol as symbol, s.asset_type as asset_type, s.google_topic_id as google_topic_id FROM historical_data h JOIN symbols s ON h.exchange=s.exchange AND h.symbol=s.symbol WHERE h.series_type=?'
-
-        if gconfig.feature.financials.enabled and gconfig.feature.financials.dataRequired:
-            stmt += ' , vwtb_edgar_quarters q'
-            stmt2 += ' AND h.exchange = q.exchange AND h.symbol = q.symbol '
-            stmt3 += ' AND h.exchange||h.symbol IN (SELECT DISTINCT q.exchange||q.symbol FROM vwtb_edgar_quarters q) AND REPLACE(h.period_date, \'-\', \'\') >= q.filed'
-
-        if normalizationInfo or gconfig.testing.enabled:
-            exchange = asList(exchange)
-            if gconfig.testing.enabled:
-                exchange.append(gconfig.testing.exchange)
-
-            if exchange:
-                stmt3 += self._andXContainsListStatement('h.exchange', exchange)
-            elif excludeExchange:
-                stmt3 += self._andXContainsListStatement('h.exchange', asList(excludeExchange), notIn=True)
-
-            if sectors:
-                stmt3 += self._andXContainsListStatement('h.sector', sectors)
-            elif excludeSectors:
-                stmt3 += self._andXContainsListStatement('h.sector', excludeSectors, notIn=True)
-
-            if assetTypes:
-                stmt3 += self._andXContainsListStatement('s.asset_type', assetTypes)
-        else:
-            if gconfig.feature.googleInterests.enabled: 
-                stmt3 += 'AND s.google_topic_id IS NOT NULL'
-            if gconfig.feature.companyAge.enabled and gconfig.feature.companyAge.dataRequired: 
-                stmt3 += ' AND s.founded IS NOT NULL'
-            if gconfig.feature.sector.enabled and gconfig.feature.sector.dataRequired:
-                stmt3 += ' AND s.sector IS NOT NULL'
-
-
-        tuple = (seriesType.name,)
-        for i in range(len(normalizationColumns)):
-            stmt3 += ' AND h.%s <= ? ' % normalizationColumns[i]
-            tuple += (normalizationMaxes[i],)
-
-        stmt = stmt + stmt2 + stmt3
-
-        stmt += ' GROUP BY h.exchange, h.symbol'
-        if gconfig.testing.enabled and gconfig.testing.GET_SYMBOLS_LIMIT > 0: stmt += ' LIMIT ' + str(gconfig.testing.GET_SYMBOLS_LIMIT)
-        elif gconfig.testing.REDUCED_SYMBOL_SCOPE: stmt += ' LIMIT ' + str(gconfig.testing.REDUCED_SYMBOL_SCOPE)
-
-        symbolList = self._queryOrGetCache(stmt, tuple, self._getHistoricalDataCount(), 'getnormsymbolist')
-        # symbolList = self.dbc.execute(stmt, tuple).fetchall()
-
-        if DEBUG and not normalizationInfo: print (len(symbolList), '/', len(normalizationLists[0]), 'are within thresholds')
-
-        return normalizationColumns, normalizationMaxes, symbolList
-
-    def _andXContainsListStatement(self, column, lst, notIn=False):
-        return ' AND ' + column + (' not' if notIn else '') + ' in (\'' + '\',\''.join(lst) + '\')'
-
     ## generally one time use
     def getGoogleTopicIDsForSymbols(self, symbol=None, dryrun=False):
         print('Getting topic IDs from Google')
@@ -593,10 +678,6 @@ class DatabaseManager(Singleton):
 
         return processDBQuartersToDicts(res) if not raw else res
 
-    def getVIXData(self) -> List[CboeVolatilityIndexRow]:
-        stmt = 'SELECT * FROM cboe_volatility_index ORDER BY date'
-        return self.dbc.execute(stmt).fetchall()
-
     def getVIXMax(self) -> float:
         stmt = 'SELECT max(high) FROM cboe_volatility_index'
         m = self.dbc.execute(stmt).fetchone()['max(high)']
@@ -604,44 +685,14 @@ class DatabaseManager(Singleton):
             raise Exception('VIX has new max exceeding 100')
         return 100
 
-    def getExchanges(self):
-        if not self.exchanges:
-            stmt = 'SELECT code FROM exchanges ORDER BY rowid'
-            self.exchanges = self.dbc.execute(stmt).fetchall()
-        return [r.code for r in self.exchanges]
+    def getNetworkAccuracy(self, networkId, accuracyType: AccuracyAnalysisTypes, subtype1: Union[PrecedingRangeType, str], subtype2=None) -> List[NetworkAccuraciesRow]:
+        res = self.getNetworkAccuracies_basic(**locals())
 
-    def getAssetTypes(self):
-        if not self.assetTypes:
-            stmt = 'SELECT type FROM asset_types ORDER BY rowid'
-            self.assetTypes = self.dbc.execute(stmt).fetchall()
-        return [r.type for r in self.assetTypes]
-
-
-    def getSectors(self, asRowDict=False):
-        stmt = 'SELECT * FROM sectors ORDER BY rowid'
-        res = self.dbc.execute(stmt).fetchall()
-        return res if asRowDict else [r['sector'] for r in res]
-
-    def getMostRecentNetworkAccuracyUpdateRows(self, nnid) -> List[AccuracyLastUpdatesRow]:
-        stmt = 'SELECT * FROM accuracy_last_updates WHERE network_id=?'
-        return self.dbc.execute(stmt, (str(nnid),)).fetchall()
-
-    def getNetworkAccuracy(self, nnid, acctype: AccuracyAnalysisTypes, arg1: Union[PrecedingRangeType, str], arg2=None) -> List[NetworkAccuraciesRow]:
-        stmt = 'SELECT subtype2, sum, count FROM network_accuracies WHERE network_id=? AND accuracy_type=? AND subtype1=?'
-        tple = [str(nnid), acctype.value]
-        if acctype == AccuracyAnalysisTypes.STOCK:
-            stmt += ' AND subtype2=?'
-            tple += [arg1, arg2]
-        elif acctype == AccuracyAnalysisTypes.PRECEDING_RANGE:
-            tple.append(arg1.value)
-        
-        res = self.dbc.execute(stmt, tuple(tple)).fetchall()
-
-        if acctype == AccuracyAnalysisTypes.STOCK:
+        if accuracyType == AccuracyAnalysisTypes.STOCK:
             count = res[0]['count']
             if count == 0: return 0
             return res[0]['sum']/count
-        elif acctype == AccuracyAnalysisTypes.PRECEDING_RANGE:
+        elif accuracyType == AccuracyAnalysisTypes.PRECEDING_RANGE:
             r1type = res[0]['subtype2']
             r1count = res[0]['count']
             r2count = res[1]['count']
@@ -652,40 +703,18 @@ class DatabaseManager(Singleton):
                 correct = r2count
             return correct/total
 
-    def getTickerSplit(self, nnid, setCount):
-        stmt = 'SELECT pickled_split FROM ticker_splits WHERE network_id=? AND set_count=?'
-        res = self.dbc.execute(stmt, (nnid, setCount)).fetchall()
+    def getTickerSplit(self, networkId, setCount):
+        res = self.getTickerSplits_basic(**locals())
         if len(res) > 1:
             raise ValueError('Too many returned rows')
         return recdotobj(res[0]['pickled_split'])
 
     def getLatestSplitDate(self, exchange=None) -> str:
-        stmt = 'SELECT max(date) as date FROM stock_splits'
-        args = []
-        exchange = asList(shortc(exchange, []))
-        if exchange:
-            stmt += ' WHERE exchange in ({})'.format(','.join(['?' for e in exchange]))
-            args.extend(exchange)
-
-        print(stmt, args)
-        res = self.dbc.execute(stmt, tuple(args)).fetchone()['date']
+        res = _dbGetter('stock_splits_polygon_d', **locals(), sqlColumns='max(date)', onlyColumn_asList='max(date)')[0]
         if not res:
             return '1970-01-01'
         else:
             return res
-    
-    def getStockSplits(self, exchange=None, symbol=None) -> List[StockSplitsPolygonDRow]:
-        # stmt = 'SELECT * FROM stock_splits'
-        stmt = f'SELECT * FROM {self.getTableString("stock_splits_polygon_d")}'
-        args = []
-        exchange = asList(shortc(exchange, []))
-        if exchange:
-            stmt += ' WHERE exchange in ({})'.format(','.join(['?' for e in exchange]))
-            args.extend(exchange)
-            if symbol:
-                stmt += ' AND symbol=?'
-                args.append(symbol)
-        return self.dbc.execute(stmt, tuple(args)).fetchall()
 
     def getGoogleInterests(self, exchange=None, symbol=None, gtopicid=None, itype:InterestType=InterestType.DAILY, stream=None, artificial=None, dt=None, raw=False, queryLimit=None):
         stmt = ''
@@ -742,87 +771,33 @@ class DatabaseManager(Singleton):
         else:
             return -1
 
-    def getTechnicalIndicatorData(self, exchange, symbol, indicator: IndicatorType, seriesType: SeriesType=SeriesType.DAILY, date=None, period=None, valuesOnly=True):
-        stmt = f'SELECT {"*" if not valuesOnly else "value"} FROM {self.getTableString("technical_indicator_data_c")} WHERE exchange=? and symbol=? and indicator=? AND date_type=? '
-        args = [exchange, symbol, indicator.key, seriesType.name]
-        if date:
-            stmt += ' AND date=? '
-            args.append(date)
-        if period:
-            stmt += ' AND period=? '
-            args.append(period)
-
-        res = self.dbc.execute(stmt, tuple(args)).fetchall()
+    def getTechnicalIndicatorData(self, exchange, symbol, indicator: IndicatorType, dateType: SeriesType=SeriesType.DAILY, date=None, period=None, valuesOnly=True):
+        if valuesOnly: sqlColumns = 'value'
+        res = _dbGetter('technical_indicator_data_c', **locals(), excludeKeys='valuesOnly')
         if valuesOnly:
             return [indicator.sqlParser(d.value) for d in res]
-        return res
+        else: return res
 
     def getDistinctExchangesForHistoricalData(self):
         stmt = 'SELECT DISTINCT exchange FROM historical_data'
         res = self.dbc.execute(stmt).fetchall()
         return [e for e in res]
     
-    def getVectorSimilarity(self, exchange, symbol, seriesType: SeriesType=None, dt=None, vclass: OutputClass=None, precedingRange=None, followingRange=None, changeType=None, changeValue=None, orderBy='date') -> List[VectorSimilaritiesCRow]:
-        stmt = f'SELECT * FROM {self.getTableString("vector_similarities_c")} WHERE exchange=? and symbol=? '
-        args = [exchange, symbol]
-
-        if seriesType:
-            stmt += 'AND date_type=? '
-            args.append(seriesType.name)
-        if dt:
-            stmt += 'AND date=? '
-            args.append(asISOFormat(dt))
-        if vclass:
-            stmt += 'AND vector_class=? '
-            args.append(vclass.name)
-        if precedingRange:
-            stmt += 'AND preceding_range=? '
-            args.append(precedingRange)
-        if followingRange:
-            stmt += 'AND following_range=? '
-            args.append(followingRange)
-        if changeType:
-            stmt += 'AND change_type=? '
-            args.append(changeType)
-        if changeValue:
-            stmt += 'AND change_value=? '
-            args.append(changeValue)
-        
-        stmt += f' ORDER BY {orderBy} ASC'
-
-        return self.dbc.execute(stmt, tuple(args)).fetchall()
-
-    def getYahooSymbolInfo(self, symbol):
-        return self.dbc.execute(f'SELECT * FROM {self.getTableString("symbol_info_yahoo_d")} WHERE symbol=?', (symbol,)).fetchall()
+    def getVectorSimilarity(self, exchange, symbol, dateType: SeriesType=None, date=None, vectorClass: OutputClass=None, precedingRange=None, followingRange=None, changeType=None, changeValue=None, orderBy='date') -> List[VectorSimilaritiesCRow]:
+        if date: date = asISOFormat(date)
+        return _dbGetter('vector_similarities_c', **locals())
 
     def getDumpEarningsDates(self, api: EarningsCollectionAPI, exchange=None, symbol=None, **kwargs):
-        wherestmt = ''
-        args = []
         if api == EarningsCollectionAPI.NASDAQ:
             table = 'earnings_dates_nasdaq_d'
-            if symbol:
-                wherestmt = ' WHERE symbol=? '
-                args = [symbol]
+        elif api == EarningsCollectionAPI.MARKETWATCH:
+            table = 'earnings_dates_marketwatch_d'
+        elif api == EarningsCollectionAPI.YAHOO:
+            table = 'earnings_dates_yahoo_d'
         else:
-            if api == EarningsCollectionAPI.MARKETWATCH:
-                table = 'earnings_dates_marketwatch_d'
-            elif api == EarningsCollectionAPI.YAHOO:
-                table = 'earnings_dates_yahoo_d'
-
-            if exchange or symbol:
-                wherestmt = ' WHERE '
-                if exchange:
-                    wherestmt += 'exchange=? '
-                    args.append(exchange)
-                    if symbol:
-                        wherestmt += 'AND symbol=?'
-                        args.append(symbol)
-                else:
-                    wherestmt += 'symbol=?'
-                    args.append(symbol)
-
-        stmt = f'SELECT * FROM {self.getTableString(table)} {wherestmt}'
-        return self.dbc.execute(stmt, args).fetchall()
+            raise ValueError(f'Unrecognized API {api}')
+        
+        return _dbGetter(**locals(), excludeKeys=['api'])
 
     def getUniqueEarningsCollectionDates(self, api: EarningsCollectionAPI):
         if api == EarningsCollectionAPI.NASDAQ:
@@ -831,38 +806,26 @@ class DatabaseManager(Singleton):
             table = 'earnings_dates_marketwatch_d'
         elif api == EarningsCollectionAPI.YAHOO:
             table = 'earnings_dates_yahoo_d'
-        
-        stmt = f'SELECT DISTINCT input_date AS date FROM {self.getTableString(table)} ORDER BY date ASC'
-        return [r.date for r in self.dbc.execute(stmt).fetchall()]
+
+        return _dbGetter(**locals(), sqlColumns='DISTINCT input_date', orderBy='input_date', onlyColumn_asList='input_date')
 
     def getLatestEarningsCollectionDate(self, api: EarningsCollectionAPI):
         ''' returns latest anchor date, i.e. date on which collection was done but the (most recent market) day's data was not updated yet '''
-        wherestmt = 'WHERE surprise_percentage IS NOT NULL'
         if api == EarningsCollectionAPI.NASDAQ:
             table = 'earnings_dates_nasdaq_d'
         elif api == EarningsCollectionAPI.MARKETWATCH:
             table = 'earnings_dates_marketwatch_d'
         elif api == EarningsCollectionAPI.YAHOO:
             table = 'earnings_dates_yahoo_d'
-        
-        stmt = f'SELECT MAX(input_date) AS date FROM {self.getTableString(table)} {wherestmt}'
 
-        return self.dbc.execute(stmt).fetchone()['date']
+        return _dbGetter(**locals(), surprise_percentage=SQLHelpers.NOTNULL, sqlColumns='MAX(input_date)', onlyColumn_asList='MAX(input_date)')[0]
 
     def getEarningsDate(self, exchange=None, symbol=None, inputDate=None, earningsDate=None):
-        additionalStmt, arguments = generateSQLAdditionalStatementAndArguments(**locals())
-        stmt = f'SELECT * FROM {self.getTableString("earnings_dates_c")}'
-        return self.dbc.execute(stmt + additionalStmt, arguments).fetchall()
+        return _dbGetter('earnings_dates_c', **locals())
 
-    def getDumpTickers_polygon(self, exchange=None, primary_exchange=None, ticker=None, cik=None, active=None, delisted_utc=None, ticker_root=None):
-        additionalStmt, arguments = generateSQLAdditionalStatementAndArguments(**locals())
-        stmt = f'SELECT * FROM {self.getTableString("symbol_info_polygon_d")}'
-        return self.dbc.execute(stmt + additionalStmt, arguments).fetchall()
-
-
-    ## end gets ####################################################################################################################################################################
+    #endregion 
     ####################################################################################################################################################################
-    ## sets ####################################################################################################################################################################
+    #region sets inserts updates
 
     ## ensures there are corresponding rows in the last_updates table for each series type
     def addLastUpdatesRows(self, exchange, symbol):
@@ -1392,9 +1355,9 @@ class DatabaseManager(Singleton):
                 args = [d[k] for k in sortedKeys(d) if k not in actualPKColsGenerator(d)] + [d[k] for k in sortedKeys(d) if k in actualPKColsGenerator(d)]
                 self.dbc.execute(stmt, args)
 
-    ## end sets ####################################################################################################################################################################
+    #endregion
     ####################################################################################################################################################################
-    ## deletes ####################################################################################################################################################################
+    #region deletes removals
        
     def deleteNetworks(self, exclude=[], dryRun=True):
         networkIds = [str(x.id) for x in self.getNetworks()]
@@ -1461,18 +1424,17 @@ class DatabaseManager(Singleton):
         self.dbc.execute(stmt, tuple(args))
 
     def deleteDumpTicker_polygon(self, primary_exchange, ticker, delisted_utc):
-        additionalStmt, arguments = generateSQLAdditionalStatementAndArguments(**locals())
+        additionalStmt, arguments = generateSQLSuffixStatementAndArguments(**locals())
         stmt = f'DELETE FROM {self.getTableString("symbol_info_polygon_d")}'
         return self.dbc.execute(stmt + additionalStmt, arguments).fetchall()
 
 
-    ## end deletes ####################################################################################################################################################################
+    #endregion
     ####################################################################################################################################################################
-    ## migrations ####################################################################################################################################################################
-    
+    #region migrations
 
     def _condenseFoundedTuples(self):
-        symlist = self.getStagedSymbolRows()
+        symlist = self.getDumpStagingSymbolInfo_basic()
         tpls = []
         for s in symlist:
             # if s.founded: continue
@@ -1518,7 +1480,7 @@ class DatabaseManager(Singleton):
     def _condenseSectorTuples(self):
         stmt = f'SELECT * FROM {self.getTableString("staging_symbol_info_d")} WHERE fmp_sector IS NOT NULL AND polygon_sector IS NOT NULL AND alphavantage_sector IS NOT NULL AND migrated=0'
         symbolList = self.dbc.execute(stmt).fetchall()
-        sectorList = self.getSectors()
+        sectorList = self.getSectors_basic(orderBy='rowid', onlyColumn_asList='sector')
 
         print('Checking', len(symbolList), 'symbols in staging')
         print(sectorList)
@@ -1548,7 +1510,7 @@ class DatabaseManager(Singleton):
 
     def staging_condenseIPO(self):
         apilist = ['polygon', 'fmp']
-        symlist = self.getStagedSymbolRows()
+        symlist = self.getDumpStagingSymbolInfo_basic()
         for s in symlist:
             if s.ipo: continue
 
@@ -1641,9 +1603,9 @@ class DatabaseManager(Singleton):
         # self.dbc.executemany(f'UPDATE {self.getTableString("staging_symbol_info_d")} SET migrated=1 WHERE migrated <> ? AND exchange=? and symbol=?', tpls)        
 
 
-    ## end migrations ####################################################################################################################################################################
+    #endregion
     ####################################################################################################################################################################
-    ## limited use utility ####################################################################################################################################################################
+    #region limited use utility
 
     ## generally only used after VIX update dumps
     ## fill any data gaps with artificial data using last real trading day
@@ -2004,13 +1966,12 @@ class DatabaseManager(Singleton):
 
         return 'CS'
 
-
     ## BATS seems to be all non-CS
     def analyzePossibleSymbolAssetTypes(self, exchange=['NYSE','NASDAQ','NYSE MKT','NYSE ARCA']):
         exchange = asList(exchange)
         stmt = 'SELECT * FROM symbols WHERE (api_polygon=1 OR api_fmp=1 or api_alphavantage=1) '
         if exchange:
-            stmt += self._andXContainsListStatement('exchange', exchange)
+            stmt += f' AND exchange in ({",".join(exchange)})'
         stmt += ' ORDER BY symbol'
 
         res = self.dbc.execute(stmt).fetchall()
@@ -2312,13 +2273,13 @@ class DatabaseManager(Singleton):
     ## builds a DB copy with just enough info for Google Interests collector to run and input data to
     def buildGIDBCopy(self, verbose=1):
         dest_db_path = os.path.join(path, f'data\\gidbcopy-{str(int(time.time()))}.db')
-        destination_connect, destination_cursor = _getDBHandles(dest_db_path)
+        destination_connect, destination_cursor = getDBConnectionAndCursor(dest_db_path)
 
         destination_cursor.execute('PRAGMA foreign_keys=0')
 
         ## write required tables to new DB
         requiredmaintablesTuple = ('main', ['symbols', 'historical_data'])
-        requireddumptablesTuple = (self.dumpDBAlias, ['google_interests_d'])
+        requireddumptablesTuple = (dumpDBAlias, ['google_interests_d'])
         for dbalias, tables in [requiredmaintablesTuple, requireddumptablesTuple]:
             src_tables = self.dbc.execute(f'SELECT * from {dbalias}.sqlite_master WHERE type=\'table\' AND tbl_name IN ({ generateCommaSeparatedQuestionMarkString(tables) })', tables).fetchall()
             for table in src_tables:
@@ -2362,7 +2323,7 @@ class DatabaseManager(Singleton):
 
     ## take stock of data from DB copy used for collecting Google Interests data
     def analyzeGIDBCopy(self, src_db_path):
-        source_connect, source_cursor = _getDBHandles(src_db_path)
+        source_connect, source_cursor = getDBConnectionAndCursor(src_db_path)
 
         ## DB copy should all have topic IDs, stock data, and probably some GI data already
         symbolerrors = source_cursor.execute('SELECT * FROM symbols WHERE google_topic_id IS NULL').fetchall()
@@ -2392,7 +2353,7 @@ class DatabaseManager(Singleton):
     ## import Google Interests data from a DB copy from elsewhere (e.g. EC2 instance)
     def importFromGIDBCopy(self, src_db_path, interestType: InterestType=None, dryrun=False, verbose=1):
         destination_cursor = self.dbc
-        source_connect, source_cursor = _getDBHandles(src_db_path)
+        source_connect, source_cursor = getDBConnectionAndCursor(src_db_path)
 
         ## update deleted topic IDs
         symbolerrors = source_cursor.execute('SELECT * FROM symbols WHERE google_topic_id IS NULL').fetchall()
@@ -2415,9 +2376,9 @@ class DatabaseManager(Singleton):
         self.commit()
         source_connect.close()
 
-    ## end limited use utility ####################################################################################################################################################################
+    #endregion
     ####################################################################################################################################################################
-    
+
 
 
 

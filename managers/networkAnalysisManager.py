@@ -173,7 +173,7 @@ class NetworkAnalysisManager(Singleton):
         self.nn.load()
         self.latestUpdateRows = recdotdict({ AccuracyAnalysisTypes[r.accuracy_type]: { 
             'data_count': r.data_count, 'min_date': r.min_date, 'last_exchange': r.last_exchange, 'last_symbol': r.last_symbol
-            } for r in dbm.getMostRecentNetworkAccuracyUpdateRows(self.nn.id) })
+            } for r in dbm.getAccuracyLastUpdates_basic(networkId=self.nn.id) })
 
     def resetTestTimes(self):
         self.testing_getKerasSetsTime = 0

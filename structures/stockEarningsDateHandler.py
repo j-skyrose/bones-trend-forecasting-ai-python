@@ -57,7 +57,7 @@ class StockEarningsDateHandler(GetMemoryUsage):
 
 if __name__ == '__main__':
     dbm: DatabaseManager = DatabaseManager()
-    h: StockEarningsDateHandler = StockEarningsDateHandler(dbData=dbm.getEarningsDate('NASDAQ','CNP'))
+    h: StockEarningsDateHandler = StockEarningsDateHandler(dbData=dbm.getEarningsDates_basic('NASDAQ', 'CNP'))
     print(h.getNextEarningsDate('2022-08-08'))
     print(h.getNextEarningsDate('2023-05-06'))
     print(h.getNextEarningsDate('2021-05-06'))
