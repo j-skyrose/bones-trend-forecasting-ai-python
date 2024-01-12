@@ -11,6 +11,7 @@ import copy
 from typing import List
 
 from constants.enums import NormalizationGroupings
+from managers._generatedDatabaseExtras.databaseRowObjects import networkTrainingConfigSnakeCaseTableColumns
 from structures.normalizationColumnObj import NormalizationColumnObj
 from utils.dbSupport import isNormalizationColumn
 
@@ -37,8 +38,12 @@ class NormalizationDataHandler:
             self._normalizationData.append(NormalizationColumnObj(k, v))
 
     @classmethod
-    def buildFromDBColumns(cls, columns):
-        data = [NormalizationColumnObj(c.name) for c in columns if isNormalizationColumn(c.name)]
+    def buildFromDBColumns(cls, columns=None):
+        nameExtractor = lambda x: x.name
+        if not columns:
+            columns = networkTrainingConfigSnakeCaseTableColumns
+            nameExtractor = lambda x: x
+        data = [NormalizationColumnObj(nameExtractor(c)) for c in columns if isNormalizationColumn(nameExtractor(c))]
         return cls(data)
 
     def get(self, key, orNone=False):

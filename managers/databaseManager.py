@@ -7,9 +7,9 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import math, re, dill, operator, shutil, json, time, pickle, calendar
+import math, re, dill, operator, shutil, json, time, pickle, calendar, numpy
 from typing import Dict, List, Union
-import sqlite3, atexit, numpy as np, xlrd
+import sqlite3, atexit, xlrd
 from datetime import date, timedelta, datetime
 from tqdm import tqdm
 from multiprocessing import current_process
@@ -17,7 +17,7 @@ from decimal import Decimal
 from enum import Enum
 
 from globalConfig import config as gconfig
-from constants.enums import APIState, AccuracyAnalysisTypes, AdvancedOrdering, CorrBool, EarningsCollectionAPI, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, SetType, Direction
+from constants.enums import APIState, AccuracyAnalysisTypes, AdvancedOrdering, CorrBool, EarningsCollectionAPI, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, NormalizationMethod, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, SetType, Direction
 from constants.values import unusableSymbols, apiList, standardExchanges
 from managers.configManager import StaticConfigManager
 from managers.dbCacheManager import DBCacheManager
@@ -27,7 +27,7 @@ from structures.api.yahoo import Yahoo
 from structures.normalizationColumnObj import NormalizationColumnObj
 from structures.normalizationDataHandler import NormalizationDataHandler
 from structures.sql.sqlArgumentObj import SQLArgumentObj
-from utils.dbSupport import convertToSnakeCase, dumpDBAlias, generateCommaSeparatedQuestionMarkString, generateSQLSuffixStatementAndArguments, getTableColumns, getTableString, processDBQuartersToDicts, _dbGetter, generateDatabaseAnnotationObjectsFile, generateCompleteDBConnectionAndCursor, getDBConnectionAndCursor
+from utils.dbSupport import convertToSnakeCase, dumpDBAlias, generateCommaSeparatedQuestionMarkString, generateExcludeUnusableTickersSnippet, generateSQLSuffixStatementAndArguments, getTableColumns, getTableString, processDBQuartersToDicts, _dbGetter, generateDatabaseAnnotationObjectsFile, generateCompleteDBConnectionAndCursor, getDBConnectionAndCursor
 from utils.other import buildCommaSeparatedTickerPairString, parseCommandLineOptions
 from utils.support import asDate, asISOFormat, asList, flatten, keySortedValues, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotobj, shortc, shortcdict, sortedKeys, tqdmLoopHandleWrapper, unixToDatetime
 
@@ -610,8 +610,25 @@ class DatabaseManager(Singleton):
         stmt += 'GROUP BY exchange, symbol'
         return self.dbc.execute(stmt, tuple).fetchall()
 
-    ## performs imperfect calculation of maxes, using column averages grouped by ticker rather than the raw values across all tickers (allows filtering out of unusable tickers while possibly saving memory/cpu time)
-    def getNormalizationData(self, seriesType: SeriesType=None, standardDeviationCount=2.5, normalizationGrouping: Union[NormalizationGroupings, List[NormalizationGroupings]]=None, **kwargs) -> NormalizationDataHandler:
+    def getNormalizationValue(self, tableName, columnName, seriesType: SeriesType, normalizationMethod: NormalizationMethod=NormalizationMethod.STANDARD_DEVIATION):
+        '''returns average/max value from given column of given table, grouped by tickers'''
+
+        stmt = f"""
+            SELECT
+            {'exchange, symbol,' if normalizationMethod == NormalizationMethod.STANDARD_DEVIATION else ''}
+            {'AVG' if normalizationMethod == NormalizationMethod.STANDARD_DEVIATION else 'MAX'}
+            ({columnName}) AS val FROM {tableName}
+            WHERE series_type='{seriesType.name}' AND
+            {generateExcludeUnusableTickersSnippet()}
+            {'GROUP BY exchange, symbol' if normalizationMethod == NormalizationMethod.STANDARD_DEVIATION else ''}
+            {f'LIMIT {gconfig.testing.REDUCED_SYMBOL_SCOPE}' if gconfig.testing.REDUCED_SYMBOL_SCOPE else ''}
+        """.replace('\n','')
+
+        return self._queryOrGetCache(stmt, [], self._getHistoricalDataCount(), 'getnormval')
+
+    def getNormalizationData(self, config, seriesType: SeriesType=None, normalizationGrouping: Union[NormalizationGroupings, List[NormalizationGroupings]]=None, **kwargs) -> NormalizationDataHandler:
+        '''performs imperfect calculation of maxes, using column averages grouped by ticker rather than the raw values across all tickers (allows filtering out of unusable tickers while possibly saving memory/cpu time)'''
+
         ## determine which data will be collected
         normalizationGrouping = asList(normalizationGrouping)
         if normalizationGrouping:
@@ -621,29 +638,34 @@ class DatabaseManager(Singleton):
             if seriesType: ngroups.append(NormalizationGroupings.HISTORICAL)
             if False: ngroups.append(NormalizationGroupings.FINANCIAL) ## TODO
 
-        normalizationData = NormalizationDataHandler.buildFromDBColumns(self.getTableColumns('network_training_config'))
+        normalizationData = NormalizationDataHandler.buildFromDBColumns()
         ## get averages for each normalization data column
         for c in normalizationData:
-            stmt = f'SELECT *, avg({c.columnName}) FROM {c.normalizationGrouping.tableName} '
-            args = []
+            if c.columnName in config.data.normalizationMethod.keys():
+                normalizationMethod = shortcdict(config.data.normalizationMethod[c.columnName], 'type', config.data.normalizationMethod.default.type)
+                methodAmount = shortcdict(config.data.normalizationMethod[c.columnName], 'value', config.data.normalizationMethod.default.value)
+            else:
+                normalizationMethod = config.data.normalizationMethod.default.type
+                methodAmount = config.data.normalizationMethod.default.value
+
             if c.normalizationGrouping == NormalizationGroupings.HISTORICAL:
-                stmt += ' WHERE series_type=? GROUP BY exchange, symbol'
-                args.append(seriesType.name)
+                data = self.getNormalizationValue(c.normalizationGrouping.tableName, c.columnName, seriesType, normalizationMethod)
             # elif c.normalizationGrouping == NormalizationGroupings.STOCK:
             #     pass ## nothing to do
             # elif c.normalizationGrouping == NormalizationGroupings.FINANCIAL:
             #     pass ## TODO
-            
-            if gconfig.testing.REDUCED_SYMBOL_SCOPE: stmt += f' LIMIT {gconfig.testing.REDUCED_SYMBOL_SCOPE}'
-            data = self.__purgeUnusableTickers(self._queryOrGetCache(stmt, tuple(args), self._getHistoricalDataCount(), 'getsandavg'))
 
-            ## extract row values
-            vals = [r[f'avg({c.columnName})'] for r in data]
-            std = np.std(vals)
-            avg = np.mean(vals)
-            lowerlimit = max(0, avg - std * standardDeviationCount)
-            upperlimit = avg + std * standardDeviationCount
-            c.value = upperlimit
+            ## determine upperlimit for this column
+            if normalizationMethod == NormalizationMethod.STANDARD_DEVIATION:
+                ## extract row values
+                vals = [r['val'] for r in data]
+                std = numpy.std(vals)
+                avg = numpy.mean(vals)
+                lowerlimit = max(0, avg - std * methodAmount)
+                upperlimit = avg + std * methodAmount
+                c.value = upperlimit
+            else:
+                c.value = data[0]['val']
 
         return normalizationData
 

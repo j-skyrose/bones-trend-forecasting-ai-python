@@ -281,7 +281,7 @@ class DataManager():
         kwargs = addAdditionalDefaultKWArgs(kwargs, config)
 
         if config.data.normalize:
-            kwargs['normalizationData'] = dbm.getNormalizationData(**kwargs)
+            kwargs['normalizationData'] = dbm.getNormalizationData(config, **kwargs)
 
         symbolList = dbm.getSymbols(**kwargs)
 
@@ -309,7 +309,7 @@ class DataManager():
                 kwargs['normalizationData'] = network.stats.normalizationData
         else:
             if shouldNormalize:
-                kwargs['normalizationData'] = dbm.getNormalizationData(**kwargs)
+                kwargs['normalizationData'] = dbm.getNormalizationData(config, **kwargs)
 
         symbolList = dbm.getSymbols(**kwargs)
 

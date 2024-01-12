@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import List, Tuple
 
 from constants.enums import NormalizationGroupings, SQLHelpers
-from constants.values import normalizationColumnPrefix
+from constants.values import normalizationColumnPrefix, unusableSymbols
 from managers.configManager import StaticConfigManager
 from structures.sql.sqlArgumentObj import SQLArgumentObj
 from structures.sql.sqlOrderObj import SQLOrderObj
@@ -100,6 +100,12 @@ def parseNormalizationColumn(c) -> Tuple[NormalizationGroupings, str]:
     columnName = '_'.join(csplit[2:])
 
     return normalizationGrouping, columnName
+
+def generateExcludeUnusableTickersSnippet(alias=None):
+    '''returns "exchange||symbol NOT IN (...)" snippet for SQL WHERE clause'''
+    aliasString = f'{alias}.' if alias else ''
+    unusableSymbolsPipedPairString = ','.join([f"'{exchange}||{symbol}'" for exchange, symbol in unusableSymbols])
+    return f" {aliasString}exchange||{aliasString}symbol NOT IN ({unusableSymbolsPipedPairString})"
 
 def generateSQLSuffixStatementAndArguments(excludeKeys=[], **kwargs):
     '''converts arguments (passed to a DBM SQL GET function) into the appropriate WHERE statement; including order by'''

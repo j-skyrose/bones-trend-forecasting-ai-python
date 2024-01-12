@@ -9,6 +9,7 @@ sys.path.append(path)
 
 import operator
 from enum import Enum
+
 from constants.values import indicatorsKey
 from utils.support import parseCSVFloatsIntoTuple, shortc
 
@@ -284,6 +285,10 @@ class NormalizationGroupings(Enum):
     HISTORICAL = 'historical_data'
     STOCK = 'symbols'
     FINANCIAL = 'vwtb_edgar_financial_nums'
+
+class NormalizationMethod(Enum):
+    STANDARD_DEVIATION = 'STANDARD_DEVIATION'
+    REAL_MAX = 'REAL_MAX'
 
 class ChangeType(Enum):
     PERCENTAGE = 'PERCENTAGE'

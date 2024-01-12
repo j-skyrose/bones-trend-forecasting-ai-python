@@ -8,7 +8,7 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 from constants.values import indicatorsKey
-from constants.enums import DataFormType, Direction, FeatureExtraType, IndicatorType, OutputClass, ReductionMethod, SeriesType
+from constants.enums import DataFormType, Direction, FeatureExtraType, IndicatorType, NormalizationMethod, OutputClass, ReductionMethod, SeriesType
 from utils.support import recdotdict
 
 # TESTING = True
@@ -107,6 +107,17 @@ config = recdotdict({
     },
     'data': {
         'normalize': False,
+        ## not necessarily exhaustive set of normalization columns
+        'normalizationMethod': {
+            'default': { ## applies to all columns unless they are explicitly specified
+                'type': NormalizationMethod.STANDARD_DEVIATION,
+                'value': 2.5
+            },
+            # 'high': {}
+            # 'volume': {
+            #     'type': NormalizationMethod.REAL_MAX
+            # },
+        },
     },
     'sets': {
         'positiveSplitRatio': 1/6, # default 0.5,
