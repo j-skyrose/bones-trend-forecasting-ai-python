@@ -17,7 +17,7 @@ from decimal import Decimal
 from enum import Enum
 
 from globalConfig import config as gconfig
-from constants.enums import APIState, AccuracyAnalysisTypes, AdvancedOrdering, CorrBool, EarningsCollectionAPI, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, NormalizationMethod, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, SetType, Direction
+from constants.enums import APIState, AccuracyAnalysisTypes, AdvancedOrdering, ChangeType, CorrBool, EarningsCollectionAPI, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, NormalizationMethod, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, SetType, Direction
 from constants.values import unusableSymbols, apiList, standardExchanges
 from managers.configManager import StaticConfigManager
 from managers.dbCacheManager import DBCacheManager
@@ -990,12 +990,12 @@ class DatabaseManager(Singleton):
         val = self._convertVIXDataPoint(row) if row else point
         self.dbc.execute(stmt, (*val,))
 
-    def insertVectorSimilarity(self, exchange, symbol, seriesType: SeriesType, dt, vclass: OutputClass, precedingRange, followingRange, threshold, val, upsert=True):
-        stmt = f'INSERT {"OR IGNORE" if upsert else ""} INTO {self.getTableString("vector_similarities_c")} VALUES (?,?,?,?,?,?,?,?,?)'
-        args = [exchange, symbol, seriesType.name, asISOFormat(dt), vclass.name, precedingRange, followingRange, threshold]
+    def insertVectorSimilarity(self, exchange, symbol, seriesType: SeriesType, dt, vclass: OutputClass, precedingRange, followingRange, changeType: ChangeType, changeValue, val, upsert=True):
+        stmt = f'INSERT {"OR IGNORE" if upsert else ""} INTO {self.getTableString("vector_similarities_c")} VALUES (?,?,?,?,?,?,?,?,?,?)'
+        args = [exchange, symbol, seriesType.name, asISOFormat(dt), vclass.name, precedingRange, followingRange, changeType.name, changeValue]
         self.dbc.execute(stmt, tuple(args + [val]))
         if upsert:
-            stmt = f'UPDATE {self.getTableString("vector_similarities_c")} SET value=? WHERE exchange=? AND symbol=? AND date_type=? AND date=? AND vector_class=? AND preceding_range=? AND following_range=? AND change_threshold=?'
+            stmt = f'UPDATE {self.getTableString("vector_similarities_c")} SET value=? WHERE exchange=? AND symbol=? AND date_type=? AND date=? AND vector_class=? AND preceding_range=? AND following_range=? AND change_type=? AND change_value=?'
             self.dbc.execute(stmt, tuple([val] + args))
 
     ## for updating symbol details like sector, industry, founded

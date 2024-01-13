@@ -505,7 +505,7 @@ class DataManager():
 
         kwargs = {}
         if self.normalized:
-            kwargs['earningsDateNormalizationMax'] = 700
+            kwargs['earningsDateNormalizationMax'] = self.config.data.normalizationMethod.earningsDate.value
 
         startt = time.time()
         ret = self.inputVectorFactory.build(

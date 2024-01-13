@@ -14,7 +14,7 @@ from numpy.core import _exceptions as numpy_exceptions
 from typing import Dict, List
 
 from globalConfig import config as gconfig
-from constants.enums import ChangeType, EarningsCollectionAPI, FeatureExtraType, IndicatorType, OutputClass, SeriesType
+from constants.enums import ChangeType, EarningsCollectionAPI, FeatureExtraType, IndicatorType, NormalizationMethod, OutputClass, SeriesType
 from constants.exceptions import InsufficientDataAvailable
 from constants.values import indicatorsKey, unusableSymbols
 from managers.databaseManager import DatabaseManager
@@ -50,6 +50,7 @@ def similarityCalculationAndInsertion(exchange=None, **kwargs):
     ## remove unnecessary/redundant features
     ## only keep EMA200, since all are based on stock data, which is already included...and to not break stuff by having no indicators
     cf = gconfig
+    cf.similarityCalculation.enabled = True
     for ind in IndicatorType.getActuals():
         cf.feature[indicatorsKey][ind].enabled = False
     # cf.feature[indicatorsKey][IndicatorType.EMA200].enabled = True
@@ -62,6 +63,8 @@ def similarityCalculationAndInsertion(exchange=None, **kwargs):
     cf.sets.instanceReduction.enabled = False
 
     cf.data.normalize = True
+    cf.data.normalizationMethod.default.type = NormalizationMethod.REAL_MAX
+    cf.data.normalizationMethod.earningsDate.value = 181
 
     props = {
         'precedingRange': 60,
@@ -69,6 +72,9 @@ def similarityCalculationAndInsertion(exchange=None, **kwargs):
         'changeType': ChangeType.ABSOLUTE,
         'changeValue': 2
     }
+
+    if gconfig.testing.enabled:
+        props['precedingRange'] = 1
 
     dm: DataManager = DataManager.forAnalysis(
         skips=SkipsObj(sets=True),
@@ -96,6 +102,10 @@ def _calculateSimiliarites(similaritiesSum:List[float], startindex, vectors):
     for cindx in range(startindex, len(vectors)):
     # for cindx in tqdm.tqdm(range(startindex, len(vectors)), desc='Columns'):
         vector = vectors[cindx]
+
+        for indx,v in enumerate(vector):
+            if v > 1.25 or v < 0:
+                raise RuntimeError(f'Value above max (1): {v} at {indx}')
 
         ## calculate similarites for each row
         similarities = numpy.zeros(cindx)

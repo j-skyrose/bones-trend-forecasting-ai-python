@@ -87,6 +87,18 @@ config = recdotdict({
     'useGPU': useGPU,
     'useMainGPU': useMainGPU,
     'multicore': not ('VSCODE_GIT_IPC_HANDLE' in os.environ),
+    'similarityCalculation': {
+        'enabled': False,
+        'earningsDate': {
+            'maxDayDifference': 180,
+            # for scalar representation, which is default for similarity calculation as it should better capture the perceived difference between the days of vectors
+            # 0 <- postDateThreshold: days before known earnings
+            # postDateThreshold -> 1: days after known earnings (up to maxPostDays)
+            # 1: days until next earnings unknown
+            'postDateThreshold': 0.7,
+            'maxPostDays': 7
+        }
+    },
     'dataForm': {
         'dayOfWeek': DataFormType.VECTOR,
         'dayOfMonth': DataFormType.VECTOR,
@@ -117,6 +129,10 @@ config = recdotdict({
             # 'volume': {
             #     'type': NormalizationMethod.REAL_MAX
             # },
+            'earningsDate': { ## not optional
+                'type': NormalizationMethod.REAL_MAX,
+                'value': 700
+            }
         },
     },
     'sets': {
@@ -140,8 +156,6 @@ config = recdotdict({
     },
     'network': {
         'recurrent': True
-    },
-    'inputVectorFactory': {
     },
     'trainer': {
         'customValidationClassValueRatio': 0.15, ## positive : negative

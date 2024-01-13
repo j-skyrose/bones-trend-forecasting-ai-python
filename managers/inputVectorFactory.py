@@ -226,29 +226,48 @@ class InputVectorFactory(Singleton):
                         earningsDate = earningsDateHandler.getNextEarningsDate(d.period_date)
                         if earningsDate:
                             daydiff = (date.fromisoformat(earningsDate) - date.fromisoformat(d.period_date)).days
-                        
-                        if self.config.dataForm.earningsDate.vectorSize2:
-                            itlist = [
-                                1 if earningsDate else 0, ## current earnings date is known; unknown being either missing, or current day is more than 180 days (~2 quarters) away from closest known earnings date
-                                daydiff if earningsDate else 0 ## distance (in days) from current earnings date
-                            ]
-                        else:
-                            itlist = [
-                                1 if earningsDate else 0, ## current earnings date is known; unknown being either missing, or current day is more than 180 days (~2 quarters) away from closest known earnings date
-                                1 if earningsDate and daydiff > 0 else 0, ## value is days until current (i.e. most recent) earnings date
-                                1 if earningsDate and daydiff < 0 else 0, ## value is days after current (i.e. most recent) earnings date
-                                abs(daydiff) if earningsDate else 0 ## distance (in days) from current earnings date
-                            ]
-                            
-                            # 1 if earningsDate else 0, ## current earnings date is known; unknown being either missing, or current day is more than 180 days (~2 quarters) away from closest known earnings date
-                            # 1 if earningsDate and daydiff > 0 else 0, ## value is days until current (i.e. most recent) earnings date
-                            # abs(daydiff) if earningsDate else 0 ## distance (in days) from current earnings date
 
-                        if earningsDateNormalizationMax:
-                            itlist[-1] = normalizeValue(itlist[-1], earningsDateNormalizationMax)
+                        if not self.config.similarityCalculation.enabled:
+                            if self.config.dataForm.earningsDate.vectorSize2:
+                                itlist = [
+                                    1 if earningsDate else 0, ## current earnings date is known; unknown being either missing, or current day is more than 180 days (~2 quarters) away from closest known earnings date
+                                    daydiff if earningsDate else 0 ## distance (in days) from current earnings date
+                                ]
+                            else:
+                                itlist = [
+                                    1 if earningsDate else 0, ## current earnings date is known; unknown being either missing, or current day is more than 180 days (~2 quarters) away from closest known earnings date
+                                    1 if earningsDate and daydiff > 0 else 0, ## value is days until current (i.e. most recent) earnings date
+                                    1 if earningsDate and daydiff < 0 else 0, ## value is days after current (i.e. most recent) earnings date
+                                    abs(daydiff) if earningsDate else 0 ## distance (in days) from current earnings date
+                                ]
+                                
+                                # 1 if earningsDate else 0, ## current earnings date is known; unknown being either missing, or current day is more than 180 days (~2 quarters) away from closest known earnings date
+                                # 1 if earningsDate and daydiff > 0 else 0, ## value is days until current (i.e. most recent) earnings date
+                                # abs(daydiff) if earningsDate else 0 ## distance (in days) from current earnings date
+
+                            if earningsDateNormalizationMax:
+                                itlist[-1] = normalizeValue(itlist[-1], earningsDateNormalizationMax)
+
+                        else: ## similarity calculation
+                            if earningsDate and daydiff < self.config.similarityCalculation.earningsDate.maxDayDifference:
+                                if daydiff >= 0: ## before earnings date
+                                    # normalize and adjust to [0, postDateThreshold] range
+                                    itlist = [normalizeValue(daydiff, earningsDateNormalizationMax) * self.config.similarityCalculation.earningsDate.postDateThreshold]
+                                else: ## after earnings
+                                    daydiff = abs(daydiff)
+                                    if daydiff > self.config.similarityCalculation.earningDate.maxPostDays:
+                                        itlist = [1]
+                                    else:
+                                        stepSize = (1 - self.config.similarityCalculation.earningDate.postDateThreshold) / (self.config.similarityCalculation.earningsDate.maxPostDays + 1)
+                                        itlist = [0.7 + (daydiff * stepSize)]
+                            else: ## earnings date unknown or exceeds max difference
+                                itlist = [1]
+
                         vectorAsList.extend(itlist)
                 else:
-                    if self.config.dataForm.earningsDate.vectorSize2:
+                    if self.config.similarityCalculation.enabled:
+                        vectorAsList = [1]
+                    elif self.config.dataForm.earningsDate.vectorSize2:
                         vectorAsList = [0,0]*len(stockDataSet)
                     else:
                         vectorAsList = [0,0,0,0]*len(stockDataSet)
