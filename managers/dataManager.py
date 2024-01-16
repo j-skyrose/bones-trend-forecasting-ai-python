@@ -63,9 +63,11 @@ def multicore_getEarningsDateTickerTuples(ticker):
 class DataManager():
 
     def __init__(self,
-        precedingRange=0, followingRange=0, seriesType: SeriesType=SeriesType.DAILY, changeType: ChangeType=ChangeType.PERCENTAGE, changeValue=0,
-        setCount=None, setSplitTuple=None, minimumSetsPerSymbol=0, useAllSets=False,
-        inputVectorFactory=InputVectorFactory(), normalizationData=NormalizationDataHandler(), indicatorConfig=gconfig.defaultIndicatorFormulaConfig, symbolList:List=[], symbol:List=[],
+        ## defaults in gconfig.training
+        precedingRange=None, followingRange=None, seriesType: SeriesType=None, changeType: ChangeType=None, changeValue=None, setSplitTuple=None,
+        setCount=None, minimumSetsPerSymbol=0, useAllSets=False,
+        inputVectorFactory=InputVectorFactory(), normalizationData=NormalizationDataHandler(), indicatorConfig=gconfig.defaultIndicatorFormulaConfig,
+        symbolList:List=[], symbol:List=[],
         analysis=False, skips: SkipsObj=SkipsObj(), saveSkips=False,
 
         statsOnly=False, initializeStockDataHandlersOnly=False, useOptimizedSplitMethodForAllSets=True,
@@ -76,8 +78,6 @@ class DataManager():
         maxPageSize=0, skipAllDataInitialization=False,
         maxGoogleInterestHandlers=50,
         verbose=None, **kwargs
-        # precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, setCount=None, threshold=0, setSplitTuple=(1/3,1/3), minimumSetsPerSymbol=0, inputVectorFactory=InputVectorFactory(),
-        # neuralNetwork: NeuralNetworkInstance=None, exchange=[], excludeExchange=[], sectors=[], excludeSectors=[]
     ):
         self.stockDataHandlers: Dict[TickerKeyType, StockDataHandler] = {}
         self.explicitValidationStockDataHandlers: Dict[TickerKeyType, StockDataHandler] = {}        
@@ -95,6 +95,12 @@ class DataManager():
         self.testingSet: List[DataPointInstance] = []
 
         self.config = inputVectorFactory.config
+        ## unpack config.training properties
+        self.precedingRange = shortc(precedingRange, shortcdict(self.config.training, 'precedingRange'))
+        self.followingRange = shortc(followingRange, shortcdict(self.config.training, 'followingRange'))
+        self.seriesType = shortc(seriesType, shortcdict(self.config.training, 'seriesType'))
+        self.changeType = shortc(changeType, shortcdict(self.config.training, 'changeType'))
+        self.changeValue = shortc(changeValue, shortcdict(self.config.training, 'changeValue'))
 
         ## check for inappropriate argument combinations, and other misconfigurations
         if useAllSets and not useOptimizedSplitMethodForAllSets:
@@ -120,11 +126,6 @@ class DataManager():
         startt = time.time()
         self.verbose = shortc(verbose, 1)
         self.inputVectorFactory = inputVectorFactory
-        self.precedingRange = precedingRange
-        self.followingRange = followingRange
-        self.seriesType = seriesType
-        self.changeType = changeType
-        self.changeValue = changeValue
         self.minDate = minDate
         self.normalizationData = normalizationData
         self.indicatorConfig = indicatorConfig
@@ -136,7 +137,7 @@ class DataManager():
             self.maxGoogleInterestHandlers = maxGoogleInterestHandlers
 
         ## (training/validation/testing) set initialization-related parameters
-        self.setCount = setCount
+        self.setCount = shortc(setCount, shortcdict(self.config.training, 'setCount'))
         self.minimumSetsPerSymbol = minimumSetsPerSymbol
         self.initializeStockDataHandlersOnly = initializeStockDataHandlersOnly
         self.type: DataManagerType
@@ -176,15 +177,12 @@ class DataManager():
         ##
 
         ## default setSplitTuple determination
-        if not setSplitTuple:
-            if explicitValidationSymbolList:
-                self.setSplitTuple = (2/3,0)
-            else:
-                self.setSplitTuple = (1/3,1/3)
+        if setSplitTuple and not explicitValidationSymbolList and setSplitTuple[1] == 0:
+            raise ValueError('No validation set messes things up')
+        elif not setSplitTuple and explicitValidationSymbolList:
+            self.setSplitTuple = (2/3,0)
         else:
-            if not explicitValidationSymbolList and setSplitTuple[1] == 0:
-                raise ValueError('No validation set messes things up')
-            self.setSplitTuple = setSplitTuple
+            self.setSplitTuple = shortc(setSplitTuple, self.config.training.setSplitTuple)
 
 
         if explicitValidationSymbolList and not skips.stocks:
@@ -451,7 +449,8 @@ class DataManager():
         return getMaxIndicatorPeriod(self.config.feature[indicatorsKey].keys(), self.indicatorConfig)
 
     ## preserves much of the initialized data while mainly allowing new input vectors to be created with a different configuration
-    def setNewConfig(self, config, indicatorConfig=None, verbose=None):
+    def setNewConfig(self, config, indicatorConfig=None,
+                     verbose=None):
         verbose = shortc(verbose, self.verbose)
 
         indicatorConfig = shortc(indicatorConfig, config.defaultIndicatorFormulaConfig)
@@ -461,11 +460,20 @@ class DataManager():
         self.config = config
         self.indicatorConfig = indicatorConfig
         self.inputVectorFactory = InputVectorFactory(config)
+        self.precedingRange = shortcdict(self.config.training, 'precedingRange', self.precedingRange, True)
+        self.followingRange = shortcdict(self.config.training, 'followingRange', self.followingRange, True)
+        self.changeType = shortcdict(self.config.training, 'changeType', self.changeType, True)
+        self.changeValue = shortcdict(self.config.training, 'changeValue', self.changeValue, True)
 
         if currentMaxIndicatorPeriod < newMaxIndicatorPeriod:
             # TODO: need to regen everything starting with stock data handlers as some may have been excluded due to insufficient data length
-            pass
-        elif currentMaxIndicatorPeriod > newMaxIndicatorPeriod:
+            raise NotImplementedError()
+        elif currentMaxIndicatorPeriod > newMaxIndicatorPeriod or any([
+            shortcdict(self.config.training, 'precedingRange'),
+            shortcdict(self.config.training, 'followingRange'),
+            shortcdict(self.config.training, 'changeType'),
+            shortcdict(self.config.training, 'changeValue'),
+        ]):
             ## available selections will decrease
             for sdh in self.stockDataHandlers.values():
                 sdh.maxIndicatorPeriod = newMaxIndicatorPeriod

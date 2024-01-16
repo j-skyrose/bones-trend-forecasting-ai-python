@@ -8,7 +8,7 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 from constants.values import indicatorsKey
-from constants.enums import DataFormType, Direction, FeatureExtraType, IndicatorType, NormalizationMethod, OutputClass, ReductionMethod, SeriesType
+from constants.enums import AccuracyType, ChangeType, DataFormType, Direction, FeatureExtraType, IndicatorType, NormalizationMethod, OutputClass, ReductionMethod, SeriesType
 from utils.support import recdotdict
 
 # TESTING = True
@@ -50,34 +50,12 @@ if TESTING and SEED_RANDOM:
     
     resetSeeds()
 
+## default
 trainingConfig = {
-    ## master
-    'setCount': 500,
-    'precedingRange': 60,
-    'followingRange': 20,
-    'threshold': 0.1,
-    'setSplitTuple': (5/7,2/7,0/7),
     'seriesType': SeriesType.DAILY,
-
-    'epochs': 10,
-    'batchSize': 64,
-    'iterations': 5,
-
-} if TESTING else {
-    ## master
-    'setCount': 125000,
-    # 'precedingRange': 126, ## ~0.5 year
-    # 'precedingRange': 252, ## ~1 year
-    'precedingRange': 200,
-    'followingRange': 20, ## ~1 month
-    'threshold': 0.4,
-    'setSplitTuple': (5/7,2/7,0/7),
-    'seriesType': SeriesType.DAILY,
-
-    'epochs': 25,
-    'batchSize': 64,
-    'iterations': 13,
-
+    'changeType': ChangeType.PERCENTAGE,
+    'accuracyType': AccuracyType.NEGATIVE,
+    'setSplitTuple': (1/3,1/3)
 }
 
 def genFeatureObj(enabled, extype:FeatureExtraType, dataRequired=True):
