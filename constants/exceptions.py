@@ -27,3 +27,6 @@ class ArgumentError(Exception):
 
 class NotSupportedYet(Exception):
     pass
+
+class InsufficientInstances(Exception):
+    pass

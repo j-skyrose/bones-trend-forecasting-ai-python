@@ -355,18 +355,18 @@ class NeuralNetworkInstance:
     def getAccuracyStats(self):
         return self._generateAccuracyStatsObj()
 
-    @classmethod
-    def prettyPrintAccuracyStat(cls, name, stats=None, current=None, last=None):
+    @staticmethod
+    def prettyPrintStat(accuracyName=None, name=None, stats=None, current=None, last=None):
         current = shortc(current, shortcdict(stats, 'current'))
         last = shortc(last, shortcdict(stats, 'last'))
         print(
-            f'{name} accuracy:'.ljust(19) + 
+            (f'{accuracyName} accuracy:' if accuracyName else f'{name}:').ljust(19) + 
             f'{current}'.ljust(22) + 
             (f"({'+' if current >= last else '-'} {f'{abs(current - last):.20f}'})" if last else '')
         )
 
     @classmethod
-    def printAccuracyStats(cls, statsDict, classValueRatio=None, config=None):
+    def printAccuracyStats(cls, stats, classValueRatio=None, config=None):
         if config:
             pass ## config already set
         elif hasattr(cls, 'inputVectorFactory'):
@@ -374,9 +374,24 @@ class NeuralNetworkInstance:
         else:
             config = gconfig
         classValueRatio = shortc(classValueRatio, config.trainer.customValidationClassValueRatio)
-        for name, stats in statsDict.items():
-            cls.prettyPrintAccuracyStat(name, stats)
-        cls.prettyPrintAccuracyStat('CUSTOM', current=getCustomAccuracy(statsDict, classValueRatio=classValueRatio))
+
+        if type(stats) == list and len(stats) == 1:
+            stats = stats[0]
+
+        if type(stats) == list and len(stats) > 1: ## multiple values for each
+            statsDict = { k: [shortcdict(s[k], 'current', s[k]) for s in stats] for k in stats[0].keys() }
+            statsDict['CUSTOM'] = [getCustomAccuracy(s, classValueRatio=classValueRatio) for s in stats]
+            for k, sts in statsDict.items():
+                print(f'{k} Accuracy')
+                print('Minimum:'.ljust(19) + f'{min(sts)}'.ljust(22))
+                print('Median:'.ljust(19) + f'{sts[int(len(sts)/2)]}'.ljust(22))
+                print('Maximum:'.ljust(19) + f'{max(sts)}'.ljust(22))
+                print('Average:'.ljust(19) + f'{numpy.average(sts)}'.ljust(22))
+                print()
+        else:
+            for name, sts in stats.items():
+                cls.prettyPrintStat(accuracyName=name, stats=sts)
+            cls.prettyPrintStat(accuracyName='CUSTOM', current=getCustomAccuracy(stats, classValueRatio=classValueRatio))
         print()
 
     def printAllAccuracyStats(self):
@@ -419,6 +434,8 @@ if __name__ == '__main__':
     print(inp.shape)
     # oup = kutils.to_categorical([0,1], num_classes=2)
     oup = numpy.array([0,1])
+    cf = copy.deepcopy(gconfig)
+    cf.network.recurrent = False
     n = NeuralNetworkInstance.new(
         '1',
         Adam(amsgrad=True),
@@ -428,10 +445,9 @@ if __name__ == '__main__':
             # { 'units': 200, 'dropout': True, 'dropoutRate':0.0025 },
             # { 'units': 100, 'dropout': False, 'dropoutRate':0.0025 }
         ],
+        factoryConfig=cf,
         # (2, 2), ## teimsteps, features, 
-        inputSize=4,
-        recurrent=False
-        # inp.shape
+        inputSize=4
     )
 
     n.printAllAccuracyStats()

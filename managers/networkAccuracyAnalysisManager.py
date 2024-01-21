@@ -152,7 +152,7 @@ def analyzeInputSectionWeight(dm: DataManager):
     print('### Averages')
     prettyPrintStats(avgstats)
 
-class NetworkAnalysisManager(Singleton):
+class NetworkAccuracyAnalysisManager(Singleton):
     nn: NeuralNetworkInstance = None
     dm: DataManager = None
     latestUpdateRows: Dict[AccuracyAnalysisTypes, Dict] = None
@@ -331,5 +331,5 @@ class NetworkAnalysisManager(Singleton):
 
 if __name__ == '__main__':
 
-    nam = NetworkAnalysisManager(1641959005)
+    nam = NetworkAccuracyAnalysisManager(1641959005)
     nam.bringAccuraciesUpToDate(AccuracyAnalysisTypes.PRECEDING_RANGE)

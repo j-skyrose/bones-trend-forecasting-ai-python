@@ -21,7 +21,6 @@ from managers.vixManager import VIXManager
 from managers.marketDayManager import MarketDayManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from managers.dataManager import DataManager
-from managers.networkAnalysisManager import NetworkAnalysisManager
 from managers.inputVectorFactory import InputVectorFactory
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.stockDataHandler import StockDataHandler

@@ -18,6 +18,7 @@ from argparse import ArgumentError
 
 from globalConfig import config as gconfig
 from constants.enums import ChangeType, DataFormType, Direction, NormalizationGroupings, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetClassificationType, SetType, DataManagerType, IndicatorType
+from constants.exceptions import InsufficientInstances
 from utils.support import asList, generateFibonacciSequence, getAdjustedSlidingWindowPercentage, partition, recdotlist, shortc, multicore_poolIMap, shortcdict, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.other import getInstancesByClass, getMaxIndicatorPeriod, getOutputClass, maxQuarters, getIndicatorPeriod, addAdditionalDefaultKWArgs
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
@@ -1022,7 +1023,7 @@ class DataManager():
             positiveSelectedInstances, negativeSelectedInstances = getInstancesByClass(self.selectedInstances)
             if verbose>=2: print('Class split ratio:', len(positiveSelectedInstances) / len(self.selectedInstances))
             if not selectAll:
-                if len(positiveSelectedInstances) / len(self.selectedInstances) < gconfig.sets.minimumClassSplitRatio: raise ValueError('Positive to negative set ratio below minimum threshold')
+                if len(positiveSelectedInstances) / len(self.selectedInstances) < gconfig.sets.minimumClassSplitRatio: raise InsufficientInstances('Positive to negative set ratio below minimum threshold')
                 self.setsSlidingWindowPercentage = getAdjustedSlidingWindowPercentage(len(self.selectedInstances), setCount) 
                 if verbose>=2: print('Adjusted sets window size from', setCount, 'to', int(len(self.selectedInstances)*self.setsSlidingWindowPercentage))
 
@@ -1078,7 +1079,7 @@ class DataManager():
                 positiveSelectedInstances, negativeSelectedInstances = getInstancesByClass(self.selectedInstances)
                 print('All instances selected\nFinal balance:', len(positiveSelectedInstances), '/', len(negativeSelectedInstances))
 
-            if len(self.selectedInstances) < setCount: raise IndexError('Not enough sets available: %d vs %d' % (len(self.selectedInstances), setCount))
+            if len(self.selectedInstances) < setCount: raise InsufficientInstances('Not enough instances available: %d vs %d' % (len(self.selectedInstances), setCount))
             ## instance selection done
 
         ## shuffle and distribute instances
