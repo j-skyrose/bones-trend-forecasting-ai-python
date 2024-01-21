@@ -195,7 +195,8 @@ class DataManager():
 
 
         if useAllSets and useOptimizedSplitMethodForAllSets:
-            self.windows = dbm.getTickerSplit('split1681021636', 50000)
+            # self.windows = dbm.getTickerSplit('split1681021636', 50000)
+            self.windows = dbm.getTickerSplit('split1705598270', 10000)
             for windex in range(len(self.windows)):
                 for i in range(len(self.windows[windex])):
                     exchange = self.windows[windex][i].exchange
@@ -352,6 +353,8 @@ class DataManager():
     @classmethod
     def determineAllSetsTickerSplit(cls, setCount, **kwargs):
                                     # precedingRange=0, followingRange=0, threshold=0,
+        if gconfig.testing.REDUCED_SYMBOL_SCOPE: raise ValueError('Do not run with reduced symbol scope, results will be inadequate.')
+
         self = cls.forAnalysis(
             initializeStockDataHandlersOnly=True,
             **kwargs
@@ -361,6 +364,12 @@ class DataManager():
         outputClassCountsDict = {}
         for k,v in tqdm.tqdm(self.stockDataHandlers.items(), desc='Collecting output class counts'):
             outputClassCountsDict[k] = self.initializeStockDataInstances([v], collectOutputClassesOnly=True, verbose=0)
+        noposCount = 0
+        for k,v in outputClassCountsDict.items():
+            if v[OutputClass.POSITIVE] > 0:
+                print(k.getTuple(), v)
+            else: noposCount += 1
+        print(f'Remaining {noposCount}/{len(outputClassCountsDict)} have no positive instances')
 
         instanceCount = 0
         for v in outputClassCountsDict.values():
@@ -374,17 +383,22 @@ class DataManager():
         tickerWindows = [[] for i in range(numberOfWindows)]
         splitRatio = gconfig.sets.minimumClassSplitRatio
 
-        ## catalog tickers in optimal-level buckets
+        ## catalog tickers into optimal-level buckets
         optimals = [[] for i in range(3)]
         nonOptimals = []
         for k,v in outputClassCountsDict.items():
             splt = v[OutputClass.POSITIVE] / (v[OutputClass.POSITIVE] + v[OutputClass.NEGATIVE])
             for i in range(len(optimals)):
-                if splitRatio - 0.01*(i+1) <= splt and splt < splitRatio + 0.02*(i+1):
+                lowerBound = splitRatio - 0.02*(i+1)
+                upperBound = splitRatio + 0.03*(i+1)
+                if lowerBound <= splt and splt < upperBound:
                     optimals[i].append(k)
                     break
                 if i == len(optimals)-1:
                     nonOptimals.append(k)
+        for indx,o in enumerate(optimals):
+            print(f'Bucket level {indx} optimals: {len(o)}')
+        print(f'Bucket non-optimals: {len(nonOptimals)}')
             
         def getWindowCountTotal(w):
             try:
@@ -392,37 +406,48 @@ class DataManager():
             except TypeError:
                 return 0
         
-        ## distribute all tickers from tlist in the window buckets, attempting to stay within setCount
-        def fitTickerListToWindows(tlist: List, additionalToleranceFactor=1, label=None):
-            startingwindex = windows.index(min(windows, key=len))
-            skiptlistindexes = []
+        ## distribute all tickers into the window buckets, attempting to stay within setCount
+        def fitTickerListToWindows(tickers: List, toleranceStart=1, toleranceStep=None, label=None):
+            startingWindowIndex = windows.index(min(windows, key=len))
+            skipIndexes = []
             breakouter = False
-            with tqdm.tqdm(total=len(tlist), desc=label) as tqdmbar:
-                while len(skiptlistindexes) < len(tlist):
-                    startinglen = len(skiptlistindexes)
-                    for windex in range(startingwindex, len(windows)+startingwindex):
+            step = 0
+            with tqdm.tqdm(total=len(tickers), desc=label) as tqdmbar:
+                while len(skipIndexes) < len(tickers):
+                    additionalToleranceFactor = toleranceStart + (shortc(toleranceStep, 0) * step)
+                    step += 1
+                    startingLength = len(skipIndexes)
+
+                    ## loop through the windows, attempting to fit a ticker in
+                    for windex in range(startingWindowIndex, len(windows)+startingWindowIndex):
                         windex = windex % len(windows)
-                        for opindex in range(len(tlist)):
-                            if opindex in skiptlistindexes: continue
-                            if getWindowCountTotal(windows[windex]) + outputClassCountsDict[tlist[opindex]][OutputClass.POSITIVE] + outputClassCountsDict[tlist[opindex]][OutputClass.NEGATIVE] < windowSize * additionalToleranceFactor:
-                                windows[windex].append(outputClassCountsDict[tlist[opindex]])
-                                tickerWindows[windex].append(tlist[opindex].getDict()) ## must go in as dict so unpickling and sql factory can work
-                                skiptlistindexes.append(opindex)
+
+                        ## loop through the tickers, seeing if any can fit in current window
+                        for opindex in range(len(tickers)):
+                            if opindex in skipIndexes: continue
+
+                            if getWindowCountTotal(windows[windex]) + outputClassCountsDict[tickers[opindex]][OutputClass.POSITIVE] + outputClassCountsDict[tickers[opindex]][OutputClass.NEGATIVE] < windowSize * additionalToleranceFactor:
+                                ## ticker can fit in window
+                                windows[windex].append(outputClassCountsDict[tickers[opindex]])
+                                tickerWindows[windex].append(tickers[opindex].getDict()) ## must go in as dict so unpickling and sql factory can work
+                                skipIndexes.append(opindex)
+
                                 tqdmbar.update()
-                                if len(skiptlistindexes) == len(tlist):
+                                if len(skipIndexes) == len(tickers):
                                     breakouter = True
                                 break
-                        if breakouter: break
+
+                        if breakouter: break 
                     
-                    if len(skiptlistindexes) == startinglen:
+                    if len(skipIndexes) == startingLength:
                         print('stuck')
                         break
-            for skp in reversed(sorted(skiptlistindexes)):
-                tlist.pop(skp)
+            for skp in reversed(sorted(skipIndexes)):
+                tickers.pop(skp)
         
         for p in range(len(optimals)):
-            fitTickerListToWindows(optimals[p], 1 + 0.03*p, label='Fitting optimals level {}'.format(p))
-        fitTickerListToWindows(nonOptimals, 1.15, label='Fitting non-optimals')
+            fitTickerListToWindows(optimals[p], toleranceStart=1 + 0.03*p, label='Fitting optimals level {}'.format(p))
+        fitTickerListToWindows(nonOptimals, toleranceStart=1.15, toleranceStep=0.05, label='Fitting non-optimals')
 
         def getWindowRatio(w):
             pos = 0
@@ -614,7 +639,7 @@ class DataManager():
         for h in tqdmLoopHandleWrapper(stockDataHandlers, verbose, desc='Initializing stock instances'):
             availableIndexes = { o: [] for o in OutputClass }
             for sindex in h.getAvailableSelections():
-                oupclass = getOutputClass(h.data, sindex, self.followingRange, self.changeType, self.changeValue)
+                oupclass = getOutputClass(h.data, sindex, self.followingRange, self.changeType, self.changeValue, h.stockPriceNormalizationMax, h.dataOffset)
 
                 if collectOutputClassesOnly:
                     outputClassCounts[oupclass] += 1
@@ -1343,19 +1368,28 @@ class DataManager():
 
 if __name__ == '__main__':
 
-    setcount = 50000
-    tsplit = DataManager.determineAllSetsTickerSplit(
-        setcount,
-        # NeuralNetworkManager().get(1641959005),
-        # assetTypes=['CS','CLA','CLB','CLC']
-        # exchange=['BATS','NASDAQ','NEO','NYSE','NYSE ARCA','NYSE MKT','TSX']
-        exchanges=dbm.getDistinctExchangesForHistoricalData(),
-        precedingRange=60, followingRange=10, threshold=0.05
-    )
-    dbm.saveTickerSplit('split{}'.format(str(int(time.time()))), setcount, tsplit)
-    exit()
-    
-    s = DataManager.forTraining(
+    ## determine ticker split for optimized use of all sets for training
+    # setcount = 10000
+    # tsplit = DataManager.determineAllSetsTickerSplit(
+    #     setcount,
+    #     # NeuralNetworkManager().get(1641959005),
+    #     # assetTypes=['CS','CLA','CLB','CLC']
+    #     # exchange=['BATS','NASDAQ','NEO','NYSE','NYSE ARCA','NYSE MKT','TSX']
+    #     # exchange=dbm.getDistinctExchangesForHistoricalData(),
+    #     precedingRange=60, followingRange=10,
+    #     changeType=ChangeType.ABSOLUTE, changeValue=4,
+        
+    #     exchange=usExchanges,
+    #     assetType=['Stock', 'CS', 'CLA', 'CLB', 'CLC'],
+    #     close=SQLArgumentObj(9.99, OperatorDict.GREATERTHAN),
+    #     requireEarningsDates=True,
+    # )
+    # dbm.saveTickerSplit('split{}'.format(str(int(time.time()))), setcount, tsplit)
+    # exit()
+    ## end
+
+
+    s: DataManager = DataManager.forTraining(
         SeriesType.DAILY,
         precedingRange=90,
         followingRange=30,

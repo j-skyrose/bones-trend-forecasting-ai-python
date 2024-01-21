@@ -92,7 +92,7 @@ def getInstancesByClass(instances, classification: SetClassificationType=None) -
             print(f'Error while sorting {i}')
     return list(classBuckets.values()) if len(classes) > 1 else classBuckets[classes[0]]
 
-def getOutputClass(data, index, followingRange, changeType, changeValue):
+def getOutputClass(data, index, followingRange, changeType, changeValue, normalizationMax=None, normalizationOffset=None):
     try:
         previousDayHigh = data[index - 1].high
         finalDayLow = data[index + followingRange].low
@@ -102,6 +102,8 @@ def getOutputClass(data, index, followingRange, changeType, changeValue):
             change = finalDayLow - previousDayHigh
     except ZeroDivisionError:
         change = 0
+    if normalizationMax:
+        change = denormalizeValue(change, normalizationMax, normalizationOffset)
     return OutputClass.POSITIVE if change >= changeValue else OutputClass.NEGATIVE
 
 def determinePrecedingRangeType(data):
@@ -221,11 +223,6 @@ def getCustomAccuracy(statsObj=None, positiveAccuracy=None, negativeAccuracy=Non
     
 
 if __name__ == '__main__':
-    # print(getMarketHolidays(2020))
-    # print(getInputVectorStats().toString())
-
-
-
     # ## nyse:mtb-
     # descfulldate = 'The company was founded August 1, 2016 in blah blah'.lower()
     # descyearonly = 'The company was founded in 1930 and is headquartered in Arden Hills, Minnesota.'.lower()
@@ -245,8 +242,4 @@ if __name__ == '__main__':
 
     # print(shortc('None', 'e'))
 
-
-    print(getInputVectorStats().toString())
-
     pass
-
