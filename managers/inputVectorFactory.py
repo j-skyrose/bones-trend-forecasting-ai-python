@@ -568,6 +568,13 @@ class InputVectorFactory(Singleton):
     # def build(self, *args):
     #     return self._inputVector(*args)
 
+def prettyPrintIVFStats(stats=None):
+    if not stats: stats = InputVectorFactory().getStats()
+    indexc = 0
+    for k in stats[InputVectorDataType.SERIES]:
+        for _ in range(stats[InputVectorDataType.SERIES][k]):
+            print(f'{indexc: >4} {k}')
+            indexc += 1
 
 if __name__ == '__main__':
     ivf: InputVectorFactory = InputVectorFactory()
@@ -576,7 +583,19 @@ if __name__ == '__main__':
     # print(ivf.getInputSize(200))
     print(ivf.getStats())
 
-    _,_,seriesSize = ivf.getInputSize()
-    precrange = 3
-    _,_,seriesArr = ivf.build(**ivf._buildMockData(precrange), sector='Technology', exchange='NYSE', stockSplits=[], etfFlag=False)
-    print(numpy.reshape(seriesArr, (precrange, seriesSize)))
+    ## to match with similarity calculation config
+    cf = gconfig
+    for ind in IndicatorType.getActuals():
+        cf.feature[indicatorsKey][ind].enabled = False
+    # cf.feature[indicatorsKey][IndicatorType.EMA200].enabled = True
+    cf.feature.dayOfWeek.enabled = False
+    cf.feature.dayOfMonth.enabled = False
+    cf.feature.monthOfYear.enabled = False
+    cf.dataForm.earningsDate.vectorSize2 = False
+    # cf.similarityCalculation.enabled = True
+    prettyPrintIVFStats(InputVectorFactory(cf).getStats())
+
+    # _,_,seriesSize = ivf.getInputSize()
+    # precrange = 3
+    # _,_,seriesArr = ivf.build(**ivf._buildMockData(precrange), sector='Technology', exchange='NYSE', stockSplits=[], etfFlag=False)
+    # print(numpy.reshape(seriesArr, (precrange, seriesSize)))
