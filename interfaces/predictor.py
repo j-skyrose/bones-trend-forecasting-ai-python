@@ -26,7 +26,7 @@ from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.stockDataHandler import StockDataHandler
 from constants.enums import AccuracyType, InputVectorDataType, OperatorDict, SeriesType
 from constants.exceptions import AnchorDateAheadOfLastDataDate, NoData, SufficientlyUpdatedDataNotAvailable
-from utils.support import Singleton, asDate, asList, shortc, shortcdict
+from utils.support import Singleton, asDate, asList, shortc, shortcdict, tqdmLoopHandleWrapper
 from globalConfig import config as gconfig
 
 ivf: InputVectorFactory = InputVectorFactory()
@@ -169,7 +169,7 @@ class Predictor(Singleton):
 
         anchorDateArg = max(anchorDates)
         nn = self._initialize(networkid=networkid, anchorDate=anchorDateArg, postPredictionWeighting=postPredictionWeighting, 
-                              skipAllDataInitialization='maxPageSize' in kwargs,
+                              skipAllDataInitialization='maxPageSize' in kwargs, verbose=verbose,
                               **kwargs)
         tickers = self.dm.symbolList
         if len(tickers) == 0:
@@ -195,17 +195,15 @@ class Predictor(Singleton):
         maxPage = self.dm.getSymbolListPageCount() if self.dm.usePaging else None
         pageLoopHandle = range(1, maxPage+1) if self.dm.usePaging else [0]
         for page in pageLoopHandle:
-            loopHandle = tickers
+            loopList = tickers
             if self.dm.usePaging:
                 self.dm.initializeAllDataForPage(page)
-                loopHandle = self.dm.getSymbolListPage(page)
+                loopList = self.dm.getSymbolListPage(page)
             if len(anchorDates) > 1:
                 loopingTickers = False
-                loopHandle = anchorDates
-            if verbose > 0:
-                loopHandle = tqdm.tqdm(loopHandle, desc='Building{}...'.format(' page {}/{}'.format(page, maxPage) if self.dm.usePaging else ''))
+                loopList = anchorDates
             
-            for tkrORdt in loopHandle:
+            for tkrORdt in tqdmLoopHandleWrapper(loopList, verbose=verbose, desc='Building{}...'.format(' page {}/{}'.format(page, maxPage) if self.dm.usePaging else '')):
                 if loopingTickers:
                     dt = anchorDates[0]
                     texchange = tkrORdt.exchange
@@ -227,7 +225,7 @@ class Predictor(Singleton):
                     predictionTickers.append(tkrORdt)
                 except (ValueError, tf.errors.InvalidArgumentError, SufficientlyUpdatedDataNotAvailable, KeyError, AnchorDateAheadOfLastDataDate, TypeError) as e:
                 # except IndexError:
-                    print(e.__class__, e)
+                    if verbose > 0: print(e.__class__, e)
                     # raise e
 
                     predictionExceptions.append(e)
@@ -313,7 +311,7 @@ class Predictor(Singleton):
                             elif phase == 2 and len(tickersJustBelowThreshold) > 0: break
 
                             ## determine weighting factors and assign ticker to appropriate set
-                            tqdmhandle = tqdm.tqdm(sortedPredictionList, desc=f'Weighting {phaseString}')
+                            tqdmhandle = tqdmLoopHandleWrapper(sortedPredictionList, verbose=verbose, desc=f'Weighting {phaseString}')
                             for s in tqdmhandle:
                                 exchange, symbol, prediction = s
                                 ## raw prediction values below appropriate threshold will not rise above it with additional weighting, so skip until next phase
@@ -350,16 +348,17 @@ class Predictor(Singleton):
                                 if numberofWeightingsLimit and weightingsCount >= numberofWeightingsLimit:
                                     break
 
-                                c = 0
-                                postfixstr = ''
-                                for exchange, symbol, factorTuple in sorted(tickersMeetingThreshold + tickersJustBelowThreshold + tickersNotMeetingThreshold, key=lambda x: weightedAccuracyLambda(x[2]), reverse=True):
-                                    if c > 2: break
-                                    if c > 0:
-                                        postfixstr += ' || '
-                                    c += 1
-                                    postfixstr += f'{exchange}:{symbol}; {float(weightedAccuracyLambda(factorTuple))*100:.3f}%'
+                                if verbose >= 1:
+                                    c = 0
+                                    postfixstr = ''
+                                    for exchange, symbol, factorTuple in sorted(tickersMeetingThreshold + tickersJustBelowThreshold + tickersNotMeetingThreshold, key=lambda x: weightedAccuracyLambda(x[2]), reverse=True):
+                                        if c > 2: break
+                                        if c > 0:
+                                            postfixstr += ' || '
+                                        c += 1
+                                        postfixstr += f'{exchange}:{symbol}; {float(weightedAccuracyLambda(factorTuple))*100:.3f}%'
 
-                                tqdmhandle.set_postfix_str(postfixstr)
+                                    tqdmhandle.set_postfix_str(postfixstr)
 
                     except (InternalError, KeyboardInterrupt):
                         pass
@@ -394,24 +393,25 @@ class Predictor(Singleton):
                 else:
                     noThresholdAdjacentTickers = True
 
-                ## output tickers and their prediction (+ factors) from the highest value set
-                print()
-                printed = 0
-                for exchange, symbol, val in outputTickers:
-                    if noThresholdAdjacentTickers and printed >= notMeetingThresholdsPrintLimit: break
-                    printval = val
-                    if postPredictionWeighting:
-                        printval = weightedAccuracyLambda(val)
-                    print(f"{exchange}:{symbol} : {printval * 100} % {f'<- {val}' if postPredictionWeighting else ''}")
-                    printed += 1
-                if postPredictionWeighting: print('Factors: predictions, network, sector, symbol, precrange')
+                if verbose >= 1:
+                    ## output tickers and their prediction (+ factors) from the highest value set
+                    print()
+                    printed = 0
+                    for exchange, symbol, val in outputTickers:
+                        if noThresholdAdjacentTickers and printed >= notMeetingThresholdsPrintLimit: break
+                        printval = val
+                        if postPredictionWeighting:
+                            printval = weightedAccuracyLambda(val)
+                        print(f"{exchange}:{symbol} : {printval * 100} % {f'<- {val}' if postPredictionWeighting else ''}")
+                        printed += 1
+                    if postPredictionWeighting: print('Factors: predictions, network, sector, symbol, precrange')
 
-                ## output summary of the predictions
-                print()
-                print(len(predictionExceptions), '/', len(predictionTickers), 'had exceptions')
-                print(len(tickersMeetingThreshold), '/', len(predictionTickers) - len(predictionExceptions), 'predicted to exceed threshold from EOD', MarketDayManager.getPreviousMarketDay(dt).isoformat(), 'to', MarketDayManager.advance(MarketDayManager.getLastMarketDay(dt), nn.stats.followingRange).isoformat())
-                if len(tickersMeetingThreshold) == 0:
-                    print(len(tickersJustBelowThreshold), '/', len(predictionTickers) - len(predictionExceptions), 'are just below the threshold')
+                    ## output summary of the predictions
+                    print()
+                    print(len(predictionExceptions), '/', len(tickers), 'had exceptions')
+                    print(len(tickersMeetingThreshold), '/', len(predictionTickers), 'predicted to exceed threshold from EOD', MarketDayManager.getPreviousMarketDay(dt).isoformat(), 'to', MarketDayManager.advance(MarketDayManager.getLastMarketDay(dt), nn.stats.followingRange).isoformat())
+                    if len(tickersMeetingThreshold) == 0:
+                        print(len(tickersJustBelowThreshold), '/', len(predictionTickers), 'are just below the threshold')
 
         return predictResults if singleSymbol else (tickersMeetingThreshold, tickersJustBelowThreshold, tickersNotMeetingThreshold)
 
