@@ -25,7 +25,7 @@ from structures.sql.sqlArgumentObj import SQLArgumentObj
 
 from constants.exceptions import APILimitReached, APIError, APITimeout, NotSupportedYet
 from utils.other import parseCommandLineOptions
-from utils.support import asDate, asDatetime, getIndex, recdotdict, shortcdict, tqdmLoopHandleWrapper
+from utils.support import asDate, asDatetime, asList, getIndex, recdotdict, shortcdict, tqdmLoopHandleWrapper
 from constants.enums import APIState, EarningsCollectionAPI, FinancialReportType, FinancialStatementType, InterestType, MarketType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
 from constants.values import tseNoCommissionSymbols, minGoogleDate
 
@@ -77,7 +77,8 @@ class Collector:
         print('Got', len(self.apiErrors), 'API errors')
         print(len(apiErrorErrors), '/', len(self.apiErrors), 'had errors while trying to update API field:', apiErrorErrors)
 
-    def _loopCollectByDate(self, api, dryrun=False):
+    def _loopCollectByDate(self, api, symbol=None, dryrun=False):
+        symbol = asList(symbol)
         batchByDate = {}
         startingPastDaysCount = self.apiManager.apis[api].priority * 365
 
@@ -113,6 +114,8 @@ class Collector:
         ## commit data only if symbols are in the given bucket
         counter = 0
         for s in tqdm.tqdm(batchBySymbol, desc='Inserting data'):
+            if symbol and s not in symbol: continue
+
             exchangeQuery = dbm.getSymbols(symbol=s, api=api)
             if len(exchangeQuery) != 1:
                 self.apiErrors.append(('-',s))
