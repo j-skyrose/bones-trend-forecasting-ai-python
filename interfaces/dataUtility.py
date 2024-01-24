@@ -139,7 +139,7 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
     ticker = TickerKeyType.fromDict(ticker)
     neginstances = getInstancesByClass(dm.stockDataInstances.values())[1]
     def getDTArg(indx): ## specifically for neg instances
-        return dm.stockDataHandlers[ticker].data[neginstances[indx].index].period_date
+        return neginstances[indx].getAnchorDay().period_date
 
     ## prepare get/insert arguments
     def prepareArgs(indx=None):

@@ -20,6 +20,10 @@ class DataPointInstance(GetMemoryUsage):
         self.index = index
         self.outputClass = outputClass
 
+    def getAnchorDay(self):
+        '''returns the full dict for the anchor day (i.e. stockDataHandler[index])'''
+        return self.stockDataHandler.data[self.index]
+
     def getInputVector(self):
         return self.buildInputVectorFunc(self.stockDataHandler, self.index)
 
