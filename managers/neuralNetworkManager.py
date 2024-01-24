@@ -45,8 +45,9 @@ class NeuralNetworkManager(Singleton):
             print(f'"saving" to {nSavePath}')
         print('done saving network', key)
 
-    def get(self, id) -> NeuralNetworkInstance:
-        return self.networks[str(id)]
+    def get(self, arg) -> NeuralNetworkInstance:
+        if type(arg) == NeuralNetworkInstance: return arg
+        return self.networks[str(arg)]
 
     def getAllNetworksBy(self, accuracyType=AccuracyType.NEGATIVE, negativeAccuracy=0.0, changeThreshold=0.0, precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, epochs=0):
         retnns = []
