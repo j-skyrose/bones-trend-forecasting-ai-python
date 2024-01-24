@@ -475,7 +475,7 @@ class DataManager():
         return getMaxIndicatorPeriod(self.config.feature[indicatorsKey].keys(), self.indicatorConfig)
 
     ## preserves much of the initialized data while mainly allowing new input vectors to be created with a different configuration
-    def setNewConfig(self, config, indicatorConfig=None,
+    def setNewConfig(self, config, indicatorConfig=None, page=1,
                      verbose=None):
         verbose = shortc(verbose, self.verbose)
 
@@ -500,14 +500,17 @@ class DataManager():
             shortcdict(self.config.training, 'changeType'),
             shortcdict(self.config.training, 'changeValue'),
         ]):
-            ## available selections will decrease
-            for sdh in self.stockDataHandlers.values():
-                sdh.maxIndicatorPeriod = newMaxIndicatorPeriod
-                sdh.determineSelections()
-            # TODO: should modify _initializeAllData to handle this re-init instead, some conditions may be missed and no use duplicating here
-            self.initializeTechnicalIndicators(verbose)
-            self.initializeStockDataInstances(refresh=True, verbose=verbose)
-            self.setupSets(verbose=verbose)
+            if self.usePaging:
+                self.initializeAllDataForPage(page)
+            else:
+                ## available selections will decrease
+                for sdh in self.stockDataHandlers.values():
+                    sdh.maxIndicatorPeriod = newMaxIndicatorPeriod
+                    sdh.determineSelections()
+                # TODO: should modify _initializeAllData to handle this re-init instead, some conditions may be missed and no use duplicating here
+                self.initializeTechnicalIndicators(verbose)
+                self.initializeStockDataInstances(refresh=True, verbose=verbose)
+                self.setupSets(verbose=verbose)
 
     def buildInputVector(self, stockDataHandler: StockDataHandler, stockDataIndex):
         symbolData = stockDataHandler.symbolData
