@@ -17,7 +17,6 @@ from typing import Tuple
 from utils.other import determinePrecedingRangeType
 from constants.values import standardExchanges
 from managers.databaseManager import DatabaseManager
-from managers.vixManager import VIXManager
 from managers.marketDayManager import MarketDayManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from managers.dataManager import DataManager
@@ -30,6 +29,8 @@ from utils.support import Singleton, asDate, asList, shortc, shortcdict, tqdmLoo
 from globalConfig import config as gconfig
 
 ivf: InputVectorFactory = InputVectorFactory()
+nnm: NeuralNetworkManager = NeuralNetworkManager()
+dbm: DatabaseManager = DatabaseManager()
 
 POSITIVE_THRESHOLD = 0.5
 JUST_BELOW_POSITIVE_THRESHOLD = 0.45
@@ -37,9 +38,6 @@ def thresholdRound(val):
     return 1 if val > POSITIVE_THRESHOLD else 0
 
 class Predictor(Singleton):
-    vixm: VIXManager = VIXManager()
-    dbc: DatabaseManager = DatabaseManager()
-    nnm: NeuralNetworkManager = NeuralNetworkManager()
 
     def __init__(self):
         self.resetTestTimes()
@@ -53,7 +51,7 @@ class Predictor(Singleton):
         exchanges = asList(shortcdict(kwargs, 'exchange', []))
         symbols = asList(shortcdict(kwargs, 'symbol', []))
 
-        nn = self.nnm.get(kwargs['networkid']) if 'networkid' in kwargs.keys() else kwargs['network']
+        nn = nnm.get(kwargs['networkid']) if 'networkid' in kwargs.keys() else kwargs['network']
         nn.load()
 
         needNewDataManager = False
@@ -320,7 +318,7 @@ class Predictor(Singleton):
 
                                 if gconfig.testing.predictor:
                                     startt = time.time()
-                                symbolInfo = self.dbc.getSymbols(exchange=exchange, symbol=symbol)[0]
+                                symbolInfo = dbm.getSymbols(exchange=exchange, symbol=symbol)[0]
                                 if gconfig.testing.predictor:
                                     self.wt_testing_getSymbolsTime += time.time() - startt
 
