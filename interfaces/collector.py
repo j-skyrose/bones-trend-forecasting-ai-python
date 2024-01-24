@@ -899,8 +899,11 @@ class Collector:
                     cur_direction = Direction.ASCENDING
                     upsertData = True
                     if ginterests:
-                         if date.fromisoformat(ginterests[-1].date) < maxdate:
-                            startdate = date.fromisoformat(ginterests[0].date)
+                         latestmonthlydate = date.fromisoformat(ginterests[-1].date)
+                         if latestmonthlydate < maxdate:
+                            latestdailydate = date.fromisoformat(dbm.getGoogleInterests(s.exchange, s.symbol, itype=InterestType.DAILY, raw=True)[-1].date)
+                            if latestmonthlydate < latestdailydate: ## monthly data is behind daily
+                                startdate = date.fromisoformat(ginterests[0].date)
                     else:
                         startdate = min(
                             maxdate - timedelta(weeks=278), ## offset >275? weeks to trigger monthly buckets
