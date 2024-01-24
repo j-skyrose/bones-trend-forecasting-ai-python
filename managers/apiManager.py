@@ -128,6 +128,14 @@ class APIManager(Singleton):
             qdate,
             verbose=verbose
         )
+    
+    def getSimpleQuote(self, symbol=None, api='fmp', verbose=0, mock=False):
+        if api != 'fmp': raise NotSupportedYet
+        return self._executeRequestWrapper(
+            api,
+            (lambda apih: apih.api.getSimpleQuote(symbol)) if not mock else (lambda apih: {'test': 'test'}),
+            verbose=verbose
+        )
 
     def getAggregates(self, api='polygon', symbol=None, multipler=None, timespan=None, fromDate=None, toDate=None, limit=50000, verbose=0):
         return self._executeRequestWrapper(
@@ -250,6 +258,7 @@ if __name__ == '__main__':
     apim = APIManager()
     # res = apim.query('alphavantage', exchange='NASDAQ', symbol='HOL', seriesType=SeriesType.DAILY_ADJUSTED)
     # print(res[-50:])
+    # r = apim.getSimpleQuote('DAL', mock=True)
     r = apim.getTickers('polygon', verbose=2, active=True, market=MarketType.STOCKS)
     print(len(r))
 

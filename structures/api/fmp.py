@@ -81,6 +81,13 @@ class FMP:
                 'period': ftype.fmp
             })
         )
+    
+    def getSimpleQuote(self, symbol):
+        return self.__responseHandler(
+            requests.get(f'{self.url}/quote-short/{symbol}', params={
+                'apikey': self.apiKey
+            })
+        )
 
     ## todo
     # TSX symbols might need to be suffixed by '.TO'
