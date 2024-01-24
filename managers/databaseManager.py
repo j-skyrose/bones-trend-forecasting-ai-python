@@ -403,6 +403,8 @@ class DatabaseManager(Singleton):
                    exchange=None, symbol=None, name=None, assetType=None, api=None, googleTopicId=None, sector=None, industry=None, founded=None,
                    ## historical data table
                    seriesType: SeriesType=None, periodDate=None, open=None, high=None, low=None, close=None, volume=None, artificial=None,
+                   ## reductions
+                   tickerExclusionList: List[Tuple[str, str]]=[],
                    ## other
                    requireEarningsDates=None, normalizationData=None, rawStmt=False, **_) -> List[SymbolsRow]:
         kwargs = {}
@@ -460,6 +462,9 @@ class DatabaseManager(Singleton):
 
         if requireEarningsDates:
             adds.append(f's.exchange||s.symbol IN (SELECT DISTINCT exchange||symbol FROM {self.getTableString("earnings_dates_c")})')
+
+        if tickerExclusionList:
+            adds.append(generateExcludeTickersSnippet(tickerExclusionList, alias='s'))
 
         ## construct WHERE portion
         if adds:
