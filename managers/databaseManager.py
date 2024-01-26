@@ -370,6 +370,12 @@ class DatabaseManager(Singleton):
             orderBy=None, excludeKeys=None, onlyColumn_asList=None) -> List[SymbolInfoPolygonDBkInactivesonlyRow]:
         return _dbGetter("symbol_info_polygon_d_bk_inactivesonly", **locals())
 
+    def getDumpStockDataDailyPolygon_basic(self,
+            ticker=None, periodDate=None,
+            preMarket=None, open=None, high=None, low=None, close=None, afterHours=None, volume=None, transactions=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[StockDataDailyPolygonDRow]:
+        return _dbGetter("stock_data_daily_polygon_d", **locals())
+
     #endregion basic generic gets - AUTO-GENERATED SECTION
     ####################################################################################################################################################################
     #region non-basic gets
@@ -908,6 +914,14 @@ class DatabaseManager(Singleton):
         stmt = 'UPDATE last_updates SET date=?, api=? WHERE exchange=? AND symbol=? AND type=?'
         self.dbc.execute(stmt, (str(currentDate), api, exchange, symbol, seriesType.name))
         # print('Data inserted and updated')
+
+    def insertStockDataDump_polygon(self, periodDate, data):
+        stmt = f"INSERT INTO {getTableString('stock_data_daily_polygon_d')}({','.join(sortedKeys(data[0]) + ['periodDate'])}) VALUES({','.join(['?' for _ in data[0]] + ['?'])})"
+        self.dbc.executemany(stmt, [keySortedValues(d) + [periodDate] for d in data])
+
+    def updateNonMarketHourStockData_polygon(self, ticker, periodDate, pre_market, after_hours):
+        stmt = f"UPDATE {getTableString('stock_data_daily_polygon_d')} SET pre_market=?, after_hours=? WHERE ticker=? and period_date=?"
+        self.dbc.execute(stmt, (pre_market, after_hours, ticker, asISOFormat(periodDate)))
 
     ## insert data in historical_data_minute table
     def insertMinuteBatchData(self, exchange, symbol, data):

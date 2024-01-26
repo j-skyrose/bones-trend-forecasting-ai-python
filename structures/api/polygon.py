@@ -12,7 +12,7 @@ from requests.models import Response
 
 from constants.exceptions import APIError, APITimeout
 from constants.enums import FinancialReportType, MarketType, OperatorDict, TimespanType
-from utils.support import asISOFormat, shortcdict
+from utils.support import asISOFormat, recdotdict, shortcdict
 
 # import codecs
 # w=codecs.getwriter("utf-8")(sys.stdout.buffer)
@@ -123,7 +123,7 @@ class Polygon:
 
     def query(self, date, verbose=0):
         rjson = self.__responseHandler(
-            requests.get(self.url + '/v2/aggs/grouped/locale/us/market/stocks/' + date, params={
+            requests.get(self.url + '/v2/aggs/grouped/locale/us/market/stocks/' + asISOFormat(date), params={
                 'apikey': self.apiKey,
                 'unadjusted': True
             }),
@@ -136,16 +136,28 @@ class Polygon:
 
         for d in range(len(data)):
             data[d] = {
-                'symbol': data[d]['T'],
+                'ticker': data[d]['T'],
                 'open': data[d]['o'],
                 'high': data[d]['h'],
                 'low': data[d]['l'],
                 'close': data[d]['c'],
-                'volume': data[d]['v']
+                'volume': data[d]['v'],
+                'transactions': shortcdict(data[d], 'n', 0)
             }
 
         if verbose == 1: print(rjson['resultsCount'],'data points retrieved')
         return data
+
+    def getNonMarketHoursStockData(self, ticker, dt, verbose=0):
+        rjson = self.__responseHandler(
+            requests.get(self.url + f'/v1/open-close/{ticker}/{asISOFormat(dt)}', params={
+                'apikey': self.apiKey,
+                'unadjusted': True
+            }),
+            verbose
+        )
+        return recdotdict(rjson)
+
 
     def getAggregates(self, symbol: str, multipler: int, timespan: TimespanType, fromDate, toDate, limit, verbose=0):
         rjson = self.__responseHandler(

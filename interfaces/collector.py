@@ -25,7 +25,7 @@ from structures.sql.sqlArgumentObj import SQLArgumentObj
 
 from constants.exceptions import APILimitReached, APIError, APITimeout, NotSupportedYet
 from utils.other import parseCommandLineOptions
-from utils.support import asDate, asDatetime, asList, getIndex, recdotdict, shortcdict, tqdmLoopHandleWrapper
+from utils.support import asDate, asDatetime, asISOFormat, asList, getIndex, recdotdict, shortcdict, tqdmLoopHandleWrapper
 from constants.enums import APIState, EarningsCollectionAPI, FinancialReportType, FinancialStatementType, InterestType, MarketType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
 from constants.values import tseNoCommissionSymbols, minGoogleDate
 
@@ -186,6 +186,82 @@ class Collector:
                     dbm.rollbackBatch()
                     raise e
             # break # do one at a time
+
+    def collectDailyStockData(self, api='polygon', direction: Direction=Direction.ASCENDING, verbose=1):
+        if api != 'polygon': raise NotSupportedYet
+
+        ## determine starting date
+        startDate = dbm.getDumpStockDataDailyPolygon_basic(sqlColumns=f"{'max' if direction == Direction.ASCENDING else 'min'}(period_date) as dt", onlyColumn_asList='dt')
+        dstep = timedelta(days=1) * (1 if direction == Direction.ASCENDING else -1)
+        if startDate[0] != None:
+            startDate = asDate(startDate[0])
+        else:
+            if direction == Direction.ASCENDING:
+                raise ValueError('No existing data, cannot collect ascending')
+            else:
+                startDate = date.today() 
+
+        currentDate = startDate + dstep
+        noDataStreakCount = 0
+        insertCount = 0
+        while True:
+            try:
+                data = self.apiManager.query(api, qdate=currentDate, verbose=verbose)
+            except APIError:
+                ## should be 403 error: unauthorized to access data for day (above/below [today - 2 years, previous day])
+                break
+
+            if len(data) == 0:
+                if verbose: print(f'No data returned for {currentDate}')
+                noDataStreakCount += 1
+                if noDataStreakCount > 4:
+                    ## exit if no data for 5 days in a row, i.e. (probably) at end of available data
+                    break
+            else: 
+                noDataStreakCount = 0
+                dbm.insertStockDataDump_polygon(asISOFormat(currentDate), data)
+                insertCount += len(data)
+
+            currentDate += dstep
+        
+        if verbose:
+            print(f'Inserted {insertCount} rows')
+
+    def collectDailyNonMarketHoursStockData(self, api='polygon', ticker=None, dt=None, verbose=1):
+        if api != 'polygon': raise NotSupportedYet
+
+        ## get tickers missing pre-market data
+        basickwargs = {}
+        if ticker: basickwargs['ticker'] = ticker
+        if dt: basickwargs['periodDate'] = [asISOFormat(d) for d in asList(dt)]
+        missingPremarketList = dbm.getDumpStockDataDailyPolygon_basic(preMarket=SQLHelpers.NULL, **basickwargs)
+
+        insertCount = 0
+        try:
+            for r in missingPremarketList:
+                try:
+                    data = self.apiManager.query(api, symbol=r.ticker, qdate=r.period_date, verbose=verbose)
+                except APIError:
+                    continue
+
+                ## check integrity of existing data
+                misMatchFields = []
+                if r.open != data['open']: misMatchFields.append('open')
+                if r.high != data['high']: misMatchFields.append('high')
+                if r.low != data['low']: misMatchFields.append('low')
+                if r.close != data['close']: misMatchFields.append('close')
+                if r.volume != data['volume']: misMatchFields.append('volume')
+                if misMatchFields: raise ValueError(f'{r.ticker} - {r.period_date} has mismatch between existing data and new non-market hours data for fields: {misMatchFields}')
+
+                dbm.updateNonMarketHourStockData_polygon(r.ticker, r.period_date, data['preMarket'], data['afterHours'])
+                insertCount += 1
+
+                if insertCount % 50 == 0: dbm.commit()
+        except KeyboardInterrupt:
+            pass
+        
+        if verbose:
+            print(f'Inserted {insertCount} rows')
 
     def startAPICollection(self, api, seriesType: SeriesType=SeriesType.DAILY, dryrun=False, **kwargs):
         typeAPIs = ['alphavantage'] #self.apiManager.getAPIList(sort=True)

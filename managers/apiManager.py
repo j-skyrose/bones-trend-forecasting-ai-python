@@ -112,18 +112,25 @@ class APIManager(Singleton):
         return recdotobj(self.__executeAPIRequest(apiHandle, lambda: requestFunc(apiHandle), verbose))
 
     def query(self, api, symbol=None, seriesType=None, qdate=None, exchange=None, fromDate=None, toDate=None, avCompact=False, verbose=0):
-        ## polygon
         if qdate:
-            queryArgs = (qdate, verbose)
-        ## neo
+            ## polygon
+            if symbol: queryArgs = (symbol, qdate, verbose)
+            else: queryArgs = (qdate, verbose)
         elif fromDate and toDate:
+            ## neo
             queryArgs = (symbol, fromDate, toDate, verbose)
-        ## alphavantage
         else:
+            ## alphavantage
             queryArgs = (seriesType, symbol, exchange, avCompact)
+        
+        requestFunc = lambda apih: apih.api.query(*queryArgs)
+        if symbol and qdate:
+            ## polygon non-market hours
+            requestFunc = lambda apih: apih.api.getNonMarketHoursStockData(*queryArgs)
+
         return self._executeRequestWrapper(
             api,
-            lambda apih: apih.api.query(*queryArgs),
+            requestFunc,
             seriesType,
             qdate,
             verbose=verbose

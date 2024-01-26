@@ -937,3 +937,19 @@ class SymbolInfoPolygonDBkInactivesonlyRow():
 		self.tickerSuffix = tickerSuffixValue
 		self.address2 = address2Value
 
+## TABLE: stock_data_daily_polygon_d ######################################
+stockDataDailyPolygonDSnakeCaseTableColumns = ['ticker', 'period_date', 'pre_market', 'open', 'high', 'low', 'close', 'after_hours', 'volume', 'transactions']
+stockDataDailyPolygonDCamelCaseTableColumns = ['ticker', 'periodDate', 'preMarket', 'open', 'high', 'low', 'close', 'afterHours', 'volume', 'transactions']
+class StockDataDailyPolygonDRow():
+    def __init__(self, tickerValue: str, periodDateValue: str, preMarketValue: float, openValue: float, highValue: float, lowValue: float, closeValue: float, afterHoursValue: float, volumeValue: float, transactionsValue: float):
+        self.ticker = tickerValue
+        self.periodDate = periodDateValue
+        self.preMarket = preMarketValue
+        self.open = openValue
+        self.high = highValue
+        self.low = lowValue
+        self.close = closeValue
+        self.afterHours = afterHoursValue
+        self.volume = volumeValue
+        self.transactions = transactionsValue
+

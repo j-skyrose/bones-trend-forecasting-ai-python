@@ -99,9 +99,11 @@ class GetMemoryUsage(object):
         return sz + sys.getsizeof(cls)
 
 def sortedKeys(d):
+    '''ensures consistent order of keys'''
     return sorted(d.keys())
 
 def keySortedValues(d):
+    '''ensures consistent order of values according to order of keys'''
     return [d[k] for k in sortedKeys(d)]
 
 def shortc(val, e):
