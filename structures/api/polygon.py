@@ -44,7 +44,7 @@ class Polygon:
     "type": "CS"
     '''
     #endregion
-    def getTickers(self, ticker=None, market:MarketType=None, cik=None, active=None, verbose=0):
+    def getTickers(self, ticker=None, market:MarketType=MarketType.STOCKS, cik=None, active=None, verbose=0):
         '''https://polygon.io/docs/stocks/get_v3_reference_tickers'''
 
         params = {
@@ -194,7 +194,7 @@ class Polygon:
         return data
 
     def __responseHandler(self, resp: Response, verbose=0):
-        if verbose == 1: print('made request', resp.url)
+        if verbose: print('made request', resp.url)
 
         if resp.ok:
             rjson = resp.json()

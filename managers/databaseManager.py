@@ -35,7 +35,7 @@ configManager: StaticConfigManager = StaticConfigManager()
 
 ## generate before import to ensure things are up-to-date for the current execution
 generateDatabaseAnnotationObjectsFile()
-from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, CboeVolatilityIndexRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow
+from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, CboeVolatilityIndexRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, SymbolInfoAlphavantageDRow
 from managers._generatedDatabaseExtras.databaseRowObjects import symbolsSnakeCaseTableColumns, historicalDataSnakeCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns
 
 class DatabaseManager(Singleton):
@@ -375,6 +375,12 @@ class DatabaseManager(Singleton):
             preMarket=None, open=None, high=None, low=None, close=None, afterHours=None, volume=None, transactions=None,
             orderBy=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[StockDataDailyPolygonDRow]:
         return _dbGetter("stock_data_daily_polygon_d", **locals())
+
+    def getDumpSymbolInfoAlphavantage_basic(self,
+            exchange=None, symbol=None, delistingDate=None,
+            name=None, assetType=None, ipoDate=None, status=None, asOfDate=None, description=None, evToRevenue=None, trailingPe=None, peRatio=None, priceToBookRatio=None, dividendDate=None, country=None, currency=None, marketCapitalization=None, beta=None, quarterlyRevenueGrowthYoy=None, operatingMarginTtm=None, pegRatio=None, industry=None, exDividendDate=None, address=None, priceToSalesRatioTtm=None, evToEbitda=None, revenuePerShareTtm=None, grossProfitTtm=None, dilutedEpsttm=None, returnOnAssetsTtm=None, fiscalYearEnd=None, cik=None, ebitda=None, bookValue=None, profitMargin=None, latestQuarter=None, analystTargetPrice=None, returnOnEquityTtm=None, sharesOutstanding=None, quarterlyEarningsGrowthYoy=None, forwardPe=None, revenueTtm=None, eps=None, dividendYield=None, dividendPerShare=None, sector=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[SymbolInfoAlphavantageDRow]:
+        return _dbGetter("symbol_info_alphavantage_d", **locals())
 
     #endregion basic generic gets - AUTO-GENERATED SECTION
     ####################################################################################################################################################################
@@ -1396,6 +1402,23 @@ class DatabaseManager(Singleton):
                 args = [d[k] for k in sortedKeys(d) if k not in actualPKColsGenerator(d)] + [d[k] for k in sortedKeys(d) if k in actualPKColsGenerator(d)]
                 self.dbc.execute(stmt, args)
 
+    def insertTickersDump_alphavantage(self, data: List[Dict], upsert=True):
+        data = asList(data)
+        stmtGenerator = lambda rowObj: f"INSERT {'OR IGNORE' if upsert else ''} INTO {self.getTableString('symbol_info_alphavantage_d')}(`{'`,`'.join(sortedKeys(rowObj))}`) VALUES ({generateCommaSeparatedQuestionMarkString(rowObj.keys())})"
+        for d in data:
+            stmt = stmtGenerator(d)
+            args = keySortedValues(d)
+            self.dbc.execute(stmt, args)
+
+        if upsert:
+            possiblePKCols = sorted(['exchange', 'symbol', 'delisting_date'])
+            actualPKColsGenerator = lambda rowObj: [pk for pk in possiblePKCols if pk in sortedKeys(rowObj)]
+            stmtGenerator = lambda rowObj: f"UPDATE {self.getTableString('symbol_info_alphavantage_d')} SET {','.join([c + '=?' for c in sortedKeys(rowObj) if c not in actualPKColsGenerator(rowObj)])} WHERE {' AND '.join([c + '=?' for c in actualPKColsGenerator(rowObj)])}"
+            for d in data:
+                stmt = stmtGenerator(d)
+                args = [d[k] for k in sortedKeys(d) if k not in actualPKColsGenerator(d)] + [d[k] for k in sortedKeys(d) if k in actualPKColsGenerator(d)]
+                self.dbc.execute(stmt, args)
+
     #endregion
     ####################################################################################################################################################################
     #region deletes removals
@@ -1469,6 +1492,10 @@ class DatabaseManager(Singleton):
         stmt = f'DELETE FROM {self.getTableString("symbol_info_polygon_d")}'
         return self.dbc.execute(stmt + additionalStmt, arguments).fetchall()
 
+    def deleteDumpTicker_alphavantage(self, exchange, symbol, delisting_date):
+        additionalStmt, arguments = generateSQLSuffixStatementAndArguments(**locals())
+        stmt = f'DELETE FROM {self.getTableString("symbol_info_alphavantage_d")}'
+        return self.dbc.execute(stmt + additionalStmt, arguments).fetchall()
 
     #endregion
     ####################################################################################################################################################################

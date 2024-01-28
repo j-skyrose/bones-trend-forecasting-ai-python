@@ -953,3 +953,17 @@ class StockDataDailyPolygonDRow():
         self.volume = volumeValue
         self.transactions = transactionsValue
 
+## TABLE: symbol_info_alphavantage_d ######################################
+symbolInfoAlphavantageDSnakeCaseTableColumns = ['exchange', 'symbol', 'delisting_date', 'name', 'asset_type', 'ipo_date', 'status', 'as_of_date']
+symbolInfoAlphavantageDCamelCaseTableColumns = ['exchange', 'symbol', 'delistingDate', 'name', 'assetType', 'ipoDate', 'status', 'asOfDate']
+class SymbolInfoAlphavantageDRow():
+    def __init__(self, exchangeValue: str, symbolValue: str, delistingDateValue: str, nameValue: str, assetTypeValue: str, ipoDateValue: str, statusValue: str, asOfDateValue: str):
+        self.exchange = exchangeValue
+        self.symbol = symbolValue
+        self.delistingDate = delistingDateValue
+        self.name = nameValue
+        self.assetType = assetTypeValue
+        self.ipoDate = ipoDateValue
+        self.status = statusValue
+        self.asOfDate = asOfDateValue
+

@@ -217,37 +217,42 @@ class APIManager(Singleton):
                    verbose=0, **kwargs):
         '''Query all ticker symbols which are supported by the given API'''
 
-        if api != 'polygon': raise NotSupportedYet()
+        if api not in ['polygon', 'alphavantage']: raise NotSupportedYet()
 
         apiHandle = self.apis[api]
 
         pageIndex = 1
         tickers = []
         resp = self.__executeAPIRequest(apiHandle, lambda: apiHandle.api.getTickers(verbose=verbose, **kwargs), verbose=verbose)
-        while True:
-            data = resp['results']
 
-            if verbose: print(len(data),'tickers retrieved')
-            if onlyPage is None or pageIndex == onlyPage:
-                tickers.extend(data)
+        if api == 'alphavantage':
+            return resp
+        elif api == 'polygon':
+            while True:
+                data = resp['results']
 
-            if (onlyPage is not None and pageIndex == onlyPage) or (limit is not None and len(tickers) >= limit):
-                if limit is not None: tickers = tickers[:limit]
-                break ## got required page/amount, no need to request further
-            if 'next_url' in resp.keys():
-                if verbose: print('has next url')
-                resp = self.__executeAPIRequest(apiHandle, lambda: apiHandle.api.getNextURL(resp['next_url']), verbose=verbose)
-            else:
-                if verbose: print('was last page')
-                break
-            pageIndex += 1
-        
-        return tickers
+                if verbose: print(len(data),'tickers retrieved')
+                if onlyPage is None or pageIndex == onlyPage:
+                    tickers.extend(data)
 
-    def getTickerDetails(self, api, ticker, asOfDate=None, verbose=0):
+                if (onlyPage is not None and pageIndex == onlyPage) or (limit is not None and len(tickers) >= limit):
+                    if limit is not None: tickers = tickers[:limit]
+                    break ## got required page/amount, no need to request further
+                if 'next_url' in resp.keys():
+                    if verbose: print('has next url')
+                    resp = self.__executeAPIRequest(apiHandle, lambda: apiHandle.api.getNextURL(resp['next_url']), verbose=verbose)
+                else:
+                    if verbose: print('was last page')
+                    break
+                pageIndex += 1
+            
+            return tickers
+
+    def getTickerDetails(self, api, ticker, verbose=0, **kwargs):
+        '''additional kwargs: exchange, asOfDate'''
         return self._executeRequestWrapper(
             api,
-            lambda apih: apih.api.getTickerDetails(ticker, asOfDate=asOfDate, verbose=verbose),
+            lambda apih: apih.api.getTickerDetails(ticker, verbose=verbose, **kwargs),
             verbose=verbose
         )
 

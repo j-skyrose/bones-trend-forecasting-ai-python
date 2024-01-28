@@ -65,13 +65,36 @@ def convertToPascalCase(string):
     ret = convertToCamelCase(string)
     return str(ret[0]).capitalize() + ret[1:]
 
-def convertToSnakeCase(string):
-    '''exampleStringText -> example_string_text'''
-    ret = ''
+def convertToSnakeCase(arg):
+    '''exampleStringText -> example_string_text\n
+       for acronyms this conversion is one-way'''
+
+    if isinstance(arg, list):
+        if arg and isinstance(arg[0], dict):
+            for a in arg:
+                for k in list(a.keys()):
+                    snkk = convertToSnakeCase(k)
+                    if k != snkk:
+                        ## i.e. not in snake case, need to replace
+                        a[snkk] = a[k]
+                        del a[k]
+            return arg
+        else:
+            return [convertToSnakeCase(a) for a in arg]
+
+    ## otherwise arg is a normal string
+    words = []
     char: str
-    for idx,char in enumerate(string):
-        if idx != 0 and char.isupper(): ret += '_'
-        ret += char.lower()
+    for char in arg:
+        if len(words) == 0 or char.isupper(): words.append(char.lower())
+        else: words[-1] += char
+    
+    ret = ''
+    for windx,w in enumerate(words):
+        if len(ret) == 0: ret += w
+        elif len(w) == 1 and len(words[windx-1]) == 1: ret += w
+        else: ret += f'_{w}'
+
     return ret
 
 def isNormalizationColumn(c):
