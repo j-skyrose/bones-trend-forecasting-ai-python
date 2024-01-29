@@ -1,5 +1,7 @@
 from datetime import date
 
+tab = '    '
+
 normalizationColumnPrefix = 'highest'
 defaultConfigFileSection = 'DEFAULT'
 indicatorsKey = 'indicators'
