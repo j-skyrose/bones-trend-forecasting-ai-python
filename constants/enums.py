@@ -172,6 +172,30 @@ class SQLInsertHelpers(Enum):
     REPLACE = ' OR REPLACE '
     ROLLBACK = ' OR ROLLBACK '
 
+class AdvancedOrdering(Enum):
+    def __init__(self, val:str):
+        self.sqlDirection:Direction = Direction.ASCENDING if val.split('_')[-1] == 'ASC' else Direction.DESCENDING
+
+    VOLUME_ASC = 'VOLUME_ASC'
+    VOLUME_DESC = 'VOLUME_DESC'
+    GOOGLEINTEREST_ASC = 'GOOGLEINTEREST_ASC'
+    GOOGLEINTEREST_DESC = 'GOOGLEINTEREST_DESC'
+    S_5050_VOLUMEGI_ASC = 'S_5050_VOLUMEGI_ASC'
+    S_5050_VOLUMEGI_DESC = 'S_5050_VOLUMEGI_DESC'
+
+    @classmethod
+    def getVolumeEnums(cls):
+        return [cls.VOLUME_ASC, cls.VOLUME_DESC]
+
+    @classmethod
+    def getGoogleInterestEnums(cls):
+        return [cls.GOOGLEINTEREST_ASC, cls.GOOGLEINTEREST_DESC]
+
+    @classmethod
+    def get5050Enums(cls):
+        return [cls.S_5050_VOLUMEGI_ASC, cls.S_5050_VOLUMEGI_DESC]
+
+
 class OperatorDict(Enum):
     def __init__(self, a, b, c=None, d=None):
         self.function = a

@@ -212,7 +212,7 @@ def _dbGetter(table, sqlColumns='*', onlyColumn_asList=None, **kwargs):
     additionalStmt, arguments = generateSQLSuffixStatementAndArguments(**kwargs)
     stmt = f'SELECT {",".join(asList(sqlColumns))} FROM {getTableString(table)}' + additionalStmt
     rows = dbm.dbc.execute(stmt, arguments).fetchall()
-    if onlyColumn_asList:
+    if onlyColumn_asList and len(rows) > 0:
         return [r[onlyColumn_asList] for r in rows]
     else:
         return rows
@@ -329,7 +329,7 @@ def generateDatabaseGeneralizedGettersForDBM():
                 astring = f'{convertToCamelCase(c.name)}=None'
                 if c['pk']: argumentPKStrings.append(astring)
                 else: argumentStrings.append(astring)
-            suffixArgumentStrings = ['orderBy=None', 'excludeKeys=None', 'onlyColumn_asList=None']
+            suffixArgumentStrings = ['orderBy=None', 'excludeKeys=None', 'onlyColumn_asList=None', 'sqlColumns=\'*\'']
 
             argumentLineSeparator = f',\n{tab}{tab}{tab}'
             arglists = [['self']]

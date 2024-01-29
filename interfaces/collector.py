@@ -1071,6 +1071,7 @@ class Collector:
         insertcount = 0
         uniquedates = set()
         insertLoopTuples = []
+        firstIntegrityError = True
         for a in collectionConfig.keys():
             for d in collectionConfig[a][parsedDataKey]:
                 insertLoopTuples.append((a,d))
@@ -1079,7 +1080,10 @@ class Collector:
                 if not dryrun: dbm.insertEarningsDateDump(api, **dkwargs)
                 insertcount += 1
                 uniquedates.add(dkwargs['earningsDate'])
-            except sqlite3.IntegrityError:
+            except sqlite3.IntegrityError as e:
+                if firstIntegrityError: 
+                    print(e)
+                    firstIntegrityError = False
                 pass
 
         print(f'got data for {len(uniquedates)} days')
