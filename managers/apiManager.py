@@ -121,7 +121,7 @@ class APIManager(Singleton):
             queryArgs = (symbol, fromDate, toDate, verbose)
         else:
             ## alphavantage
-            queryArgs = (seriesType, symbol, exchange, avCompact)
+            queryArgs = (seriesType, symbol, exchange, avCompact, verbose)
         
         requestFunc = lambda apih: apih.api.query(*queryArgs)
         if symbol and qdate:

@@ -202,10 +202,10 @@ class Polygon:
             ## some error in response, is either message or date out of allowed range
             if 'error' in rjson.keys():
                 print('APIError', resp, rjson)
-                raise APIError
+                raise APIError(rjson['error'])
             elif len(rjson.keys()) == 1:
                 print('APIError', resp, rjson)
-                raise APIError
+                raise APIError(list(rjson.keys())[0])
                 # raise APITimeout
 
             if verbose == 2: print('got response', rjson)
@@ -214,8 +214,8 @@ class Polygon:
         elif resp.status_code == 429:
             raise APITimeout
         else:
-            print('APIError' ,resp)
-            raise APIError
+            print('APIError', resp)
+            raise APIError(resp.status_code)
 
     def getFinancials(self, symbol, ftype: FinancialReportType):
         return self.__responseHandler(

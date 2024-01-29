@@ -26,7 +26,7 @@ from structures.sql.sqlArgumentObj import SQLArgumentObj
 from constants.exceptions import APILimitReached, APIError, APITimeout, NotSupportedYet
 from utils.dbSupport import convertToSnakeCase
 from utils.other import parseCommandLineOptions
-from utils.support import asDate, asDatetime, asISOFormat, asList, getIndex, recdotdict, shortcdict, tqdmLoopHandleWrapper
+from utils.support import asDate, asDatetime, asISOFormat, asList, getIndex, getItem, recdotdict, shortcdict, tqdmLoopHandleWrapper
 from constants.enums import APIState, EarningsCollectionAPI, FinancialReportType, FinancialStatementType, InterestType, MarketType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
 from constants.values import tseNoCommissionSymbols, minGoogleDate
 
@@ -47,6 +47,7 @@ class Collector:
     def __updateSymbolsAPIField(self, api, exchange, symbol, val):
         dbm.dbc.execute('UPDATE symbols SET api_'+api+'=? WHERE exchange=? AND symbol=?',(val, exchange, symbol))
 
+    ## TODO: decommission? new dump method does not use last updated table -> _loopCollectBySymbol_new
     def _loopCollectBySymbol(self, api, symbols, seriesType):
         updatedCount = 0
         apiErrorErrors = []
@@ -78,6 +79,7 @@ class Collector:
         print('Got', len(self.apiErrors), 'API errors')
         print(len(apiErrorErrors), '/', len(self.apiErrors), 'had errors while trying to update API field:', apiErrorErrors)
 
+    ## TODO: decommission? new dump method does not use last updated table -> _loopCollectByDate_new
     def _loopCollectByDate(self, api, symbol=None, dryrun=False):
         symbol = asList(symbol)
         batchByDate = {}
@@ -188,28 +190,43 @@ class Collector:
                     raise e
             # break # do one at a time
 
-    def collectDailyStockData(self, api='polygon', direction: Direction=Direction.ASCENDING, verbose=1):
-        if api != 'polygon': raise NotSupportedYet
+    def _loopCollectByDate_new(self, api, direction: Direction=Direction.ASCENDING, startDate=None, symbol=None, limit=None, dryrun=False, verbose=1):
+        if api not in ['polygon']: raise NotSupportedYet
+
+        getFunction = getattr(dbm, f'getDumpStockDataDaily{api.capitalize()}_basic')
+        insertFunction = getattr(dbm, f'insertStockDataDump_{api}')
 
         ## determine starting date
-        startDate = dbm.getDumpStockDataDailyPolygon_basic(sqlColumns=f"{'max' if direction == Direction.ASCENDING else 'min'}(period_date) as dt", onlyColumn_asList='dt')
         dstep = timedelta(days=1) * (1 if direction == Direction.ASCENDING else -1)
-        if startDate[0] != None:
-            startDate = asDate(startDate[0])
-        else:
-            if direction == Direction.ASCENDING:
-                raise ValueError('No existing data, cannot collect ascending')
+        if not startDate:
+            startDate = getFunction(sqlColumns=f"{'max' if direction == Direction.ASCENDING else 'min'}(period_date) as dt", onlyColumn_asList='dt')
+            if startDate[0] != None:
+                startDate = asDate(startDate[0])
             else:
-                startDate = date.today() 
+                if direction == Direction.ASCENDING:
+                    raise ValueError('No existing data, cannot collect ascending')
+                else:
+                    startDate = date.today()
+            currentDate = startDate + dstep
+        else:
+            currentDate = asDate(startDate)
 
-        currentDate = startDate + dstep
+        ## collect data
+        symbol = asList(symbol)
         noDataStreakCount = 0
+        dayCount = 0
+        daysWithData = 0
         insertCount = 0
+        if verbose: print(f'Starting collection on {currentDate}')
         while True:
             try:
                 data = self.apiManager.query(api, qdate=currentDate, verbose=verbose)
-            except APIError:
-                ## should be 403 error: unauthorized to access data for day (above/below [today - 2 years, previous day])
+            except APIError as e:
+                if verbose:
+                    if e.args[0] == 403:
+                        ## 403 error: unauthorized to access data for day (above/below [today - 2 years, previous day])
+                        print('Halting due to 403 error, date was likely outside of authorized range')
+                    else: print('Halting due to unexpected API error')
                 break
 
             if len(data) == 0:
@@ -218,15 +235,109 @@ class Collector:
                 if noDataStreakCount > 4:
                     ## exit if no data for 5 days in a row, i.e. (probably) at end of available data
                     break
-            else: 
+            else:
                 noDataStreakCount = 0
-                dbm.insertStockDataDump_polygon(asISOFormat(currentDate), data)
-                insertCount += len(data)
+                daysWithData += 1
+
+                ## insert data to DB
+                if verbose: print('Inserting into database', end='\r')
+                filteredData = [d for d in data if not symbol or d['ticker'] in symbol]
+                if not dryrun:
+                    insertFunction(asISOFormat(currentDate), filteredData)
+                insertCount += len(filteredData)
+                dbm.commit()
 
             currentDate += dstep
+            dayCount += 1
+            if limit and dayCount >= limit: break
         
         if verbose:
-            print(f'Inserted {insertCount} rows')
+            print(f"{'Would insert' if dryrun else 'Inserted'} {insertCount} rows for {dayCount} days ({len(daysWithData)} actual)")
+        
+    def _loopCollectBySymbol_new(self, api='alphavantage', symbol=None, seriesType: SeriesType=SeriesType.DAILY, active=True, limit=None, dryrun=False, verbose=1):
+        if api not in ['alphavantage']: raise NotSupportedYet
+
+        getStockDataFunction = getattr(dbm, f'getDumpStockDataDaily{api.capitalize()}_basic')
+        getTickerInfoFunction = getattr(dbm, f'getDumpSymbolInfo{api.capitalize()}_basic')
+        insertFunction = getattr(dbm, f'insertStockDataDump_{api}')
+
+        ## determine symbols to collect for
+        symbol = asList(symbol)
+        if not symbol:
+            hasData = getStockDataFunction(sqlColumns='DISTINCT exchange,symbol')
+            allTickers = getTickerInfoFunction(status='Active' if active else ('Delisted' if active == False else None), sqlColumns='DISTINCT exchange,symbol')
+            noDataSymbols = []
+            for t in allTickers:
+                if not getItem(hasData, lambda x: (x.exchange, x.symbol) == (t.exchange, t.symbol)):
+                    noDataSymbols.append((t.exchange, t.symbol))
+            symbol = noDataSymbols
+        if limit: symbol = symbol[:limit]
+
+        exchangeErrors = []
+        apiErrors = []
+        noDataErrors = []
+        successCount = 0
+        insertCount = 0
+        if verbose: print(f'Starting collection for {len(symbol)} symbols')
+        for s in symbol:
+            if isinstance(s, tuple):
+                exchange, symbl = s
+            else:
+                ## determine correct exchange for the symbol
+                symbl = s
+                tickerInfo = getTickerInfoFunction(symbol=symbl, sqlColumns='DISTINCT exchange', onlyColumn_asList='exchange')
+                if len(tickerInfo) != 1:
+                    exchangeErrors.append(symbl)
+                    if verbose:
+                        if len(tickerInfo) == 0:
+                            print(f'No exchange found for {symbl}')
+                        elif len(tickerInfo) > 1:
+                            print(f'Too many exchanges found for {symbl}: {tickerInfo}')
+                    continue
+                
+                exchange = tickerInfo[0]
+            
+            ## call API
+            try:
+                if not dryrun:
+                    data = self.apiManager.query(api, exchange=exchange, symbol=symbl, seriesType=seriesType, verbose=verbose)
+                else: print(f'Would get data for {exchange}:{symbl}')
+            except APIError as e:
+                if verbose: print(f'APIError for {symbl}')
+                apiErrors.append(symbl)
+                continue
+            except APILimitReached:
+                if verbose: print('API limit reached')
+                break
+
+            ## insert data
+            if dryrun: continue
+            elif len(data) == 0:
+                if verbose: print(f'No data returned for {exchange}:{symbl}')
+                noDataErrors.append(symbl)
+            else:
+                ## insert data to DB
+                if verbose: print('Inserting into database', end='\r')
+                insertFunction(exchange, symbl, data)
+                insertCount += len(data)
+                successCount += 1
+                dbm.commit()
+
+        if verbose:
+            if exchangeErrors: print(f'{len(exchangeErrors)} symbols had exchange errors: {exchangeErrors}')
+            if apiErrors: print(f'{len(apiErrors)} symbols had API errors: {apiErrors}')
+            if noDataErrors: print(f'{len(noDataErrors)} symbols had no data returned: {noDataErrors}')
+            print(f"{'Would insert' if dryrun else 'Inserted'} {insertCount if not dryrun else '?'} rows for {successCount - len(exchangeErrors) - len(apiErrors) - len(noDataErrors)}/{len(symbol)} symbols")
+
+    def collectDailyStockData(self, api='polygon', seriesType: SeriesType=SeriesType.DAILY, direction: Direction=Direction.ASCENDING, startDate=None, symbol=None, active=True, limit=None, dryrun=False, verbose=1):
+        if api not in ['polygon', 'alphavantage']: raise NotSupportedYet
+
+        if api in ['polygon']:
+            ## date-based data APIs
+            self._loopCollectByDate_new(api, direction=direction, startDate=startDate, symbol=symbol, limit=limit, dryrun=dryrun, verbose=verbose)
+        elif api in 'alphavantage':
+            ## symbol-based data APIs
+            self._loopCollectBySymbol_new(api, symbol=symbol, seriesType=seriesType, active=active, limit=limit, dryrun=dryrun, verbose=verbose)
 
     def collectDailyNonMarketHoursStockData(self, api='polygon', ticker=None, dt=None, verbose=1):
         if api != 'polygon': raise NotSupportedYet
@@ -251,10 +362,10 @@ class Collector:
                 if r.high != data['high']: misMatchFields.append('high')
                 if r.low != data['low']: misMatchFields.append('low')
                 if r.close != data['close']: misMatchFields.append('close')
-                if r.volume != data['volume']: misMatchFields.append('volume')
+                if r.volume != shortcdict(data, 'volume', 0): misMatchFields.append('volume')
                 if misMatchFields: raise ValueError(f'{r.ticker} - {r.period_date} has mismatch between existing data and new non-market hours data for fields: {misMatchFields}')
 
-                dbm.updateNonMarketHourStockData_polygon(r.ticker, r.period_date, data['preMarket'], data['afterHours'])
+                dbm.updateNonMarketHourStockData_polygon(r.ticker, r.period_date, shortcdict(data, 'preMarket', -1), shortcdict(data, 'afterHours', -1))
                 insertCount += 1
 
                 if insertCount % 50 == 0: dbm.commit()
@@ -264,6 +375,7 @@ class Collector:
         if verbose:
             print(f'Inserted {insertCount} rows')
 
+    ## TODO: decommission? replaced with collectDailyStockData and dump tables
     def startAPICollection(self, api, seriesType: SeriesType=SeriesType.DAILY, dryrun=False, **kwargs):
         typeAPIs = ['alphavantage'] #self.apiManager.getAPIList(sort=True)
         nonTypeAPIs = ['polygon']

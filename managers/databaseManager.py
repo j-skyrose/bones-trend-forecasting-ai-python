@@ -35,7 +35,7 @@ configManager: StaticConfigManager = StaticConfigManager()
 
 ## generate before import to ensure things are up-to-date for the current execution
 generateDatabaseAnnotationObjectsFile()
-from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, CboeVolatilityIndexRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, SymbolInfoAlphavantageDRow
+from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, CboeVolatilityIndexRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow
 from managers._generatedDatabaseExtras.databaseRowObjects import symbolsSnakeCaseTableColumns, historicalDataSnakeCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns
 
 class DatabaseManager(Singleton):
@@ -381,6 +381,12 @@ class DatabaseManager(Singleton):
             name=None, assetType=None, ipoDate=None, status=None, asOfDate=None, description=None, evToRevenue=None, trailingPe=None, peRatio=None, priceToBookRatio=None, dividendDate=None, country=None, currency=None, marketCapitalization=None, beta=None, quarterlyRevenueGrowthYoy=None, operatingMarginTtm=None, pegRatio=None, industry=None, exDividendDate=None, address=None, priceToSalesRatioTtm=None, evToEbitda=None, revenuePerShareTtm=None, grossProfitTtm=None, dilutedEpsttm=None, returnOnAssetsTtm=None, fiscalYearEnd=None, cik=None, ebitda=None, bookValue=None, profitMargin=None, latestQuarter=None, analystTargetPrice=None, returnOnEquityTtm=None, sharesOutstanding=None, quarterlyEarningsGrowthYoy=None, forwardPe=None, revenueTtm=None, eps=None, dividendYield=None, dividendPerShare=None, sector=None,
             orderBy=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[SymbolInfoAlphavantageDRow]:
         return _dbGetter("symbol_info_alphavantage_d", **locals())
+
+    def getDumpStockDataDailyAlphavantage_basic(self,
+            exchange=None, symbol=None, periodDate=None,
+            open=None, high=None, low=None, close=None, volume=None,
+            orderBy=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[StockDataDailyAlphavantageDRow]:
+        return _dbGetter("stock_data_daily_alphavantage_d", **locals())
 
     #endregion basic generic gets - AUTO-GENERATED SECTION
     ####################################################################################################################################################################
@@ -922,12 +928,17 @@ class DatabaseManager(Singleton):
         # print('Data inserted and updated')
 
     def insertStockDataDump_polygon(self, periodDate, data):
-        stmt = f"INSERT INTO {getTableString('stock_data_daily_polygon_d')}({','.join(sortedKeys(data[0]) + ['periodDate'])}) VALUES({','.join(['?' for _ in data[0]] + ['?'])})"
+        stmt = f"INSERT OR IGNORE INTO {getTableString('stock_data_daily_polygon_d')}({','.join(sortedKeys(data[0]) + ['period_date'])}) VALUES ({','.join(['?' for _ in data[0]] + ['?'])})"
         self.dbc.executemany(stmt, [keySortedValues(d) + [periodDate] for d in data])
 
     def updateNonMarketHourStockData_polygon(self, ticker, periodDate, pre_market, after_hours):
         stmt = f"UPDATE {getTableString('stock_data_daily_polygon_d')} SET pre_market=?, after_hours=? WHERE ticker=? and period_date=?"
         self.dbc.execute(stmt, (pre_market, after_hours, ticker, asISOFormat(periodDate)))
+
+    def insertStockDataDump_alphavantage(self, exchange, symbol, data):
+        someDataElement = list(data.values())[0]
+        stmt = f"INSERT OR IGNORE INTO {getTableString('stock_data_daily_alphavantage_d')}({','.join(sortedKeys(someDataElement) + ['exchange','symbol','period_date'])}) VALUES ({','.join(['?' for _ in someDataElement] + ['?','?','?'])})"
+        self.dbc.executemany(stmt, [keySortedValues(v) + [exchange, symbol, k] for k,v in data.items()])        
 
     ## insert data in historical_data_minute table
     def insertMinuteBatchData(self, exchange, symbol, data):

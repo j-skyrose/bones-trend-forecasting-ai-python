@@ -114,14 +114,15 @@ class Alphavantage:
         )
 
 
-    def query(self, type, symbol, exchange, compact=False):
+    def query(self, type, symbol, exchange, compact=False, verbose=1):
         rjson = self.__responseHandler(
             requests.get(self.url, params={
                 'apikey': self.apiKey,
                 'function': type.function,
                 'outputsize': 'compact' if compact else 'full', ## compact only returns latest 100 data points
                 'symbol': self.__formatSymbol(exchange, symbol)
-            })
+            }),
+            verbose=verbose
         )
         data = rjson[type.description]
         for d in data.keys():
@@ -133,5 +134,5 @@ class Alphavantage:
                 'volume': data[d]['5. volume']
             }
 
-        print(len(data.keys()),'data points retrieved')
+        if verbose: print(len(data.keys()),'data points retrieved')
         return data

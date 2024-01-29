@@ -954,10 +954,10 @@ class StockDataDailyPolygonDRow():
         self.transactions = transactionsValue
 
 ## TABLE: symbol_info_alphavantage_d ######################################
-symbolInfoAlphavantageDSnakeCaseTableColumns = ['exchange', 'symbol', 'delisting_date', 'name', 'asset_type', 'ipo_date', 'status', 'as_of_date']
-symbolInfoAlphavantageDCamelCaseTableColumns = ['exchange', 'symbol', 'delistingDate', 'name', 'assetType', 'ipoDate', 'status', 'asOfDate']
+symbolInfoAlphavantageDSnakeCaseTableColumns = ['exchange', 'symbol', 'delisting_date', 'name', 'asset_type', 'ipo_date', 'status', 'as_of_date', 'description', 'ev_to_revenue', 'trailing_pe', 'pe_ratio', 'price_to_book_ratio', 'dividend_date', 'country', 'currency', 'market_capitalization', 'beta', 'quarterly_revenue_growth_yoy', 'operating_margin_ttm', 'peg_ratio', 'industry', 'ex_dividend_date', 'address', 'price_to_sales_ratio_ttm', 'ev_to_ebitda', 'revenue_per_share_ttm', 'gross_profit_ttm', 'diluted_epsttm', 'return_on_assets_ttm', 'fiscal_year_end', 'cik', 'ebitda', 'book_value', 'profit_margin', 'latest_quarter', 'analyst_target_price', 'return_on_equity_ttm', 'shares_outstanding', 'quarterly_earnings_growth_yoy', 'forward_pe', 'revenue_ttm', 'eps', 'dividend_yield', 'dividend_per_share', 'sector']
+symbolInfoAlphavantageDCamelCaseTableColumns = ['exchange', 'symbol', 'delistingDate', 'name', 'assetType', 'ipoDate', 'status', 'asOfDate', 'description', 'evToRevenue', 'trailingPe', 'peRatio', 'priceToBookRatio', 'dividendDate', 'country', 'currency', 'marketCapitalization', 'beta', 'quarterlyRevenueGrowthYoy', 'operatingMarginTtm', 'pegRatio', 'industry', 'exDividendDate', 'address', 'priceToSalesRatioTtm', 'evToEbitda', 'revenuePerShareTtm', 'grossProfitTtm', 'dilutedEpsttm', 'returnOnAssetsTtm', 'fiscalYearEnd', 'cik', 'ebitda', 'bookValue', 'profitMargin', 'latestQuarter', 'analystTargetPrice', 'returnOnEquityTtm', 'sharesOutstanding', 'quarterlyEarningsGrowthYoy', 'forwardPe', 'revenueTtm', 'eps', 'dividendYield', 'dividendPerShare', 'sector']
 class SymbolInfoAlphavantageDRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, delistingDateValue: str, nameValue: str, assetTypeValue: str, ipoDateValue: str, statusValue: str, asOfDateValue: str):
+    def __init__(self, exchangeValue: str, symbolValue: str, delistingDateValue: str, nameValue: str, assetTypeValue: str, ipoDateValue: str, statusValue: str, asOfDateValue: str, descriptionValue: str, evToRevenueValue: str, trailingPeValue: str, peRatioValue: str, priceToBookRatioValue: str, dividendDateValue: str, countryValue: str, currencyValue: str, marketCapitalizationValue: str, betaValue: str, quarterlyRevenueGrowthYoyValue: str, operatingMarginTtmValue: str, pegRatioValue: str, industryValue: str, exDividendDateValue: str, addressValue: str, priceToSalesRatioTtmValue: str, evToEbitdaValue: str, revenuePerShareTtmValue: str, grossProfitTtmValue: str, dilutedEpsttmValue: str, returnOnAssetsTtmValue: str, fiscalYearEndValue: str, cikValue: str, ebitdaValue: str, bookValueValue: str, profitMarginValue: str, latestQuarterValue: str, analystTargetPriceValue: str, returnOnEquityTtmValue: str, sharesOutstandingValue: str, quarterlyEarningsGrowthYoyValue: str, forwardPeValue: str, revenueTtmValue: str, epsValue: str, dividendYieldValue: str, dividendPerShareValue: str, sectorValue: str):
         self.exchange = exchangeValue
         self.symbol = symbolValue
         self.delistingDate = delistingDateValue
@@ -966,4 +966,56 @@ class SymbolInfoAlphavantageDRow():
         self.ipoDate = ipoDateValue
         self.status = statusValue
         self.asOfDate = asOfDateValue
+        self.description = descriptionValue
+        self.evToRevenue = evToRevenueValue
+        self.trailingPe = trailingPeValue
+        self.peRatio = peRatioValue
+        self.priceToBookRatio = priceToBookRatioValue
+        self.dividendDate = dividendDateValue
+        self.country = countryValue
+        self.currency = currencyValue
+        self.marketCapitalization = marketCapitalizationValue
+        self.beta = betaValue
+        self.quarterlyRevenueGrowthYoy = quarterlyRevenueGrowthYoyValue
+        self.operatingMarginTtm = operatingMarginTtmValue
+        self.pegRatio = pegRatioValue
+        self.industry = industryValue
+        self.exDividendDate = exDividendDateValue
+        self.address = addressValue
+        self.priceToSalesRatioTtm = priceToSalesRatioTtmValue
+        self.evToEbitda = evToEbitdaValue
+        self.revenuePerShareTtm = revenuePerShareTtmValue
+        self.grossProfitTtm = grossProfitTtmValue
+        self.dilutedEpsttm = dilutedEpsttmValue
+        self.returnOnAssetsTtm = returnOnAssetsTtmValue
+        self.fiscalYearEnd = fiscalYearEndValue
+        self.cik = cikValue
+        self.ebitda = ebitdaValue
+        self.bookValue = bookValueValue
+        self.profitMargin = profitMarginValue
+        self.latestQuarter = latestQuarterValue
+        self.analystTargetPrice = analystTargetPriceValue
+        self.returnOnEquityTtm = returnOnEquityTtmValue
+        self.sharesOutstanding = sharesOutstandingValue
+        self.quarterlyEarningsGrowthYoy = quarterlyEarningsGrowthYoyValue
+        self.forwardPe = forwardPeValue
+        self.revenueTtm = revenueTtmValue
+        self.eps = epsValue
+        self.dividendYield = dividendYieldValue
+        self.dividendPerShare = dividendPerShareValue
+        self.sector = sectorValue
+
+## TABLE: stock_data_daily_alphavantage_d ######################################
+stockDataDailyAlphavantageDSnakeCaseTableColumns = ['exchange', 'symbol', 'period_date', 'open', 'high', 'low', 'close', 'volume']
+stockDataDailyAlphavantageDCamelCaseTableColumns = ['exchange', 'symbol', 'periodDate', 'open', 'high', 'low', 'close', 'volume']
+class StockDataDailyAlphavantageDRow():
+    def __init__(self, exchangeValue: str, symbolValue: str, periodDateValue: str, openValue: float, highValue: float, lowValue: float, closeValue: float, volumeValue: float):
+        self.exchange = exchangeValue
+        self.symbol = symbolValue
+        self.periodDate = periodDateValue
+        self.open = openValue
+        self.high = highValue
+        self.low = lowValue
+        self.close = closeValue
+        self.volume = volumeValue
 
