@@ -134,7 +134,7 @@ def generateExcludeUnusableTickersSnippet(alias=None):
     return generateExcludeTickersSnippet(unusableSymbols, alias)
 
 def generateSQLSuffixStatementAndArguments(excludeKeys=[], **kwargs):
-    '''converts arguments (passed to a DBM SQL GET function) into the appropriate WHERE statement; including order by'''
+    '''converts arguments (passed to a DBM SQL GET function) into the appropriate WHERE statement; including order, group by'''
 
     # excludeKeys = ['self', 'kwargs', 'table', 'exclude_keys'] + [convertToSnakeCase(k) for k in asList(shortcdict(kwargs, 'excludeKeys', []))]
     ## remove unnecessary keys
@@ -158,6 +158,13 @@ def generateSQLSuffixStatementAndArguments(excludeKeys=[], **kwargs):
             oblist.append(f'{col} {mod}')
         orderByStmt = f' ORDER BY {",".join(oblist)}'
         del kwargs['orderBy']
+    
+    ## extract and generate group by statement
+    groupByStmt = ''
+    groupbys = asList(shortcdict(kwargs, 'groupBy', []))
+    if groupbys:
+        groupByStmt = f' GROUP BY {",".join(groupbys)}'
+        del kwargs['groupBy']
 
     ## process remaining kwargs, dropping any that are None
     processedkwargs = {}
@@ -198,7 +205,7 @@ def generateSQLSuffixStatementAndArguments(excludeKeys=[], **kwargs):
             additions.append(f' {argKey} in ({",".join(["?" for x in range(len(vlist))])}) ')
             args.extend(vlist)
 
-    stmt = f' {orderByStmt} '
+    stmt = f' {groupByStmt} {orderByStmt} '
     rtargs = []
     if additions:
         stmt = f" WHERE {' AND '.join(additions)} " + stmt
@@ -329,7 +336,7 @@ def generateDatabaseGeneralizedGettersForDBM():
                 astring = f'{convertToCamelCase(c.name)}=None'
                 if c['pk']: argumentPKStrings.append(astring)
                 else: argumentStrings.append(astring)
-            suffixArgumentStrings = ['orderBy=None', 'excludeKeys=None', 'onlyColumn_asList=None', 'sqlColumns=\'*\'']
+            suffixArgumentStrings = ['groupBy=None', 'orderBy=None', 'excludeKeys=None', 'onlyColumn_asList=None', 'sqlColumns=\'*\'']
 
             argumentLineSeparator = f',\n{tab}{tab}{tab}'
             arglists = [['self']]
