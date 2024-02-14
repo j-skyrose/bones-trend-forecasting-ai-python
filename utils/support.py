@@ -134,8 +134,8 @@ def _flattenGen(li: list):
     else:
         yield li
 
-## used on rows from historical_data table
 def _isoformatd(d) -> date:
+    '''extracts period_date from recdotdict, converts to date'''
     return date.fromisoformat(d.period_date)
 
 def _edgarformatd(d) -> date:

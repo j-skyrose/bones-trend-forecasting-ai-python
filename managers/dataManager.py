@@ -32,6 +32,7 @@ from structures.financialDataHandler import FinancialDataHandler
 from structures.stockDataHandler import StockDataHandler
 from structures.dataPointInstance import DataPointInstance
 from structures.normalizationDataHandler import NormalizationDataHandler
+from structures.sql.sqlArgumentObj import SQLArgumentObj
 from structures.stockEarningsDateHandler import StockEarningsDateHandler
 from structures.stockSplitsHandler import StockSplitsHandler
 from structures.googleInterestsHandler import GoogleInterestsHandler
@@ -46,8 +47,8 @@ dbm: DatabaseManager = DatabaseManager()
 def multicore_getFinancialDataTickerTuples(ticker):
     return (ticker, DatabaseManager().getFinancialData(ticker.exchange, ticker.symbol))
 
-def multicore_getStockDataTickerTuples(ticker, seriesType, minDate, queryLimit):
-    return (ticker, DatabaseManager().getStockData(ticker.exchange, ticker.symbol, seriesType, minDate, queryLimit=queryLimit))
+def multicore_getStockDataTickerTuples(ticker, minDate, queryLimit):
+    return (ticker, DatabaseManager().getStockDataDaily(ticker.exchange, ticker.symbol, minDate=minDate, limit=queryLimit))
 
 def multicore_getStockSplitsTickerTuples(ticker):
     return (ticker, DatabaseManager().getDumpStockSplitsPolygon_basic(ticker.exchange, ticker.symbol))
@@ -610,7 +611,7 @@ class DataManager():
                     updateSkipCounts(data)
         else:
             for symdata in tqdmLoopHandleWrapper(symbolList, verbose, desc='Creating stock handlers'):
-                data = dbm.getStockData(symdata.exchange, symdata.symbol, self.seriesType, minDate=self.minDate, queryLimit=queryLimit)
+                data = dbm.getStockDataDaily(symdata.exchange, symdata.symbol, minDate=self.minDate, limit=queryLimit)
                 if dataLengthCheck(data):
                     self.__getattribute__(dmProperty)[TickerKeyType(symdata.exchange, symdata.symbol)] = StockDataHandler(data, symbolData=symdata, **sdhKWArgs)
                 else:
@@ -1379,7 +1380,6 @@ if __name__ == '__main__':
     #     # NeuralNetworkManager().get(1641959005),
     #     # assetTypes=['CS','CLA','CLB','CLC']
     #     # exchange=['BATS','NASDAQ','NEO','NYSE','NYSE ARCA','NYSE MKT','TSX']
-    #     # exchange=dbm.getDistinctExchangesForHistoricalData(),
     #     precedingRange=60, followingRange=10,
     #     changeType=ChangeType.ABSOLUTE, changeValue=4,
         

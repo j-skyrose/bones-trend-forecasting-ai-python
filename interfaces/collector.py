@@ -24,7 +24,7 @@ from structures.api.nasdaq import Nasdaq
 from structures.sql.sqlArgumentObj import SQLArgumentObj
 
 from constants.exceptions import APILimitReached, APIError, APITimeout, NotSupportedYet
-from utils.dbSupport import convertToSnakeCase
+from utils.dbSupport import convertToSnakeCase, getTableString
 from utils.other import parseCommandLineOptions
 from utils.support import asDate, asDatetime, asISOFormat, asList, getIndex, getItem, recdotdict, shortcdict, tqdmLoopHandleWrapper
 from constants.enums import APIState, EarningsCollectionAPI, FinancialReportType, FinancialStatementType, InterestType, MarketType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
@@ -252,7 +252,7 @@ class Collector:
             if limit and dayCount >= limit: break
         
         if verbose:
-            print(f"{'Would insert' if dryrun else 'Inserted'} {insertCount} rows for {dayCount} days ({len(daysWithData)} actual)")
+            print(f"{'Would insert' if dryrun else 'Inserted'} {insertCount} rows for {dayCount} days ({daysWithData} actual)")
         
     def _loopCollectBySymbol_new(self, api='alphavantage', symbol=None, seriesType: SeriesType=SeriesType.DAILY, active=True, limit=None, dryrun=False, verbose=1):
         if api not in ['alphavantage']: raise NotSupportedYet
@@ -282,6 +282,9 @@ class Collector:
         for s in symbol:
             if isinstance(s, tuple):
                 exchange, symbl = s
+            elif isinstance(s, dict):
+                exchange = dbm.exchangeAliases[shortcdict(s, 'exchange', shortcdict(s, 'primary_exchange'))]
+                symbl = shortcdict(s, 'symbol', shortcdict(s, 'ticker'))
             else:
                 ## determine correct exchange for the symbol
                 symbl = s
@@ -1148,7 +1151,7 @@ class Collector:
             for s in symbollist[:]:
                 tickergidString = f'{s.exchange:10s} {s.symbol:5s} {s.google_topic_id:15s}'
 
-                sdata = dbm.getStockData(s.exchange, s.symbol, SeriesType.DAILY)
+                sdata = dbm.getStockDataDaily(s.exchange, s.symbol)
                 if not sdata:
                     print(tickergidString, '- no stock data')
                     symbollist.remove(s)
@@ -1391,7 +1394,14 @@ if __name__ == '__main__':
             # dbm.staging_condenseSector()
             # dbm.symbols_pullStagedFounded()
             # dbm.symbols_pullStagedSector()
-            c.startAPICollection('alphavantage', SeriesType.DAILY)
+            # c.startAPICollection('polygon')
+
+            ## alphavantage active tickers not already collected in dump table and not already present in old historical_data table
+            stmt = f"SELECT a.exchange, a.symbol FROM {getTableString('symbol_info_alphavantage_d')} a WHERE a.status = 'Active' AND a.exchange||a.symbol NOT IN (SELECT DISTINCT h.exchange||h.symbol FROM {getTableString('historical_data')} h) AND a.exchange||a.symbol NOT IN (SELECT DISTINCT d.exchange||d.symbol FROM {getTableString('stock_data_daily_alphavantage_d')} d)"
+            res = dbm.dbc.execute(stmt).fetchall()
+            c.collectDailyStockData(api='alphavantage', symbol=res, dryrun=False)
+            ## done av active tickers
+
             # c.startAPICollection_exploratoryAlphavantageAPIUpdates()
             # c.startSplitsCollection('polygon')
             # c.startAPICollection('neo', SeriesType.DAILY)

@@ -306,7 +306,7 @@ class ReductionMethod(Enum):
 class NormalizationGroupings(Enum):
     def __init__(self, a):
         self.tableName = a
-    HISTORICAL = 'historical_data'
+    HISTORICAL = 'stock_data_daily_c'
     STOCK = 'symbols'
     FINANCIAL = 'vwtb_edgar_financial_nums'
 
@@ -322,6 +322,19 @@ class EarningsCollectionAPI(Enum):
     NASDAQ = 'NASDAQ'
     MARKETWATCH = 'MARKETWATCH'
     YAHOO = 'YAHOO'
+
+class StockDataSource(Enum):
+    '''API/table holding raw stock data. Assists with collection and consolidation'''
+    ALPHAVANTAGE = 'stock_data_daily_alphavantage_d'
+    HISTORIC = 'historical_data'
+    POLYGON = 'stock_data_daily_polygon_d'
+    
+    def __init__(self, a):
+        self.tableName = a
+    
+    @classmethod
+    def getInPriorityOrder(cls):
+        return [cls.ALPHAVANTAGE, cls.HISTORIC, cls.POLYGON]
 
 if __name__ == '__main__':
     print(AccuracyType.OVERALL.name, AccuracyType.OVERALL.value, AccuracyType.OVERALL.statsName)

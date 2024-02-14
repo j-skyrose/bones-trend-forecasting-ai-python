@@ -789,7 +789,7 @@ if __name__ == '__main__':
     from managers.databaseManager import DatabaseManager
     from constants.enums import SeriesType
     dbm = DatabaseManager()
-    data = dbm.getStockData('NYSE ARCA', 'SPY', SeriesType.DAILY)
+    data = dbm.getStockDataDaily('NYSE ARCA', 'SPY')
 
     atrPeriod = gconfig.defaultIndicatorFormulaConfig.periods[IndicatorType.ST]
     sts = generateSuperTrends(data, atrPeriod)

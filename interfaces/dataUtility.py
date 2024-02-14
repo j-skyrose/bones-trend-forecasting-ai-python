@@ -14,16 +14,17 @@ from numpy.core import _exceptions as numpy_exceptions
 from typing import Dict, List
 
 from globalConfig import config as gconfig
-from constants.enums import ChangeType, EarningsCollectionAPI, FeatureExtraType, IndicatorType, NormalizationMethod, OutputClass, SeriesType
-from constants.exceptions import InsufficientDataAvailable
+from constants.enums import ChangeType, Direction, EarningsCollectionAPI, FeatureExtraType, IndicatorType, NormalizationMethod, OutputClass, SQLInsertHelpers, SeriesType, StockDataSource
+from constants.exceptions import InsufficientDataAvailable, NotSupportedYet
 from constants.values import indicatorsKey, unusableSymbols
 from managers.databaseManager import DatabaseManager
 from managers.dataManager import DataManager
 from managers.inputVectorFactory import InputVectorFactory
 from managers.marketDayManager import MarketDayManager
 from structures.skipsObj import SkipsObj
+from structures.sql.sqlOrderObj import SQLOrderObj
 from utils.other import buildCommaSeparatedTickerPairString, getIndicatorPeriod, getInstancesByClass, parseCommandLineOptions
-from utils.support import addItemToContainerAtDictKey, asDate, asISOFormat, asList, flatten, getIndex, partition, recdotdict, shortc, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
+from utils.support import addItemToContainerAtDictKey, asDate, asISOFormat, asList, flatten, getIndex, partition, recdotdict, recdotobj, shortc, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.types import TickerKeyType
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex, generateATRs_AverageTrueRange, generateBollingerBands, generateCCIs_CommodityChannelIndex, generateDIs_DirectionalIndicator, generateEMAs_ExponentialMovingAverage, generateMACDs_MovingAverageConvergenceDivergence, generateRSIs_RelativeStrengthIndex, generateSuperTrends, generateVolumeBars, getExpectedLengthForIndicator, unresumableGenerationIndicators
 from utils.vectorSimilarity import euclideanSimilarity_jit
@@ -249,7 +250,7 @@ def _verifyTechnicalIndicatorDataIntegrity(stockdata, indicator: IndicatorType, 
     return indicatorCount == getExpectedLengthForIndicator(indicator, len(stockdata), indicatorPeriod)
 
 def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cacheIndicators, indicatorConfig):
-    localdbm = DatabaseManager()
+    localdbm = DatabaseManager(commitAtExit=False)
     latestIndicators = localdbm.dbc.execute(f'''
         SELECT MAX(date) AS date, COUNT(*) AS count, exchange, symbol, indicator, period, value FROM {localdbm.getTableString("technical_indicator_data_c")} WHERE date_type=? AND exchange=? AND symbol=? group by exchange, symbol, indicator, period
     ''', (seriesType.name, ticker.exchange, ticker.symbol)).fetchall()
@@ -259,7 +260,7 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
                 return li
 
     ## data should already be in ascending (date) order
-    stkdata = localdbm.getStockData(ticker.exchange, ticker.symbol, SeriesType.DAILY)
+    stkdata = localdbm.getStockDataDaily(ticker.exchange, ticker.symbol)
 
     ## skip if everything is already updated
     missingIndicators = []
@@ -288,7 +289,8 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
                 print(f'{ik.longForm} integrity check failed for {latestIndicators[0].exchange}:{latestIndicators[0].symbol}; will regenerate')
                 missingIndicators.append(ik)
         if len(missingIndicators) == 0 and len(notuptodateIndicators) == 0: return 0
-
+    else:
+        missingIndicators = [ik for ik in IndicatorType]
 
     returntpls = []
     i: IndicatorType
@@ -379,68 +381,72 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
     return returntpls
 
 ## generates or updates cached technical indicator data; should be run after every stock data dump
-def technicalIndicatorDataCalculationAndInsertion(exchange=[], symbol=[], seriesType: SeriesType=SeriesType.DAILY, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, doNotCacheADX=True, sequential=False):
-    exchange = asList(exchange)
-    symbol = asList(symbol)
-    tickers = dbm.dbc.execute('''
-        SELECT MAX(period_date) AS date, exchange, symbol FROM historical_data WHERE series_type=? {} {} group by exchange, symbol
-    '''.format(
-            ('AND exchange IN (\'{}\')'.format('\',\''.join(exchange))) if len(exchange) > 0 else '',
-            ('AND symbol IN (\'{}\')'.format('\',\''.join(symbol))) if len(symbol) > 0 else ''
-        ), (seriesType.name,)).fetchall()
-    print('Got {} tickers'.format(len(tickers)))
+def technicalIndicatorDataCalculationAndInsertion(exchange=None, symbol=None, seriesType: SeriesType=SeriesType.DAILY, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, doNotCacheADX=True, sequential=False):
+    if seriesType != SeriesType.DAILY: raise NotSupportedYet
+    
+    if exchange is None:
+        ## iterate by exchange to save on RAM
+        exchanges = dbm.getStockDataDaily_basic(sqlColumns='DISTINCT exchange', onlyColumn_asList='exchange')
+    else:
+        exchanges = asList(exchange)
 
-    purgedCount = len(tickers)
-    ## purge invalid/inappropriate tickers
-    tickers[:] = [t for t in tickers if (t.exchange, t.symbol) not in unusableSymbols]
-    purgedCount -= len(tickers)
-    print('Purged {} tickers'.format(purgedCount))
-
-    tickersupdated = 0
-    rowsadded = 0
     cacheIndicators: List = gconfig.cache.indicators
     if doNotCacheADX: cacheIndicators.remove(IndicatorType.ADX)
 
-    inserttpls = []
-    for tpls in tqdmProcessMapHandlerWrapper(partial(_multicore_updateTechnicalIndicatorData, seriesType=seriesType, cacheIndicators=cacheIndicators, indicatorConfig=indicatorConfig), tickers, verbose=1, sequentialOverride=sequential, desc='Calculating techInd data for tickers'):
-        if len(tpls) != 0:
-            rowsadded += len(tpls)
-            tickersupdated += 1
-            inserttpls.extend(tpls)
-    
-    stmt = f'INSERT OR REPLACE INTO {dbm.getTableString("technical_indicator_data_c")} VALUES (?,?,?,?,?,?,?)'
-    stmtExecFunc = lambda t: dbm.dbc.execute(stmt, t)
-    ## ideally split into chunks to speed up insertion
-    try:
-        inserttpls[:] = numpy.array_split(inserttpls, 10)
-        stmtExecFunc = lambda t: dbm.dbc.executemany(stmt, t)
-    except numpy_exceptions._ArrayMemoryError:
-        pass
+    tickersupdated = 0
+    rowsadded = 0
+    for exch in tqdmLoopHandleWrapper(exchanges, verbose=1, desc='Exchanges'):
+        tickers = dbm.getStockDataDaily_basic(exchange=exch, symbol=symbol, sqlColumns='DISTINCT exchange,symbol')
+        print('Got {} tickers'.format(len(tickers)))
 
-    for tplchunk in tqdm.tqdm(inserttpls, desc='Inserting data'):
-        stmtExecFunc(tplchunk)
+        purgedCount = len(tickers)
+        ## purge invalid/inappropriate tickers
+        tickers[:] = [t for t in tickers if (t.exchange, t.symbol) not in unusableSymbols]
+        purgedCount -= len(tickers)
+        print('Purged {} tickers'.format(purgedCount))
+
+        inserttpls = []
+        for tpls in tqdmProcessMapHandlerWrapper(partial(_multicore_updateTechnicalIndicatorData, seriesType=seriesType, cacheIndicators=cacheIndicators, indicatorConfig=indicatorConfig), tickers, verbose=1, sequentialOverride=sequential, desc='Calculating techInd data for tickers'):
+            if len(tpls) != 0:
+                rowsadded += len(tpls)
+                tickersupdated += 1
+                inserttpls.extend(tpls)
+        
+        stmt = f'INSERT OR REPLACE INTO {dbm.getTableString("technical_indicator_data_c")} VALUES (?,?,?,?,?,?,?)'
+        stmtExecFunc = lambda t: dbm.dbc.execute(stmt, t)
+        ## ideally split into chunks to speed up insertion
+        try:
+            inserttpls[:] = numpy.array_split(inserttpls, 10)
+            stmtExecFunc = lambda t: dbm.dbc.executemany(stmt, t)
+        except numpy_exceptions._ArrayMemoryError:
+            pass
+
+        for tplchunk in tqdmLoopHandleWrapper(inserttpls, verbose=0.5 if len(exchanges) > 1 else 1, desc='Inserting data'):
+            stmtExecFunc(tplchunk)
 
     print('Updated {} tickers'.format(tickersupdated))
     print('Added or replaced {} rows'.format(rowsadded))
 
 
 ## helper function to fillHistoricalGaps
-def _getDailyHistoricalGaps(exchange=None, symbol=None, autoUpdateDamagedSymbols=True, verbose=1):
-    ALL = not (exchange and symbol)
+def _getDailyHistoricalGaps(exchange=None, symbol=None, tickers=[], autoUpdateDamagedSymbols=True, verbose=1):
+    if (exchange or symbol) and tickers: raise ValueError
+    if (exchange or symbol) and not tickers: tickers = [(exchange, symbol)]
 
-    results = dbm.getHistoricalStartEndDates(exchange, symbol)
-    if verbose>=2: print('result count', len(results))
+    alltickers = dbm.getStockDataDaily_basic(sqlColumns='DISTINCT exchange,symbol')
+    loopTickers = [r for r in alltickers if (r.exchange, r.symbol) in tickers] if tickers else alltickers
 
-    dateGaps = {} if ALL else []
+    dateGapsInit = lambda: ({} if len(tickers) > 1 else [])
+    dateGaps = dateGapsInit()
     currentDamagedTickers = set()
     lastDamagedTickers = set()
     for rerun in range(2):
-        for r in tqdmLoopHandleWrapper(results, verbose%2, desc='Determining DAILY historical gaps'):
+        for r in tqdmLoopHandleWrapper(loopTickers, verbose, desc='Determining DAILY historical gaps'):
             if (r.exchange, r.symbol) in unusableSymbols or (r.exchange, r.symbol) in lastDamagedTickers: continue
 
-            data = dbm.getStockData(r.exchange, r.symbol, SeriesType.DAILY)
-            startDate = date.fromisoformat(r.start)
-            endDate = date.fromisoformat(r.finish)
+            data = dbm.getStockDataDaily(r.exchange, r.symbol)
+            startDate = date.fromisoformat(data[0].period_date)
+            endDate = date.fromisoformat(data[-1].period_date)
             if verbose>=2: 
                 print('###############################################')
                 print(r.exchange, r.symbol)
@@ -471,7 +477,7 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, autoUpdateDamagedSymbols
                     if verbose>=2: 
                         ddt = date.fromisoformat(data[dindex].period_date)
                         print('is gap')
-                    if ALL:
+                    if len(tickers) > 1:
                         try:
                             dateGaps[cdate].append((r.exchange, r.symbol))
                         except KeyError:
@@ -480,7 +486,7 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, autoUpdateDamagedSymbols
                         dateGaps.append(cdate)
                     consecgaps += 1
 
-                    if consecgaps > 75: 
+                    if consecgaps > 40: 
                         currentDamagedTickers.add((r.exchange, r.symbol))
                 else:
                     dindex += 1
@@ -520,7 +526,7 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, autoUpdateDamagedSymbols
                     f.write(newfile)
 
                 ## reset gaps so next iteration will re-build, excluding damaged symbols
-                dateGaps = {} if ALL else []
+                dateGaps = dateGapsInit()
                 lastDamagedTickers = currentDamagedTickers.copy()
                 currentDamagedTickers.clear()
 
@@ -531,48 +537,59 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, autoUpdateDamagedSymbols
 
 ## generally only used after large data acquisitions/dumps
 ## fill any data gaps with artificial data using last real trading day
-def historicalGapCalculationAndInsertion(exchange=None, symbol=None, seriesType=SeriesType.DAILY, dryrun=False, autoUpdateDamagedSymbols=True, verbose=1):
+def historicalGapCalculationAndInsertion(exchange=None, symbol=None, tickers=[], seriesType=SeriesType.DAILY, dryrun=False, autoUpdateDamagedSymbols=True, verbose=1):
+    if seriesType != SeriesType.DAILY: raise NotSupportedYet
+    if (exchange or symbol) and tickers: raise ValueError
+    if (exchange or symbol) and not tickers: tickers = [(exchange, symbol)]
     ALL = not (exchange and symbol)
-    tuples = []
-    gaps = []
-    if seriesType == SeriesType.DAILY:
-        gaps = _getDailyHistoricalGaps(exchange, symbol, autoUpdateDamagedSymbols=autoUpdateDamagedSymbols, verbose=verbose)
+    insertData = []
+    gaps = _getDailyHistoricalGaps(tickers=tickers, autoUpdateDamagedSymbols=autoUpdateDamagedSymbols, verbose=verbose)
 
     if len(gaps) == 0:
         if verbose>=1: print('No gaps found')
     else:
         for g in tqdmLoopHandleWrapper(gaps, verbose, desc='Determining historical gap fillers for ' + seriesType.name):
-            for t in tqdmLoopHandleWrapper(gaps[g], verbose-0.5, desc=str(g)) if ALL else [(exchange, symbol)]:
-                if (t[0], t[1]) in unusableSymbols: continue
+            for exchange, symbol in tqdmLoopHandleWrapper(gaps[g], verbose-0.5, desc=str(g)) if len(tickers) != 1 else tickers:
+                if (exchange, symbol) in unusableSymbols: continue
                 ## find closest date without going over
                 prevclose = None
-                for d in dbm.getStockData(t[0], t[1], seriesType):
+                for d in dbm.getStockDataDaily(exchange=exchange, symbol=symbol):
                     if date.fromisoformat(d.period_date) > g: break
                     prevclose = d.close
-                tuples.append((t[0], t[1], seriesType.name, str(g), prevclose, prevclose, prevclose, prevclose, 0, True))
+                insertData.append({
+                    'exchange': exchange,
+                    'symbol': symbol,
+                    'period_date': str(g),
+                    'open': prevclose,
+                    'high': prevclose,
+                    'low': prevclose,
+                    'close': prevclose,
+                    'artificial': True,
+                })
 
-        if len(tuples) == 0:
+        if len(insertData) == 0:
             if verbose>=1: print('No filling required')
         else:
-            if verbose>=1: print('Writing gap fillers to database')
+            if verbose>=1: print(f'Writing {len(insertData)} gap fillers to database')
             if not dryrun:
-                dbm.insertHistoricalData(tuples)
+                dbm.insertStockData(data=insertData)
             elif verbose>=1:
+                insertData = recdotobj(insertData)
                 ## count number of gaps for each ticker
                 sumdict = {}
-                for t in tuples:
-                    sumdict[(t[0], t[1])] = 0
-                for t in tuples:
-                    sumdict[(t[0], t[1])] += 1
+                for d in insertData:
+                    sumdict[(d.exchange, d.symbol)] = 0
+                for d in insertData:
+                    sumdict[(d.exchange, d.symbol)] += 1
 
                 ## print first handful of gaps for each ticker
                 sumdict = dict(sorted(sumdict.items(), key=lambda item: item[1]))
                 for tk, v in sumdict.items():
                     print(tk, v)
                     c = 0
-                    for t in tuples:
-                        if (t[0], t[1]) == tk:
-                            print(t)
+                    for d in insertData:
+                        if (d.exchange, d.symbol) == tk:
+                            print(d)
                             c+=1
                         if c > 4:
                             break
@@ -957,6 +974,64 @@ def earningsDateCalculationAndInsertion(simple=True, verbose=1):
         continue
 
     print(f'Inserted {totalRowsInserted} rows')
+
+## combines from various dump tables: alphavantage, polygon, old historical_data
+## alphavantage seems to be the more correct one than polygon, i.e. NASDAQ:AACG 2023-05-30 volume according to NASDAQ site is incorrect for polygon row (17k vs 9.5k); open is off by 1c but rest is correct
+def consolidateDailyStockData(limit=None, fillGaps=True, verbose=1, **kwargs):
+    exceptionTickers = []
+    exchangeAliasDict = dbm.getAliasesDictionary()
+    limitTickers = []
+    tickersUpdated = set()
+    
+    for api in StockDataSource.getInPriorityOrder():
+        getFunction = getattr(dbm, f'getDumpStockDataDaily{api.name.capitalize()}_basic') if api != StockDataSource.HISTORIC else dbm.getHistoricalData_basic
+        def kwargsBuilder(exchange, symbol):
+            ret = {}
+            if api == StockDataSource.POLYGON:
+                ret['ticker'] = symbol
+            else:
+                if api == StockDataSource.HISTORIC:
+                    ret['artificial'] = False
+                ret['exchange'] = exchange
+                ret['symbol'] = symbol
+            return ret
+        insertStrategy = SQLInsertHelpers.REPLACE if api == StockDataSource.ALPHAVANTAGE else SQLInsertHelpers.IGNORE
+        
+        ## check which tickers have new data and require consolidation
+        queuedTickers = dbm.getDumpQueueStockDataDaily_basic(api=api.name)
+        for exchange,symbol,_ in tqdmLoopHandleWrapper([qt.values() for qt in queuedTickers], verbose=verbose, desc=f'Transfering {api.name} ticker data'):
+            exchangeWasUnknown = False
+            if api == StockDataSource.POLYGON and exchange == 'UNKNOWN':
+                ## attempt to match ticker to an exchange
+                res = dbm.getDumpSymbolInfoPolygon_basic(ticker=symbol, orderBy=[SQLOrderObj('active', Direction.DESCENDING), SQLOrderObj('delisted_utc', Direction.DESCENDING)], onlyColumn_asList='primary_exchange')
+                try:
+                    exchange = res[0]
+                    if exchange == 'UNKNOWN': raise IndexError
+                except IndexError:
+                    ## TODO: fallback to other info tables
+                    exceptionTickers.append(symbol)
+                    continue
+                exchange = exchangeAliasDict[exchange]
+                exchangeWasUnknown = True
+
+            ## do not proceed if limit is in force and ticker was not updated with a previous API
+            if limit and len(limitTickers) == limit and (exchange, symbol) not in limitTickers: continue
+
+            data = getFunction(**kwargsBuilder(exchange, symbol))
+            if not data: raise ValueError
+
+            ## insert data to DB
+            dbm.insertStockData(exchange, symbol, data=data, insertStrategy=insertStrategy)
+            dbm.dequeueStockDataDailyTickerFromUpdate(exchange='UNKNOWN' if exchangeWasUnknown else exchange, symbol=symbol, api=api)
+            tickersUpdated.add((exchange, symbol))
+            dbm.commit()
+
+            if limit and len(limitTickers) < limit: limitTickers.append((exchange, symbol))
+
+    if fillGaps: historicalGapCalculationAndInsertion(tickers=tickersUpdated, verbose=verbose, **kwargs)
+
+    if exceptionTickers: print('Exceptions:', len(exceptionTickers), exceptionTickers)
+    print(f'{len(tickersUpdated)} tickers updated')
 
 if __name__ == '__main__':
     opts, kwargs = parseCommandLineOptions()

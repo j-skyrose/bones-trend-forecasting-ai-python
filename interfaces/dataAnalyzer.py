@@ -41,7 +41,7 @@ class DataAnalzer:
                 count += 1
                 if count > self.limit: break
 
-            stockdata = dbm.getStockData(s.exchange, s.symbol, SeriesType.DAILY)
+            stockdata = dbm.getStockDataDaily(s.exchange, s.symbol)
             anchorDateIndex = None
             for p in range(len(stockdata)):
                 if stockdata[p].period_date == anchorDate: 

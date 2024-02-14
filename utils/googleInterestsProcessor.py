@@ -42,7 +42,7 @@ def processRawGoogleInterests(exchange=None, symbol=None, verbose=1):
         ## get daily
         dailydata = dbm.getGoogleInterests(s.exchange, s.symbol, itype=InterestType.DAILY, raw=True)
         if len(dailydata) == 0: continue
-        ddh = DailyDataHandler(dailydata, dbm.getStockData(s.exchange, s.symbol, SeriesType.DAILY))
+        ddh = DailyDataHandler(dailydata, dbm.getStockDataDaily(s.exchange, s.symbol))
 
         ## overall/monthly
         mdh = MonthlyGIDataHandler(dbm.getGoogleInterests(s.exchange, s.symbol, itype=InterestType.MONTHLY, raw=True), ddh)

@@ -166,6 +166,12 @@ def generateSQLSuffixStatementAndArguments(excludeKeys=[], **kwargs):
         groupByStmt = f' GROUP BY {",".join(groupbys)}'
         del kwargs['groupBy']
 
+    ## extract and generate limit statement
+    limitStmt = ''
+    if shortcdict(kwargs, 'limit') is not None:
+        limitStmt = f' LIMIT {str(kwargs["limit"])}'
+        del kwargs['limit']
+
     ## process remaining kwargs, dropping any that are None
     processedkwargs = {}
     for k,v in kwargs.items():
@@ -205,7 +211,7 @@ def generateSQLSuffixStatementAndArguments(excludeKeys=[], **kwargs):
             additions.append(f' {argKey} in ({",".join(["?" for x in range(len(vlist))])}) ')
             args.extend(vlist)
 
-    stmt = f' {groupByStmt} {orderByStmt} '
+    stmt = f' {groupByStmt} {orderByStmt} {limitStmt} '
     rtargs = []
     if additions:
         stmt = f" WHERE {' AND '.join(additions)} " + stmt
@@ -257,8 +263,13 @@ def generateCompleteDBConnectionAndCursor(propertiesDatabasePath=None, computedD
     return connect, dbc
 
 def getTableString(tableName) -> str:
-    '''returns full table name with DB alias: dbalias.tableName'''
-    return f'{getDBAliasForTable(tableName)}.{tableName}'
+    '''returns full table name with DB alias if it is not 'main': dbalias.tableName'''
+    if '.' in tableName:
+        ## table string already generated
+        return tableName
+    dbalias = getDBAliasForTable(tableName)
+    if dbalias == mainDBAlias: return tableName
+    else: return f'{dbalias}.{tableName}'
 
 def getTableColumns(dbc, tableName) -> List:
     '''returns all table column objects'''
@@ -336,7 +347,7 @@ def generateDatabaseGeneralizedGettersForDBM():
                 astring = f'{convertToCamelCase(c.name)}=None'
                 if c['pk']: argumentPKStrings.append(astring)
                 else: argumentStrings.append(astring)
-            suffixArgumentStrings = ['groupBy=None', 'orderBy=None', 'excludeKeys=None', 'onlyColumn_asList=None', 'sqlColumns=\'*\'']
+            suffixArgumentStrings = ['groupBy=None', 'orderBy=None', 'limit=None', 'excludeKeys=None', 'onlyColumn_asList=None', 'sqlColumns=\'*\'']
 
             argumentLineSeparator = f',\n{tab}{tab}{tab}'
             arglists = [['self']]

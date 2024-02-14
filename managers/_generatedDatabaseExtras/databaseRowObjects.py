@@ -308,6 +308,24 @@ class VectorSimilaritiesCRow():
         self.changeType = changeTypeValue
         self.value = valueValue
 
+## TABLE: stock_data_daily_c ######################################
+stockDataDailyCSnakeCaseTableColumns = ['exchange', 'symbol', 'period_date', 'pre_market', 'open', 'high', 'low', 'close', 'after_hours', 'volume', 'transactions', 'artificial']
+stockDataDailyCCamelCaseTableColumns = ['exchange', 'symbol', 'periodDate', 'preMarket', 'open', 'high', 'low', 'close', 'afterHours', 'volume', 'transactions', 'artificial']
+class StockDataDailyCRow():
+    def __init__(self, exchangeValue: str, symbolValue: str, periodDateValue: str, preMarketValue: float, openValue: float, highValue: float, lowValue: float, closeValue: float, afterHoursValue: float, volumeValue: float, transactionsValue: float, artificialValue: bool):
+        self.exchange = exchangeValue
+        self.symbol = symbolValue
+        self.periodDate = periodDateValue
+        self.preMarket = preMarketValue
+        self.open = openValue
+        self.high = highValue
+        self.low = lowValue
+        self.close = closeValue
+        self.afterHours = afterHoursValue
+        self.volume = volumeValue
+        self.transactions = transactionsValue
+        self.artificial = artificialValue
+
 ## TABLE: sqlite_stat1 ######################################
 sqliteStat1SnakeCaseTableColumns = ['tbl', 'idx', 'stat']
 sqliteStat1CamelCaseTableColumns = ['tbl', 'idx', 'stat']
@@ -1018,4 +1036,13 @@ class StockDataDailyAlphavantageDRow():
         self.low = lowValue
         self.close = closeValue
         self.volume = volumeValue
+
+## TABLE: queue_stock_data_daily_d ######################################
+queueStockDataDailyDSnakeCaseTableColumns = ['exchange', 'symbol', 'api']
+queueStockDataDailyDCamelCaseTableColumns = ['exchange', 'symbol', 'api']
+class QueueStockDataDailyDRow():
+    def __init__(self, exchangeValue, symbolValue, apiValue):
+        self.exchange = exchangeValue
+        self.symbol = symbolValue
+        self.api = apiValue
 

@@ -184,10 +184,10 @@ class NetworkAccuracyAnalysisManager(Singleton):
         print('    testing_evaluateAllTime', self.testing_evaluateAllTime, 'seconds')
 
     def outOfDate(self, acctype: AccuracyAnalysisTypes):
-        return dbm._getHistoricalDataCount() > self.latestUpdateRows[acctype].data_count
+        return dbm._getStockDataDailyCount() > self.latestUpdateRows[acctype].data_count
 
     def bringAccuraciesUpToDate(self, acctype: AccuracyAnalysisTypes):
-        datacount = dbm._getHistoricalDataCount()
+        datacount = dbm._getStockDataDailyCount()
         haslastticker = self.latestUpdateRows[acctype].last_exchange and self.latestUpdateRows[acctype].last_symbol
 
         if self.outOfDate(acctype) or haslastticker:
