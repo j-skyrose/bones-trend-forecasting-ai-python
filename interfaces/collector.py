@@ -24,6 +24,7 @@ from structures.api.nasdaq import Nasdaq
 from structures.sql.sqlArgumentObj import SQLArgumentObj
 
 from constants.exceptions import APILimitReached, APIError, APITimeout, NotSupportedYet
+from utils.collectorSupport import getYahooExchangeForSymbol
 from utils.dbSupport import convertToSnakeCase, getTableString
 from utils.other import parseCommandLineOptions
 from utils.support import asDate, asDatetime, asISOFormat, asList, getIndex, getItem, recdotdict, shortcdict, tqdmLoopHandleWrapper
@@ -303,6 +304,9 @@ class Collector:
             ## call API
             try:
                 if not dryrun:
+                    if '/' in symbl:
+                        ## unknown how to map these symbols to work with AV API, BC/PA !=> BC%2FPA, BC.PA, BC%2EPA, BC-PA, BC%2DPA, BC_PA, BC%5FPA
+                        raise APIError
                     data = self.apiManager.query(api, exchange=exchange, symbol=symbl, seriesType=seriesType, verbose=verbose)
                 else: print(f'Would get data for {exchange}:{symbl}')
             except APIError as e:
@@ -600,7 +604,7 @@ class Collector:
                 'delisted_utc': t.delisted_utc
             }
         elif api == 'alphavantage':
-            activeTickers = getFunction(status='Active', delistingDate='NA')
+            activeTickers = getFunction(status='Active', delistingDate='null')
             delistDateKey = 'delisting_date'
             timestampKey = 'as_of_date'
             symbolKey = 'symbol'
@@ -1084,8 +1088,12 @@ class Collector:
                 insertcount += 1
                 uniquedates.add(dkwargs['earningsDate'])
             except sqlite3.IntegrityError as e:
-                if firstIntegrityError: 
+                if firstIntegrityError:
+                    ## typically occurs when earnings release and earnings call are on the same day, which is fine for basic earnings date use. TODO: add eventName as key so both rows are kept, e.g. Q4 2023  Earnings Release, Q4 2023  Earnings Call for NASDAQ:CSPI:2023-12-12
                     print(e)
+                    print(dkwargs)
+                    res = dbm.getDumpEarningsDates(api, shortcdict(dkwargs, 'exchange'), shortcdict(dkwargs, 'symbol'), inputDate=asISOFormat(dkwargs['inputDate']), earningsDate=asISOFormat(dkwargs['earningsDate']))
+                    print(res)
                     firstIntegrityError = False
                 pass
 
@@ -1379,6 +1387,9 @@ if __name__ == '__main__':
             c.startAPICollection(opts.api, **kwargs)
     elif opts.function:
         getattr(c, opts.function)(**kwargs)
+    elif opts.type:
+        if opts.type == 'earningsdate':
+            c.startEarningsDateCollection(**kwargs)
     else:
         # c.start(SeriesType.DAILY)
         # c.start()

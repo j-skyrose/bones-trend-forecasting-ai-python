@@ -138,9 +138,9 @@ def generateSQLSuffixStatementAndArguments(excludeKeys=[], **kwargs):
 
     # excludeKeys = ['self', 'kwargs', 'table', 'exclude_keys'] + [convertToSnakeCase(k) for k in asList(shortcdict(kwargs, 'excludeKeys', []))]
     ## remove unnecessary keys
-    excludeKeys = ['self'] + asList(excludeKeys)
+    excludeKeys = ['self', 'kwargs'] + asList(excludeKeys)
     for exk in excludeKeys:
-        del kwargs[exk]
+        if exk in kwargs.keys(): del kwargs[exk]
 
     ## extract and generate order by statement
     orderByStmt = ''

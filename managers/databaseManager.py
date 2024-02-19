@@ -895,8 +895,8 @@ class DatabaseManager(Singleton):
             table = 'earnings_dates_yahoo_d'
         else:
             raise ValueError(f'Unrecognized API {api}')
-        
-        return _dbGetter(**locals(), excludeKeys=['api'])
+
+        return _dbGetter(**locals(), **kwargs, excludeKeys=['api'])
 
     def getUniqueEarningsCollectionDates(self, api: EarningsCollectionAPI):
         if api == EarningsCollectionAPI.NASDAQ:
@@ -906,7 +906,7 @@ class DatabaseManager(Singleton):
         elif api == EarningsCollectionAPI.YAHOO:
             table = 'earnings_dates_yahoo_d'
 
-        return _dbGetter(**locals(), sqlColumns='DISTINCT input_date', orderBy='input_date', onlyColumn_asList='input_date')
+        return _dbGetter(**locals(), sqlColumns='DISTINCT input_date', orderBy='input_date', onlyColumn_asList='input_date', excludeKeys=['api'])
 
     def getLatestEarningsCollectionDate(self, api: EarningsCollectionAPI):
         ''' returns latest anchor date, i.e. date on which collection was done but the (most recent market) day's data was not updated yet '''
@@ -917,7 +917,7 @@ class DatabaseManager(Singleton):
         elif api == EarningsCollectionAPI.YAHOO:
             table = 'earnings_dates_yahoo_d'
 
-        return _dbGetter(**locals(), surprise_percentage=SQLHelpers.NOTNULL, sqlColumns='MAX(input_date)', onlyColumn_asList='MAX(input_date)')[0]
+        return _dbGetter(**locals(), surprise_percentage=SQLHelpers.NOTNULL, sqlColumns='MAX(input_date)', onlyColumn_asList='MAX(input_date)', excludeKeys=['api'])[0]
 
     def getEarningsDate(self, exchange=None, symbol=None, inputDate=None, earningsDate=None):
         return _dbGetter('earnings_dates_c', **locals())
@@ -997,7 +997,7 @@ class DatabaseManager(Singleton):
 
     def queueStockDataDailyTickersForUpdate(self, api, exchange=None, symbol=None, data=None):
         '''adds ticker to queue for data consolidation'''
-        stmt = f"INSERT INTO {getTableString('queue_stock_data_daily_d')} VALUES (?,?,?)"
+        stmt = f"INSERT OR IGNORE INTO {getTableString('queue_stock_data_daily_d')} VALUES (?,?,?)"
         if data:
             self.dbc.executemany(stmt, [(
                 d.exchange if api != StockDataSource.POLYGON else 'UNKNOWN', 
