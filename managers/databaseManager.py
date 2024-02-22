@@ -23,7 +23,6 @@ from constants.values import unusableSymbols, apiList, standardExchanges
 from managers.configManager import StaticConfigManager
 from managers.dbCacheManager import DBCacheManager
 from managers.marketDayManager import MarketDayManager
-from structures.api.googleTrends.request import GoogleAPI
 from structures.api.yahoo import Yahoo
 from structures.normalizationColumnObj import NormalizationColumnObj
 from structures.normalizationDataHandler import NormalizationDataHandler
@@ -37,7 +36,7 @@ configManager: StaticConfigManager = StaticConfigManager()
 
 ## generate before import to ensure things are up-to-date for the current execution
 if current_process().name == 'MainProcess': generateDatabaseAnnotationObjectsFile()
-from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, CboeVolatilityIndexRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, StockDataDailyCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, QueueStockDataDailyDRow
+from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, CboeVolatilityIndexRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, StockDataDailyCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, QueueStockDataDailyDRow, GoogleTopicIdsDRow
 from managers._generatedDatabaseExtras.databaseRowObjects import symbolsSnakeCaseTableColumns, historicalDataSnakeCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns
 
 class DatabaseManager(Singleton):
@@ -408,6 +407,12 @@ class DatabaseManager(Singleton):
             groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[QueueStockDataDailyDRow]:
         return _dbGetter("queue_stock_data_daily_d", **locals())
 
+    def getDumpGoogleTopicIds_basic(self,
+            exchange=None, symbol=None, topicId=None,
+            inputDate=None, lastCheckedDate=None,
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[GoogleTopicIdsDRow]:
+        return _dbGetter("google_topic_ids_d", **locals())
+
     #endregion basic generic gets - AUTO-GENERATED SECTION
     ####################################################################################################################################################################
     #region non-basic gets
@@ -750,31 +755,6 @@ class DatabaseManager(Singleton):
                 c.value = data[0]['val']
 
         return normalizationData
-
-    ## generally one time use
-    def getGoogleTopicIDsForSymbols(self, symbol=None, dryrun=False):
-        print('Getting topic IDs from Google')
-        DEBUG = True
-        gapi = GoogleAPI()
-        stmt = 'UPDATE symbols SET google_topic_id=? WHERE exchange=? AND symbol=? '
-        symbols = shortc(asList(symbol), self.getSymbols(api=['alphavantage', 'polygon'], googleTopicId=SQLHelpers.NULL))
-        topicsFound = []
-        alreadyFound = 0
-        for s in tqdm(symbols):
-            if not s.google_topic_id:
-                ex = s.exchange.replace(' ','').replace('TSX','TSE').replace('MKT', 'AMERICAN')
-                kw = ex + ':' + s.symbol
-                topics = gapi.suggestions(kw)
-                for t in topics:
-                    if t['type'] == 'Topic' and t['title'] == kw:
-                        if not dryrun: self.dbc.execute(stmt, (t['mid'], s.exchange, s.symbol))
-                        else: print(t['mid'], s.exchange, s.symbol)
-                        topicsFound.append(kw)
-            else:
-                alreadyFound += 1
-        if DEBUG: 
-            for t in topicsFound: print(t)
-        print(len(topicsFound), '/', len(symbols) - alreadyFound, 'topics found')
 
     def getFinancialData(self, exchange, symbol, raw=False):
         stmt = 'SELECT * FROM vwtb_edgar_financial_nums n JOIN vwtb_edgar_quarters q ON n.exchange = q.exchange AND n.symbol = q.symbol AND n.ddate = q.period WHERE n.exchange=? AND n.symbol=? ORDER BY q.period'
@@ -1534,6 +1514,23 @@ class DatabaseManager(Singleton):
                 stmt = stmtGenerator(d)
                 args = [d[k] for k in sortedKeys(d) if k not in actualPKColsGenerator(d)] + [d[k] for k in sortedKeys(d) if k in actualPKColsGenerator(d)]
                 self.dbc.execute(stmt, args)
+
+    def insertGoogleTopicIDDump(self, exchange, symbol, topicID, inputDate=date.today(), lastCheckedDate=date.today(), insertStrategy=SQLInsertHelpers.NONE):
+        stmt = f"INSERT {insertStrategy.value} INTO {getTableString('google_topic_ids_d')} VALUES (?,?,?,?,?)"
+        self.dbc.execute(stmt, (exchange, symbol, topicID, asISOFormat(inputDate), asISOFormat(lastCheckedDate)))
+
+    def updateGoogleTopicIDDump(self, exchange, symbol, topicID, inputDate=None, lastCheckedDate=None):
+        keys = []
+        values = []
+        if inputDate is not None:
+            keys.append('input_date')
+            values.append(asISOFormat(inputDate))
+        if lastCheckedDate is not None:
+            keys.append('last_checked_date')
+            values.append(asISOFormat(lastCheckedDate))
+
+        stmt = f"UPDATE {getTableString('google_topic_ids_d')} SET {','.join([c + '=?' for c in keys])} WHERE exchange=? AND symbol=? and topic_id=?"
+        self.dbc.execute(stmt, values + [exchange, symbol, topicID])
 
     #endregion
     ####################################################################################################################################################################

@@ -20,6 +20,8 @@ from managers.databaseManager import DatabaseManager
 from managers.apiManager import APIManager
 from managers.marketDayManager import MarketDayManager
 from structures.api.google import Google
+from structures.api.googleTrends.gt_exceptions import ResponseError
+from structures.api.googleTrends.request import GoogleAPI
 from structures.api.nasdaq import Nasdaq
 from structures.sql.sqlArgumentObj import SQLArgumentObj
 
@@ -766,6 +768,74 @@ class Collector:
             print(f'Inserted {insertCount} new tickers')
             print(f'Updated {len(tickerDetails) - insertCount} existing tickers')
         #endregion        
+
+    def startGoogleTopicIDCollection(self, exchange=None, symbol=None, tickers=None, dryrun=False, verbose=1):
+        '''ignores tickers without a determined exchange'''
+        if (exchange or symbol) and tickers: raise ValueError
+        if (exchange or symbol) and not tickers: tickers = [(exchange, symbol)]
+        gapi = GoogleAPI()
+
+        if not tickers:
+            tickerSet = set()
+            for api in ['alphavantage', 'polygon', 'yahoo']:
+                getFunction = getattr(dbm, f'getDumpSymbolInfo{api.capitalize()}_basic')
+                if api == 'polygon':
+                    getkwargs = {
+                        'sqlColumns': 'DISTINCT exchange_alias as exchange,ticker as symbol',
+                        'exchangeAlias': SQLHelpers.NOTNULL
+                    }
+                else:
+                    getkwargs = {
+                        'sqlColumns': 'DISTINCT exchange,symbol',
+                        'exchange': SQLHelpers.NOTNULL
+                    }
+
+                res = getFunction(**getkwargs)
+                for r in res:
+                    tickerSet.add((r.exchange, r.symbol))
+            tickers = list(tickerSet)
+        
+        topicsNew = []
+        topicsExisting = []
+        topicsNotFound = []
+        topicErrors = []
+        for exchange, symbol in tqdmLoopHandleWrapper(tickers, verbose=verbose, desc='Tickers'):
+            if '/' in symbol:
+                ## unknown how to map these symbols to work; since they also do not work for daily data it is fine if they are skipped for now
+                topicErrors.append((exchange, symbol))
+            exch = exchange.replace(' ','').replace('TSX','TSE').replace('MKT', 'AMERICAN') ## massage exchange
+            kw = f'{exch}:{symbol}'
+            try: 
+                gtopics = gapi.suggestions(kw)
+                for t in gtopics:
+                    if t['type'] == 'Topic' and t['title'] == kw:
+                        topicid = t['mid']
+                        if not dryrun:
+                            try:
+                                dbm.insertGoogleTopicIDDump(exchange, symbol, topicid)
+                                topicsNew.append((exchange, symbol))
+                            except sqlite3.IntegrityError:
+                                ## topic id still valid, just need to update last checked date
+                                dbm.updateGoogleTopicIDDump(exchange, symbol, topicid, lastCheckedDate=date.today())
+                                topicsExisting.append((exchange, symbol))
+                            dbm.commit()
+                        else: 
+                            print(t['mid'], exchange, symbol)
+                    else:
+                        topicsNotFound.append((exchange, symbol))
+            except ResponseError:
+                topicErrors.append((exchange, symbol))
+        if verbose:
+            if verbose > 1: print(topicsNotFound)
+            print(f'Unabled to determine topic for {len(topicsNotFound)} tickers')
+
+            if verbose > 1: print(topicErrors)
+            print(f'{len(topicErrors)} had errors')
+
+            topicsFound = len(topicsNew) + len(topicsExisting)
+            print(f'Found {topicsFound}/{len(tickers)} topics')
+            print(f'{len(topicsNew)} were new')
+            print(f'{len(topicsExisting)} were verified as unchanged')
 
     def collectAPIDump_symbolInfo(self, api, **kwargs):
         substmt = f'SELECT * FROM {dbm.getTableString("symbol_info_polygon_d")} dsi WHERE dsi.exchange = ssi.exchange AND dsi.symbol = ssi.symbol AND ' + api + ' IS NOT NULL'

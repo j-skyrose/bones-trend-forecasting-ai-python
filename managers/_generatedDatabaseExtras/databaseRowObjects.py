@@ -1046,3 +1046,14 @@ class QueueStockDataDailyDRow():
         self.symbol = symbolValue
         self.api = apiValue
 
+## TABLE: google_topic_ids_d ######################################
+googleTopicIdsDSnakeCaseTableColumns = ['exchange', 'symbol', 'topic_id', 'input_date', 'last_checked_date']
+googleTopicIdsDCamelCaseTableColumns = ['exchange', 'symbol', 'topicId', 'inputDate', 'lastCheckedDate']
+class GoogleTopicIdsDRow():
+    def __init__(self, exchangeValue: str, symbolValue: str, topicIdValue: str, inputDateValue: str, lastCheckedDateValue: str):
+        self.exchange = exchangeValue
+        self.symbol = symbolValue
+        self.topicId = topicIdValue
+        self.inputDate = inputDateValue
+        self.lastCheckedDate = lastCheckedDateValue
+
