@@ -33,7 +33,7 @@ def processRawGoogleInterests(exchange=None, symbol=None, verbose=1):
         symbolList = [recdotdict({'exchange': exchange, 'symbol': symbol})]
     else:
         # symbolList = dbm.dbc.execute('SELECT DISTINCT exchange, symbol FROM google_interests_d').fetchall()
-        symbolList = dbm.getSymbols(exchange=exchange, googleTopicId=SQLHelpers.NOTNULL)
+        symbolList = dbm.getSymbols(exchange=exchange, topicId=SQLHelpers.NOTNULL)
 
     ddh: DailyDataHandler
     for s in tqdmLoopHandleWrapper(symbolList, verbose, desc='Processing symbols'):

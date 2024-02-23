@@ -133,7 +133,31 @@ def generateExcludeTickersSnippet(tickerList, alias=None):
 def generateExcludeUnusableTickersSnippet(alias=None):
     return generateExcludeTickersSnippet(unusableSymbols, alias)
 
-def generateSQLSuffixStatementAndArguments(excludeKeys=[], **kwargs):
+def generateSQLConditionSnippet(key, value, tableAlias=None):
+    if value is None: return '', []
+
+    tableAlias = f'{tableAlias}.' if tableAlias else ''
+    if type(value) == SQLHelpers:
+        return f' {tableAlias}{key} is {value.value} ', []
+    elif type(value) == SQLArgumentObj:
+        value: SQLArgumentObj
+        return f' ? {value.modifier.sqlsymbol} {tableAlias}{key} ', [value.value]
+    else:
+        if issubclass(value.__class__, Enum): value = value.name
+        vlist = asList(value)
+        return f' {tableAlias}{key} in ({",".join(["?" for x in range(len(vlist))])}) ', vlist
+
+def generateAllSQLConditionSnippets(tableAlias=None, **kwargs):
+    snippets = []
+    args = []
+    for argKey, argVal in kwargs.items():
+        if argVal is None: continue
+        snippet, snpargs = generateSQLConditionSnippet(argKey, argVal, tableAlias)
+        snippets.append(snippet)
+        if snpargs: args.extend(snpargs)
+    return snippets, args
+
+def generateSQLSuffixStatementAndArguments(excludeKeys=[], tableAlias=None, **kwargs):
     '''converts arguments (passed to a DBM SQL GET function) into the appropriate WHERE statement; including order, group by'''
 
     # excludeKeys = ['self', 'kwargs', 'table', 'exclude_keys'] + [convertToSnakeCase(k) for k in asList(shortcdict(kwargs, 'excludeKeys', []))]
@@ -184,32 +208,9 @@ def generateSQLSuffixStatementAndArguments(excludeKeys=[], **kwargs):
     args = []
 
     ## add all column-keyword args to the query
-    for argKey, argVal in processedkwargs.items():
-        # if argKey == 'api':
-        #     if type(argVal) is list:
-        #         apiAdds = []
-        #         for a in argVal:
-        #             apiAdds.append(f's.api_{a} = 1')
-        #         additions.append(f'( {" OR ".join(apiAdds)} )')
-        #     else:
-        #         additions.append(f's.api_{api} = 1')
-        # else:
-            # col = 's'
-            # if argKey in onlyHistoricalDataSnakeCaseTableColumns:
-            #     col = 'h'
-            # col += f'.{argKey}'
-
-        if type(argVal) == SQLHelpers:
-            additions.append(f' {argKey} is {argVal.value} ')
-        elif type(argVal) == SQLArgumentObj:
-            argVal: SQLArgumentObj
-            additions.append(f' ? {argVal.modifier.sqlsymbol} {argKey} ')
-            args.append(argVal.value)
-        else:
-            if issubclass(argVal.__class__, Enum): argVal = argVal.name
-            vlist = asList(argVal)
-            additions.append(f' {argKey} in ({",".join(["?" for x in range(len(vlist))])}) ')
-            args.extend(vlist)
+    snippets, snpargs = generateAllSQLConditionSnippets(tableAlias=tableAlias, **processedkwargs)
+    additions.extend(snippets)
+    args.extend(snpargs)
 
     stmt = f' {groupByStmt} {orderByStmt} {limitStmt} '
     rtargs = []
@@ -219,16 +220,19 @@ def generateSQLSuffixStatementAndArguments(excludeKeys=[], **kwargs):
 
     return stmt, rtargs
 
-def _dbGetter(table, sqlColumns='*', onlyColumn_asList=None, **kwargs):
+def _dbGetter(table, sqlColumns='*', onlyColumn_asList=None, rawStatement=False, **kwargs):
     '''generalized SELECT statement builder and executor'''
     dbm = kwargs['self']
     additionalStmt, arguments = generateSQLSuffixStatementAndArguments(**kwargs)
     stmt = f'SELECT {",".join(asList(sqlColumns))} FROM {getTableString(table)}' + additionalStmt
-    rows = dbm.dbc.execute(stmt, arguments).fetchall()
-    if onlyColumn_asList and len(rows) > 0:
-        return [r[onlyColumn_asList] for r in rows]
+    if rawStatement:
+        return stmt, arguments
     else:
-        return rows
+        rows = dbm.dbc.execute(stmt, arguments).fetchall()
+        if onlyColumn_asList and len(rows) > 0:
+            return [r[onlyColumn_asList] for r in rows]
+        else:
+            return rows
 
 def getDBAliases():
     '''return list containing all DB aliases'''
@@ -347,7 +351,7 @@ def generateDatabaseGeneralizedGettersForDBM():
                 astring = f'{convertToCamelCase(c.name)}=None'
                 if c['pk']: argumentPKStrings.append(astring)
                 else: argumentStrings.append(astring)
-            suffixArgumentStrings = ['groupBy=None', 'orderBy=None', 'limit=None', 'excludeKeys=None', 'onlyColumn_asList=None', 'sqlColumns=\'*\'']
+            suffixArgumentStrings = ['groupBy=None', 'orderBy=None', 'limit=None', 'excludeKeys=None', 'onlyColumn_asList=None', 'sqlColumns=\'*\'', 'rawStatement=False']
 
             argumentLineSeparator = f',\n{tab}{tab}{tab}'
             arglists = [['self']]

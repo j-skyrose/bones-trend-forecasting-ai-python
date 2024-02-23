@@ -1220,7 +1220,7 @@ class Collector:
         ##
 
         ## due to prioritization, collection loop repeats until all symbols are up-to-date
-        symbollist = dbm.getSymbols(googleTopicId=SQLHelpers.NOTNULL)
+        symbollist = dbm.getSymbols(topicId=SQLHelpers.NOTNULL)
 
         while len(symbollist):
             if not collectStatsOnly: print(f'Checking {len(symbollist)} symbols{f" with <={priority_zeropercentagethreshold*100}% zeroes" if useprioritythreshold else ""}')

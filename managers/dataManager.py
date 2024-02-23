@@ -554,11 +554,11 @@ class DataManager():
             stockSplits=splitsset,
             earningsDateHandler=earningsDateHandler,
             indicators=precedingIndicators,
-            foundedDate=symbolData.founded,
-            ipoDate='todo',
-            sector=symbolData.sector,
-            exchange=symbolData.exchange,
-            etfFlag=symbolData.asset_type == 'ETF',
+            foundedDate=shortcdict(symbolData, 'founded'),
+            ipoDate=shortcdict(symbolData, 'ipo_date'),
+            sector=shortcdict(symbolData, 'sector'),
+            exchange=shortcdict(symbolData, 'exchange'),
+            etfFlag=shortcdict(symbolData, 'asset_type') == 'ETF',
             **kwargs
         )
         self.actualbuildtime += time.time() - startt

@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import math, re, dill, operator, shutil, json, time, pickle, calendar, numpy
+import math, re, dill, operator, shutil, json, time, pickle, calendar, numpy, random
 from typing import Dict, List, Tuple, Union
 import sqlite3, atexit, xlrd
 from datetime import date, timedelta, datetime
@@ -28,7 +28,7 @@ from structures.normalizationColumnObj import NormalizationColumnObj
 from structures.normalizationDataHandler import NormalizationDataHandler
 from structures.sql.sqlArgumentObj import SQLArgumentObj
 from structures.sql.sqlOrderObj import SQLOrderObj
-from utils.dbSupport import convertToSnakeCase, dumpDBAlias, generateCommaSeparatedQuestionMarkString, generateExcludeTickersSnippet, generateExcludeUnusableTickersSnippet, generateSQLSuffixStatementAndArguments, getDBAliasForTable, getTableColumns, getTableString, processDBQuartersToDicts, _dbGetter, generateDatabaseAnnotationObjectsFile, generateCompleteDBConnectionAndCursor, getDBConnectionAndCursor
+from utils.dbSupport import convertToSnakeCase, generateAllSQLConditionSnippets, generateCommaSeparatedQuestionMarkString, generateExcludeTickersSnippet, generateExcludeUnusableTickersSnippet, generateSQLConditionSnippet, generateSQLSuffixStatementAndArguments, getDBAliasForTable, getTableColumns, getTableString, processDBQuartersToDicts, _dbGetter, generateDatabaseAnnotationObjectsFile, generateCompleteDBConnectionAndCursor, getDBConnectionAndCursor
 from utils.other import buildCommaSeparatedTickerPairString, parseCommandLineOptions
 from utils.support import asDate, asISOFormat, asList, flatten, keySortedValues, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotobj, shortc, shortcdict, sortedKeys, tqdmLoopHandleWrapper, unixToDatetime
 
@@ -37,7 +37,7 @@ configManager: StaticConfigManager = StaticConfigManager()
 ## generate before import to ensure things are up-to-date for the current execution
 if current_process().name == 'MainProcess': generateDatabaseAnnotationObjectsFile()
 from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, CboeVolatilityIndexRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, StockDataDailyCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, QueueStockDataDailyDRow, GoogleTopicIdsDRow
-from managers._generatedDatabaseExtras.databaseRowObjects import symbolsSnakeCaseTableColumns, historicalDataSnakeCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns
+from managers._generatedDatabaseExtras.databaseRowObjects import symbolsSnakeCaseTableColumns, stockDataDailyCCamelCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns, symbolInfoAlphavantageDSnakeCaseTableColumns, symbolInfoPolygonDSnakeCaseTableColumns, symbolInfoYahooDSnakeCaseTableColumns
 
 class DatabaseManager(Singleton):
 
@@ -125,292 +125,292 @@ class DatabaseManager(Singleton):
     def getExchanges_basic(self,
             code=None,
             name=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[ExchangesRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[ExchangesRow]:
         return _dbGetter("exchanges", **locals())
 
     def getExchangeAliases_basic(self,
             exchange=None, alias=None, api=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[ExchangeAliasesRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[ExchangeAliasesRow]:
         return _dbGetter("exchange_aliases", **locals())
 
     def getAssetTypes_basic(self,
             type=None,
             description=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[AssetTypesRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[AssetTypesRow]:
         return _dbGetter("asset_types", **locals())
 
     def getCboeVolatilityIndex_basic(self,
             date=None,
             open=None, high=None, low=None, close=None, artificial=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[CboeVolatilityIndexRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[CboeVolatilityIndexRow]:
         return _dbGetter("cboe_volatility_index", **locals())
 
     def getSymbols_basic(self,
             exchange=None, symbol=None,
             name=None, assetType=None, apiAlphavantage=None, apiPolygon=None, googleTopicId=None, sector=None, industry=None, founded=None, apiFmp=None, apiNeo=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[SymbolsRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[SymbolsRow]:
         return _dbGetter("symbols", **locals())
 
     def getSectors_basic(self,
             sector=None,
             icbIndustry=None, gicsSector=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[SectorsRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[SectorsRow]:
         return _dbGetter("sectors", **locals())
 
     def getInputVectorFactories_basic(self,
             id=None,
             factory=None, config=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[InputVectorFactoriesRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[InputVectorFactoriesRow]:
         return _dbGetter("input_vector_factories", **locals())
 
     def getEdgarSubBalanceStatus_basic(self,
             adsh=None, ddate=None,
             status=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[EdgarSubBalanceStatusRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[EdgarSubBalanceStatusRow]:
         return _dbGetter("edgar_sub_balance_status", **locals())
 
     def getVwtbEdgarQuarters_basic(self,
             exchange=None, symbol=None, period=None,
             quarter=None, filed=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[VwtbEdgarQuartersRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[VwtbEdgarQuartersRow]:
         return _dbGetter("vwtb_edgar_quarters", **locals())
 
     def getVwtbEdgarFinancialNums_basic(self,
             exchange=None, symbol=None, tag=None, ddate=None,
             qtrs=None, uom=None, value=None, duplicate=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[VwtbEdgarFinancialNumsRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[VwtbEdgarFinancialNumsRow]:
         return _dbGetter("vwtb_edgar_financial_nums", **locals())
 
     def getSqliteStat1_basic(self,
             tbl=None, idx=None, stat=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[SqliteStat1Row]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[SqliteStat1Row]:
         return _dbGetter("sqlite_stat1", **locals())
 
     def getNetworkAccuracies_basic(self,
             networkId=None, accuracyType=None, subtype1=None, subtype2=None,
             sum=None, count=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[NetworkAccuraciesRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[NetworkAccuraciesRow]:
         return _dbGetter("network_accuracies", **locals())
 
     def getTickerSplits_basic(self,
             networkId=None, setCount=None, tickerCount=None,
             pickledSplit=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[TickerSplitsRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[TickerSplitsRow]:
         return _dbGetter("ticker_splits", **locals())
 
     def getAssetSubtypes_basic(self,
             assetType=None, subType=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[AssetSubtypesRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[AssetSubtypesRow]:
         return _dbGetter("asset_subtypes", **locals())
 
     def getStatusKey_basic(self,
             status=None,
             description=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[StatusKeyRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[StatusKeyRow]:
         return _dbGetter("status_key", **locals())
 
     def getHistoricalData_basic(self,
             exchange=None, symbol=None, seriesType=None, periodDate=None,
             open=None, high=None, low=None, close=None, volume=None, artificial=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[HistoricalDataRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[HistoricalDataRow]:
         return _dbGetter("historical_data", **locals())
 
     def getLastUpdates_basic(self,
             exchange=None, symbol=None, type=None,
             api=None, date=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[LastUpdatesRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[LastUpdatesRow]:
         return _dbGetter("last_updates", **locals())
 
     def getNetworksTemp_basic(self,
             id=None, factoryId=None, accuracyType=None, overallAccuracy=None, negativeAccuracy=None, positiveAccuracy=None, changeThreshold=None, precedingRange=None, followingRange=None, seriesType=None, highMax=None, volumeMax=None, epochs=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[NetworksTempRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[NetworksTempRow]:
         return _dbGetter("networks_temp", **locals())
 
     def getNetworks_basic(self,
             id=None,
             factoryId=None, accuracyType=None, overallAccuracy=None, negativeAccuracy=None, positiveAccuracy=None, epochs=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[NetworksRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[NetworksRow]:
         return _dbGetter("networks", **locals())
 
     def getNetworkTrainingConfig_basic(self,
             id=None,
             precedingRange=None, followingRange=None, changeValue=None, changeType=None, seriesType=None, highestHistoricalHigh=None, highestHistoricalVolume=None, minimumHistoricalCloseAllowed=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[NetworkTrainingConfigRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[NetworkTrainingConfigRow]:
         return _dbGetter("network_training_config", **locals())
 
     def getHistoricalDataMinute_basic(self,
             exchange=None, symbol=None, timestamp=None,
             open=None, high=None, low=None, close=None, volumeWeightedAverage=None, volume=None, transactions=None, artificial=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[HistoricalDataMinuteRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[HistoricalDataMinuteRow]:
         return _dbGetter("historical_data_minute", **locals())
 
     def getAccuracyLastUpdates_basic(self,
             networkId=None, accuracyType=None, dataCount=None, minDate=None, lastExchange=None, lastSymbol=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[AccuracyLastUpdatesRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[AccuracyLastUpdatesRow]:
         return _dbGetter("accuracy_last_updates", **locals())
 
     def getTechnicalIndicatorData_basic(self,
             exchange=None, symbol=None, dateType=None, date=None, indicator=None, period=None,
             value=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[TechnicalIndicatorDataCRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[TechnicalIndicatorDataCRow]:
         return _dbGetter("technical_indicator_data_c", **locals())
 
     def getEarningsDates_basic(self,
             exchange=None, symbol=None, inputDate=None, earningsDate=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[EarningsDatesCRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[EarningsDatesCRow]:
         return _dbGetter("earnings_dates_c", **locals())
 
     def getGoogleInterests_basic(self,
             exchange=None, symbol=None, date=None,
             relativeInterest=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[GoogleInterestsCRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[GoogleInterestsCRow]:
         return _dbGetter("google_interests_c", **locals())
 
     def getVectorSimilarities_basic(self,
             exchange=None, symbol=None, dateType=None, date=None, vectorClass=None, precedingRange=None, followingRange=None, changeValue=None, changeType=None,
             value=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[VectorSimilaritiesCRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[VectorSimilaritiesCRow]:
         return _dbGetter("vector_similarities_c", **locals())
 
     def getStockDataDaily_basic(self,
             exchange=None, symbol=None, periodDate=None,
             preMarket=None, open=None, high=None, low=None, close=None, afterHours=None, volume=None, transactions=None, artificial=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[StockDataDailyCRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[StockDataDailyCRow]:
         return _dbGetter("stock_data_daily_c", **locals())
 
     def getSqliteStat1_basic(self,
             tbl=None, idx=None, stat=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[SqliteStat1Row]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[SqliteStat1Row]:
         return _dbGetter("sqlite_stat1", **locals())
 
     def getDumpFinancialStmtsTagDataSetEdgar_basic(self,
             tag=None, version=None,
             custom=None, abstract=None, datatype=None, iord=None, crdr=None, tlabel=None, doc=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[FinancialStmtsTagDataSetEdgarDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[FinancialStmtsTagDataSetEdgarDRow]:
         return _dbGetter("financial_stmts_tag_data_set_edgar_d", **locals())
 
     def getDumpFinancialStmtsSubDataSetEdgar_basic(self,
             exchange=None, symbol=None, adsh=None,
             cik=None, name=None, sic=None, countryba=None, stprba=None, cityba=None, zipba=None, bas1=None, bas2=None, baph=None, countryma=None, stprma=None, cityma=None, zipma=None, mas1=None, mas2=None, countryinc=None, stprinc=None, ein=None, former=None, changed=None, afs=None, wksi=None, fye=None, form=None, period=None, fy=None, fp=None, filed=None, accepted=None, prevrpt=None, detail=None, instance=None, nciks=None, aciks=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[FinancialStmtsSubDataSetEdgarDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[FinancialStmtsSubDataSetEdgarDRow]:
         return _dbGetter("financial_stmts_sub_data_set_edgar_d", **locals())
 
     def getDumpFinancialStmtsLoadedPeriods_basic(self,
             type=None, period=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[FinancialStmtsLoadedPeriodsDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[FinancialStmtsLoadedPeriodsDRow]:
         return _dbGetter("financial_stmts_loaded_periods_d", **locals())
 
     def getDumpFinancialStmtsNumDataSetEdgar_basic(self,
             adsh=None, tag=None, version=None, coreg=None, ddate=None, qtrs=None, uom=None, duplicate=None,
             value=None, footnote=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[FinancialStmtsNumDataSetEdgarDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[FinancialStmtsNumDataSetEdgarDRow]:
         return _dbGetter("financial_stmts_num_data_set_edgar_d", **locals())
 
     def getDumpStockSplitsPolygon_basic(self,
             exchange=None, symbol=None, date=None,
             splitFrom=None, splitTo=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[StockSplitsPolygonDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[StockSplitsPolygonDRow]:
         return _dbGetter("stock_splits_polygon_d", **locals())
 
     def getDumpGoogleInterests_basic(self,
             exchange=None, symbol=None, date=None, type=None, stream=None,
             relativeInterest=None, artificial=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[GoogleInterestsDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[GoogleInterestsDRow]:
         return _dbGetter("google_interests_d", **locals())
 
     def getDumpStagingFinancials_basic(self,
             exchange=None, symbol=None, period=None, calendarDate=None,
             polygonReportPeriod=None, polygonUpdated=None, polygonDateKey=None, polygonAccumulatedOtherComprehensiveIncome=None, polygonAssets=None, polygonAssetsAverage=None, polygonAssetsCurrent=None, polygonAssetsNonCurrent=None, polygonAssetTurnover=None, polygonBookValuePerShare=None, polygonCapitalExpenditure=None, polygonCashAndEquivalents=None, polygonCashAndEquivalentsUSD=None, polygonCostOfRevenue=None, polygonConsolidatedIncome=None, polygonCurrentRatio=None, polygonDebtToEquityRatio=None, polygonDebt=None, polygonDebtCurrent=None, polygonDebtNonCurrent=None, polygonDebtUSD=None, polygonDeferredRevenue=None, polygonDepreciationAmortizationAndAccretion=None, polygonDeposits=None, polygonDividendYield=None, polygonDividendsPerBasicCommonShare=None, polygonEarningBeforeInterestTaxes=None, polygonEarningsBeforeInterestTaxesDepreciationAmortization=None, polygonEBITDAMargin=None, polygonEarningsBeforeInterestTaxesDepreciationAmortizationUSD=None, polygonEarningBeforeInterestTaxesUSD=None, polygonEarningsBeforeTax=None, polygonEarningsPerBasicShare=None, polygonEarningsPerDilutedShare=None, polygonEarningsPerBasicShareUSD=None, polygonShareholdersEquity=None, polygonAverageEquity=None, polygonShareholdersEquityUSD=None, polygonEnterpriseValue=None, polygonEnterpriseValueOverEBIT=None, polygonEnterpriseValueOverEBITDA=None, polygonFreeCashFlow=None, polygonFreeCashFlowPerShare=None, polygonForeignCurrencyUSDExchangeRate=None, polygonGrossProfit=None, polygonGrossMargin=None, polygonGoodwillAndIntangibleAssets=None, polygonInterestExpense=None, polygonInvestedCapital=None, polygonInvestedCapitalAverage=None, polygonInventory=None, polygonInvestments=None, polygonInvestmentsCurrent=None, polygonInvestmentsNonCurrent=None, polygonTotalLiabilities=None, polygonCurrentLiabilities=None, polygonLiabilitiesNonCurrent=None, polygonMarketCapitalization=None, polygonNetCashFlow=None, polygonNetCashFlowBusinessAcquisitionsDisposals=None, polygonIssuanceEquityShares=None, polygonIssuanceDebtSecurities=None, polygonPaymentDividendsOtherCashDistributions=None, polygonNetCashFlowFromFinancing=None, polygonNetCashFlowFromInvesting=None, polygonNetCashFlowInvestmentAcquisitionsDisposals=None, polygonNetCashFlowFromOperations=None, polygonEffectOfExchangeRateChangesOnCash=None, polygonNetIncome=None, polygonNetIncomeCommonStock=None, polygonNetIncomeCommonStockUSD=None, polygonNetLossIncomeFromDiscontinuedOperations=None, polygonNetIncomeToNonControllingInterests=None, polygonProfitMargin=None, polygonOperatingExpenses=None, polygonOperatingIncome=None, polygonTradeAndNonTradePayables=None, polygonPayoutRatio=None, polygonPriceToBookValue=None, polygonPriceEarnings=None, polygonPriceToEarningsRatio=None, polygonPropertyPlantEquipmentNet=None, polygonPreferredDividendsIncomeStatementImpact=None, polygonSharePriceAdjustedClose=None, polygonPriceSales=None, polygonPriceToSalesRatio=None, polygonTradeAndNonTradeReceivables=None, polygonAccumulatedRetainedEarningsDeficit=None, polygonRevenues=None, polygonRevenuesUSD=None, polygonResearchAndDevelopmentExpense=None, polygonReturnOnAverageAssets=None, polygonReturnOnAverageEquity=None, polygonReturnOnInvestedCapital=None, polygonReturnOnSales=None, polygonShareBasedCompensation=None, polygonSellingGeneralAndAdministrativeExpense=None, polygonShareFactor=None, polygonShares=None, polygonWeightedAverageShares=None, polygonSalesPerShare=None, polygonTangibleAssetValue=None, polygonTaxAssets=None, polygonIncomeTaxExpense=None, polygonTaxLiabilities=None, polygonTangibleAssetsBookValuePerShare=None, polygonWorkingCapital=None, polygonWeightedAverageSharesDiluted=None, fmp=None, alphavantage=None, polygon=None, alphavantageFiscalDateEnding=None, alphavantageReportedCurrency=None, alphavantageGrossProfit=None, alphavantageTotalRevenue=None, alphavantageCostOfRevenue=None, alphavantageCostofGoodsAndServicesSold=None, alphavantageOperatingIncome=None, alphavantageSellingGeneralAndAdministrative=None, alphavantageResearchAndDevelopment=None, alphavantageOperatingExpenses=None, alphavantageInvestmentIncomeNet=None, alphavantageNetInterestIncome=None, alphavantageInterestIncome=None, alphavantageInterestExpense=None, alphavantageNonInterestIncome=None, alphavantageOtherNonOperatingIncome=None, alphavantageDepreciation=None, alphavantageDepreciationAndAmortization=None, alphavantageIncomeBeforeTax=None, alphavantageIncomeTaxExpense=None, alphavantageInterestAndDebtExpense=None, alphavantageNetIncomeFromContinuingOperations=None, alphavantageComprehensiveIncomeNetOfTax=None, alphavantageEbit=None, alphavantageEbitda=None, alphavantageNetIncome=None, alphavantageTotalAssets=None, alphavantageTotalCurrentAssets=None, alphavantageCashAndCashEquivalentsAtCarryingValue=None, alphavantageCashAndShortTermInvestments=None, alphavantageInventory=None, alphavantageCurrentNetReceivables=None, alphavantageTotalNonCurrentAssets=None, alphavantagePropertyPlantEquipment=None, alphavantageAccumulatedDepreciationAmortizationPPE=None, alphavantageIntangibleAssets=None, alphavantageIntangibleAssetsExcludingGoodwill=None, alphavantageGoodwill=None, alphavantageInvestments=None, alphavantageLongTermInvestments=None, alphavantageShortTermInvestments=None, alphavantageOtherCurrentAssets=None, alphavantageOtherNonCurrrentAssets=None, alphavantageTotalLiabilities=None, alphavantageTotalCurrentLiabilities=None, alphavantageCurrentAccountsPayable=None, alphavantageDeferredRevenue=None, alphavantageCurrentDebt=None, alphavantageShortTermDebt=None, alphavantageTotalNonCurrentLiabilities=None, alphavantageCapitalLeaseObligations=None, alphavantageLongTermDebt=None, alphavantageCurrentLongTermDebt=None, alphavantageLongTermDebtNoncurrent=None, alphavantageShortLongTermDebtTotal=None, alphavantageOtherCurrentLiabilities=None, alphavantageOtherNonCurrentLiabilities=None, alphavantageTotalShareholderEquity=None, alphavantageTreasuryStock=None, alphavantageRetainedEarnings=None, alphavantageCommonStock=None, alphavantageCommonStockSharesOutstanding=None, alphavantageOperatingCashflow=None, alphavantagePaymentsForOperatingActivities=None, alphavantageProceedsFromOperatingActivities=None, alphavantageChangeInOperatingLiabilities=None, alphavantageChangeInOperatingAssets=None, alphavantageDepreciationDepletionAndAmortization=None, alphavantageCapitalExpenditures=None, alphavantageChangeInReceivables=None, alphavantageChangeInInventory=None, alphavantageProfitLoss=None, alphavantageCashflowFromInvestment=None, alphavantageCashflowFromFinancing=None, alphavantageProceedsFromRepaymentsOfShortTermDebt=None, alphavantagePaymentsForRepurchaseOfCommonStock=None, alphavantagePaymentsForRepurchaseOfEquity=None, alphavantagePaymentsForRepurchaseOfPreferredStock=None, alphavantageDividendPayout=None, alphavantageDividendPayoutCommonStock=None, alphavantageDividendPayoutPreferredStock=None, alphavantageProceedsFromIssuanceOfCommonStock=None, alphavantageProceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNet=None, alphavantageProceedsFromIssuanceOfPreferredStock=None, alphavantageProceedsFromRepurchaseOfEquity=None, alphavantageProceedsFromSaleOfTreasuryStock=None, alphavantageChangeInCashAndCashEquivalents=None, alphavantageChangeInExchangeRate=None, polygonLogo=None, polygonListdate=None, polygonCik=None, polygonBloomberg=None, polygonFigi=None, polygonLei=None, polygonSic=None, polygonCountry=None, polygonIndustry=None, polygonSector=None, polygonMarketcap=None, polygonEmployees=None, polygonPhone=None, polygonCeo=None, polygonUrl=None, polygonDescription=None, polygonName=None, polygonExchangeSymbol=None, polygonHqAddress=None, polygonHqState=None, polygonHqCountry=None, polygonType=None, polygonTags=None, polygonSimilar=None, polygonActive=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[StagingFinancialsDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[StagingFinancialsDRow]:
         return _dbGetter("staging_financials_d", **locals())
 
     def getDumpEarningsDatesNasdaq_basic(self,
             symbol=None, inputDate=None, earningsDate=None,
             eps=None, surprisePercentage=None, time=None, name=None, lastYearReportDate=None, lastYearEps=None, marketCap=None, fiscalQuarterEnding=None, epsForecast=None, numberOfEstimates=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[EarningsDatesNasdaqDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[EarningsDatesNasdaqDRow]:
         return _dbGetter("earnings_dates_nasdaq_d", **locals())
 
     def getDumpSymbolStatisticsYahoo_basic(self,
             exchange=None, symbol=None, inputDate=None,
             quoteType=None, currency=None, sharesOutstanding=None, marketCap=None, fullExchangeName=None, firstTradeDateMilliseconds=None, tradeable=None, cryptoTradeable=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[SymbolStatisticsYahooDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[SymbolStatisticsYahooDRow]:
         return _dbGetter("symbol_statistics_yahoo_d", **locals())
 
     def getDumpShortInterestFinra_basic(self,
             marketClassCode=None, symbolCode=None, settlementDate=None, revisionFlag=None,
             issueName=None, currentShortPositionQuantity=None, daysToCoverQuantity=None, previousShortPositionQuantity=None, issuerServicesGroupExchangeCode=None, stockSplitFlag=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[ShortInterestFinraDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[ShortInterestFinraDRow]:
         return _dbGetter("short_interest_finra_d", **locals())
 
     def getDumpEarningsDatesMarketwatch_basic(self,
             exchange=None, symbol=None, inputDate=None, earningsDate=None,
             name=None, fiscalQuarterEnding=None, epsForecast=None, eps=None, surprisePercentage=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[EarningsDatesMarketwatchDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[EarningsDatesMarketwatchDRow]:
         return _dbGetter("earnings_dates_marketwatch_d", **locals())
 
     def getDumpEarningsDatesYahoo_basic(self,
             exchange=None, symbol=None, inputDate=None, earningsDate=None,
             name=None, eventName=None, epsForecast=None, eps=None, surprisePercentage=None, startDateTime=None, startDateTimeType=None, timeZoneShortName=None, gmtOffsetMilliSeconds=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[EarningsDatesYahooDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[EarningsDatesYahooDRow]:
         return _dbGetter("earnings_dates_yahoo_d", **locals())
 
     def getDumpSymbolInfoYahoo_basic(self,
             exchange=None, symbol=None,
             quoteType=None, shortName=None, longName=None, messageBoardId=None, exchangeTimezoneName=None, exchangeTimezoneShortName=None, gmtOffSetMilliseconds=None, market=None, isEsgPopulated=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[SymbolInfoYahooDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[SymbolInfoYahooDRow]:
         return _dbGetter("symbol_info_yahoo_d", **locals())
 
     def getDumpStagingSymbolInfo_basic(self,
             exchange=None, symbol=None,
             migrated=None, founded=None, ipo=None, sector=None, polygonSector=None, fmpSector=None, alphavantageSector=None, polygonIndustry=None, fmpIndustry=None, alphavantageIndustry=None, polygonDescription=None, fmpDescription=None, alphavantageDescription=None, polygonIpo=None, fmpIpo=None, alphavantageAssettype=None, fmpIsetf=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[StagingSymbolInfoDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[StagingSymbolInfoDRow]:
         return _dbGetter("staging_symbol_info_d", **locals())
 
     def getSymbolInfoPolygonDOld_basic(self,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[SymbolInfoPolygonDOldRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[SymbolInfoPolygonDOldRow]:
         return _dbGetter("symbol_info_polygon_d_old", **locals())
 
     def getDumpSymbolInfoPolygon_basic(self,
             ticker=None, primaryExchange=None, delistedUtc=None,
             exchangeAlias=None, name=None, market=None, locale=None, type=None, active=None, currencyName=None, cik=None, compositeFigi=None, shareClassFigi=None, lastUpdatedUtc=None, postalCode=None, roundLot=None, marketCap=None, city=None, homepageUrl=None, state=None, description=None, address1=None, listDate=None, shareClassSharesOutstanding=None, weightedSharesOutstanding=None, sicCode=None, sicDescription=None, tickerRoot=None, totalEmployees=None, phoneNumber=None, tickerSuffix=None, address2=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[SymbolInfoPolygonDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[SymbolInfoPolygonDRow]:
         return _dbGetter("symbol_info_polygon_d", **locals())
 
     def getSymbolInfoPolygonDBkActivesonly_basic(self,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[SymbolInfoPolygonDBkActivesonlyRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[SymbolInfoPolygonDBkActivesonlyRow]:
         return _dbGetter("symbol_info_polygon_d_bk_activesonly", **locals())
 
     def getSymbolInfoPolygonDBkInactivesonly_basic(self,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[SymbolInfoPolygonDBkInactivesonlyRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[SymbolInfoPolygonDBkInactivesonlyRow]:
         return _dbGetter("symbol_info_polygon_d_bk_inactivesonly", **locals())
 
     def getDumpStockDataDailyPolygon_basic(self,
             ticker=None, periodDate=None,
             preMarket=None, open=None, high=None, low=None, close=None, afterHours=None, volume=None, transactions=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[StockDataDailyPolygonDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[StockDataDailyPolygonDRow]:
         return _dbGetter("stock_data_daily_polygon_d", **locals())
 
     def getDumpSymbolInfoAlphavantage_basic(self,
             exchange=None, symbol=None, delistingDate=None,
             name=None, assetType=None, ipoDate=None, status=None, asOfDate=None, description=None, evToRevenue=None, trailingPe=None, peRatio=None, priceToBookRatio=None, dividendDate=None, country=None, currency=None, marketCapitalization=None, beta=None, quarterlyRevenueGrowthYoy=None, operatingMarginTtm=None, pegRatio=None, industry=None, exDividendDate=None, address=None, priceToSalesRatioTtm=None, evToEbitda=None, revenuePerShareTtm=None, grossProfitTtm=None, dilutedEpsttm=None, returnOnAssetsTtm=None, fiscalYearEnd=None, cik=None, ebitda=None, bookValue=None, profitMargin=None, latestQuarter=None, analystTargetPrice=None, returnOnEquityTtm=None, sharesOutstanding=None, quarterlyEarningsGrowthYoy=None, forwardPe=None, revenueTtm=None, eps=None, dividendYield=None, dividendPerShare=None, sector=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[SymbolInfoAlphavantageDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[SymbolInfoAlphavantageDRow]:
         return _dbGetter("symbol_info_alphavantage_d", **locals())
 
     def getDumpStockDataDailyAlphavantage_basic(self,
             exchange=None, symbol=None, periodDate=None,
             open=None, high=None, low=None, close=None, volume=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[StockDataDailyAlphavantageDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[StockDataDailyAlphavantageDRow]:
         return _dbGetter("stock_data_daily_alphavantage_d", **locals())
 
     def getDumpQueueStockDataDaily_basic(self,
             exchange=None, symbol=None, api=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[QueueStockDataDailyDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[QueueStockDataDailyDRow]:
         return _dbGetter("queue_stock_data_daily_d", **locals())
 
     def getDumpGoogleTopicIds_basic(self,
             exchange=None, symbol=None, topicId=None,
             inputDate=None, lastCheckedDate=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*') -> List[GoogleTopicIdsDRow]:
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[GoogleTopicIdsDRow]:
         return _dbGetter("google_topic_ids_d", **locals())
 
     #endregion basic generic gets - AUTO-GENERATED SECTION
@@ -450,73 +450,87 @@ class DatabaseManager(Singleton):
         
         return ret
 
-    ## get data from symbols table
     def getSymbols(self,
-                   ## symbols table
-                   exchange=None, symbol=None, name=None, assetType=None, api=None, googleTopicId=None, sector=None, industry=None, founded=None,
+                   ## symbol_info tables
+                #    TODO: name=None, assetType=None, sector=None, industry=None, founded=None,
+                   exchange=None, symbol=None, active=True, topicId=None, api=None,
                    ## historical data table
-                   seriesType: SeriesType=None, periodDate=None, open=None, high=None, low=None, close=None, volume=None, artificial=None,
+                   periodDate=None, preMarket=None, open=None, high=None, low=None, close=None, afterHours=None, volume=None, transactions=None, artificial=None,
                    ## reductions
                    requireEarningsDates=None, normalizationData=None, tickerExclusionList: List[Tuple[str, str]]=[],
                    ## other
-                   advancedOrdering:AdvancedOrdering=None, rawStmt=False, **_) -> List[SymbolsRow]:
-        kwargs = {}
-        for k,v in locals().items():
-            k = convertToSnakeCase(k)
-            if (k in symbolsSnakeCaseTableColumns + historicalDataSnakeCaseTableColumns or k == 'api') and v is not None:
-                kwargs[k] = v
+                   advancedOrdering:AdvancedOrdering=None, rawStatement=False, verbose=0, **symbolInfoKWArgs) -> List[SymbolsRow]:
+        '''returns aggregated info about stock tickers, with advanced filtering capability based on daily data, earnings dates\n(exchange, symbol, topic ID columns)'''
 
-        stmt = 'SELECT * FROM symbols s '
-        adds = []
-        args = []
-        includingHistorical = False
-        ## check if any arguments are for the historical data table
-        onlyHistoricalDataSnakeCaseTableColumns = list(set(historicalDataSnakeCaseTableColumns) - set(symbolsSnakeCaseTableColumns))
-        if any(c in onlyHistoricalDataSnakeCaseTableColumns for c in kwargs.keys()) or (normalizationData and len(normalizationData.get(NormalizationGroupings.HISTORICAL, orNone=True)) > 0):
-            includingHistorical = True
-            stmt += f' JOIN {self.stockDataDailyTableString} d ON s.exchange=d.exchange AND s.symbol=d.symbol '
+        localsref = locals() ## freeze kwargs
+        siAlias = 's'
+        ddAlias = 'd'
+        aoAlias = 'o'
+        gtAlias = 'g'
 
-        ## add all column-keyword args to the query
-        for argKey, argVal in kwargs.items():
-            if argKey == 'api':
-                if type(argVal) is list:
-                    apiAdds = []
-                    for a in argVal:
-                        apiAdds.append(f's.api_{a} = 1')
-                    adds.append(f'( {" OR ".join(apiAdds)} )')
-                else:
-                    adds.append(f's.api_{api} = 1')
+        groupByColumns = ['exchange', 'symbol']
+
+        symbolInfoDumpStmts = []
+        symbolInfoDumpArgs = []
+        for a in ['alphavantage', 'polygon', 'yahoo']:
+            if api is not None and a != api: continue
+            
+            lkwargs = {}
+            for k,v in symbolInfoKWArgs.items():
+                k = convertToSnakeCase(k)
+                if k in globals()[f'symbolInfo{a.capitalize()}DSnakeCaseTableColumns'] and v is not None:
+                    lkwargs[k] = v
+            if a == 'alphavantage':
+                specificKWArgs = {
+                    'exchange': exchange,
+                    'symbol': symbol,
+                    'status': 'Active' if active else 'Delisted'
+                }
+            elif a == 'polygon':
+                specificKWArgs = {
+                    'exchangeAlias': exchange,
+                    'ticker': symbol,
+                    'active': active,
+                    'sqlColumns': 'exchange_alias AS exchange, ticker AS symbol, *'
+                }
+            elif a == 'yahoo':
+                specificKWArgs = {
+                    'exchange': exchange,
+                    'symbol': symbol
+                }
+            stmt, args = getattr(self, f'getDumpSymbolInfo{a.capitalize()}_basic')(**specificKWArgs, **lkwargs, rawStatement=True)
+            symbolInfoDumpStmts.append(stmt)
+            symbolInfoDumpArgs.append(args)
+
+        stmt = f"SELECT * FROM (SELECT exchange,symbol FROM ({') UNION SELECT exchange,symbol FROM ('.join(symbolInfoDumpStmts)})) {siAlias} "
+        args = flatten(symbolInfoDumpArgs)
+        whereConditions = []
+
+        ## incorporate google topic ID info
+        if topicId:
+            if topicId == SQLHelpers.NULL:
+                whereConditions.append(f'{siAlias}.exchange||{siAlias}.symbol NOT IN (SELECT DISTINCT exchange||symbol FROM {getTableString("google_topic_ids_d")})')
             else:
-                col = 's'
-                if argKey in onlyHistoricalDataSnakeCaseTableColumns:
-                    col = 'h'
-                col += f'.{argKey}'
-
-                if type(argVal) == SQLHelpers:
-                    adds.append(f' {col} is {argVal.value} ')
-                elif type(argVal) == SQLArgumentObj:
-                    argVal: SQLArgumentObj
-                    adds.append(f' ? {argVal.modifier.sqlsymbol} {col} ')
-                    args.append(argVal.value)
-                else:
-                    if issubclass(argVal.__class__, Enum): argVal = argVal.name
-                    vlist = asList(argVal)
-                    if len(vlist) > 0:
-                        adds.append(f' {col} in ({",".join(["?" for x in range(len(vlist))])}) ')
-                        args.extend(vlist)
+                stmt += f" JOIN (SELECT *,MAX(last_checked_date) FROM {getTableString('google_topic_ids_d')} GROUP BY exchange,symbol) {gtAlias} ON {siAlias}.exchange={gtAlias}.exchange AND {siAlias}.symbol={gtAlias}.symbol "
+                if topicId != SQLHelpers.NOTNULL:
+                    snippet, snpargs = generateSQLConditionSnippet('topic_id', topicId, gtAlias)
+                    whereConditions.append(snippet)
+                    if snpargs: args.extend(snpargs)
 
         ## add normalization args to query
         if normalizationData:
             nc: NormalizationColumnObj
             for nc in normalizationData:
                 if nc.normalizationGrouping in [NormalizationGroupings.HISTORICAL, NormalizationGroupings.STOCK]:
-                    adds.append(f' ? {OperatorDict.LESSTHANOREQUAL.sqlsymbol} h.{nc.columnName} ')
+                    whereConditions.append(f' ? {OperatorDict.LESSTHANOREQUAL.sqlsymbol} {ddAlias}.{nc.columnName} ')
                     args.append(nc.value)
 
         if requireEarningsDates:
-            adds.append(f's.exchange||s.symbol IN (SELECT DISTINCT exchange||symbol FROM {getTableString("earnings_dates_c")})')
+            whereConditions.append(f'{siAlias}.exchange||{siAlias}.symbol IN (SELECT DISTINCT exchange||symbol FROM {getTableString("earnings_dates_c")})')
 
-        
+        if tickerExclusionList:
+            whereConditions.append(generateExcludeTickersSnippet(tickerExclusionList, alias=siAlias))
+
         if advancedOrdering:
             if advancedOrdering in AdvancedOrdering.getVolumeEnums():
                 # column='volume'
@@ -531,31 +545,40 @@ class DatabaseManager(Singleton):
                 column='adjusted_sum'
                 table=f'(SELECT hd.exchange,hd.symbol,hd.period_date,volume+relative_interest AS {column} FROM {self.stockDataDailyTableString} hd JOIN {getTableString("google_interests_c")} gi ON hd.exchange=gi.exchange AND hd.symbol=gi.symbol)'
             
-            stmt += f' JOIN (SELECT exchange,symbol,{column} FROM {table} WHERE period_date >= {(date.today() - timedelta(days=10)).isoformat()} GROUP BY exchange,symbol ORDER BY {column} {advancedOrdering.sqlDirection.value}) h on s.exchange=h.exchange and s.symbol=h.symbol '
+            stmt += f' JOIN (SELECT exchange,symbol,{column} FROM {table} WHERE period_date >= {(date.today() - timedelta(days=10)).isoformat()} GROUP BY exchange,symbol ORDER BY {column} {advancedOrdering.sqlDirection.value}) {aoAlias} on {siAlias}.exchange={aoAlias}.exchange and {siAlias}.symbol={aoAlias}.symbol '
 
-        if tickerExclusionList:
-            adds.append(generateExcludeTickersSnippet(tickerExclusionList, alias='s'))
+        referenceDailyData = False
+        ## check if any arguments are for the daily data table
+        onlyStockDailyDataCamelCaseTableColumns = list(set(stockDataDailyCCamelCaseTableColumns) - set(['exchange', 'symbol']))
+        if any(c in onlyStockDailyDataCamelCaseTableColumns and localsref[c] is not None for c in localsref) or (normalizationData and len(normalizationData.get(NormalizationGroupings.HISTORICAL, orNone=True)) > 0):
+            referenceDailyData = True
+            stmt += f" JOIN {self.stockDataDailyTableString} {ddAlias} ON {siAlias}.exchange=d.exchange AND {siAlias}.symbol={ddAlias}.symbol "
+
+            ## add all daily data column-keyword args to the query
+            snippets, snpargs = generateAllSQLConditionSnippets(tableAlias=ddAlias, **{ k: localsref[k] for k in onlyStockDailyDataCamelCaseTableColumns })
+            whereConditions.extend(snippets)
+            args.extend(snpargs)
 
         ## construct WHERE portion
-        if adds:
-            stmt += ' WHERE '
-            stmt += ' AND '.join(adds)
+        if whereConditions:
+            stmt += ' WHERE ' + ' AND '.join(whereConditions)
 
-        ## get only distinct symbols if query includes looking at historical table data
-        if includingHistorical:
-            stmt += f' GROUP BY {",".join([f"s.{c}" for c in symbolsSnakeCaseTableColumns])} '
+        if referenceDailyData:
+            stmt += f' GROUP BY {",".join([f"{siAlias}.{c}" for c in groupByColumns])} '
 
-        if gconfig.testing.enabled and gconfig.testing.GET_SYMBOLS_LIMIT > 0: 
-            stmt += ' LIMIT ' + str(gconfig.testing.GET_SYMBOLS_LIMIT)
-        elif gconfig.testing.REDUCED_SYMBOL_SCOPE: 
-            stmt += ' LIMIT ' + str(gconfig.testing.REDUCED_SYMBOL_SCOPE)            
-
-        ## so query inserted into other queries before execution
-        if rawStmt:
+        ## so query can be inserted into other queries before execution
+        if rawStatement:
             return stmt, args
 
-        # print('executing',stmt, args)
-        return self.dbc.execute(stmt, tuple(args)).fetchall()
+        startt = time.time()
+        ret = self.dbc.execute(stmt, args).fetchall()
+        timeTaken = time.time() - startt
+        if verbose > 1: print(f'getTickers took {timeTaken} seconds')
+
+        if gconfig.testing.REDUCED_SYMBOL_SCOPE and (symbol is None or len(asList(symbol)) > gconfig.testing.REDUCED_SYMBOL_SCOPE):
+            ret[:] = random.sample(ret, gconfig.testing.REDUCED_SYMBOL_SCOPE)
+        
+        return ret
 
     ## assumes you are looking for rows that have details missing
     def getSymbolsTempInfo(self, api):
@@ -597,7 +620,8 @@ class DatabaseManager(Singleton):
 
     ## get raw data from last_updates
     def getLastUpdatedInfo(self, seriesType, dt=None, dateModifier=OperatorDict.EQUAL, **kwargs):
-        symbolsStmt, symbolsArgs = self.getSymbols(seriesType=seriesType, rawStmt=True, **kwargs)
+        if seriesType != SeriesType.DAILY: raise NotSupportedYet
+        symbolsStmt, symbolsArgs = self.getSymbols(rawStmt=True, **kwargs)
         stmt = f'SELECT * FROM last_updates lu JOIN ({symbolsStmt}) sl on lu.exchange=sl.exchange and lu.symbol=sl.symbol WHERE lu.type=? AND lu.api IS NOT NULL'
         args = symbolsArgs + [seriesType.function.replace('TIME_SERIES_','')]
         if dt:
@@ -1859,7 +1883,7 @@ class DatabaseManager(Singleton):
     def detectStockSplits(self, exchange=None, symbol=None, seriesType:SeriesType=SeriesType.DAILY, verbose=0):
         if seriesType != seriesType.DAILY: raise NotSupportedYet
         MULTIPLE = exchange or not symbol
-        results = self.getSymbols(exchange, symbol)
+        results = self.getSymbols(exchange=exchange, symbol=symbol)
 
         splitDates = {} if MULTIPLE else []
         if verbose > 0: print('Detecting {} stock splits'.format(seriesType.name))
@@ -1896,7 +1920,7 @@ class DatabaseManager(Singleton):
     ## detects stock symbols which have excessive strings of artificial dates within the historical data which may be representative of damage caused by abherrant data prior to proper symbol IPO and later gap filling attempts
     def detectArtificiallyDamagedSymbols(self, exchange=None, symbol=None, seriesType:SeriesType=SeriesType.DAILY, verbose=0):
         if seriesType != SeriesType.DAILY: raise NotSupportedYet
-        results = self.getSymbols(exchange, symbol)
+        results = self.getSymbols(exchange=exchange, symbol=symbol)
 
         damagedSymbols = []
         damageThresholdLength = 50
@@ -2330,7 +2354,7 @@ class DatabaseManager(Singleton):
 
             for idx, t in enumerate(tickers):
                 massagedSymbol = t.symbol.replace('.TO','').replace('-','.')
-                res = d.getSymbols('TSX', massagedSymbol)
+                res = d.getSymbols(exchange='TSX', symbol=massagedSymbol)
 
                 if len(res) == 0:
                     if verbose > 0: print('missing .TO match',t)
@@ -2375,7 +2399,7 @@ class DatabaseManager(Singleton):
                         print('new:',newrow)
                 
         ## check for symbol and symbol.TO collisions in historical data
-        # tickers = d.getSymbols('TSX')
+        # tickers = d.getSymbols(exchange='TSX')
         # dottotickerswithdata = []
         # for t in tickers:
         #     if '.TO' in t.symbol:
@@ -2395,7 +2419,7 @@ class DatabaseManager(Singleton):
     def analyzeGoogleInterests_totalInterestInCollectionPeriod(self, itype:InterestType=InterestType.DAILY, period=timedelta(weeks=34)):
         direction = Direction.DESCENDING
 
-        symbollist = self.getSymbols(googleTopicId=SQLHelpers.NOTNULL)
+        symbollist = self.getSymbols(topicId=SQLHelpers.NOTNULL)
         print(f'Checking {len(symbollist)} symbols')    
         for s in symbollist:
             tickergid = (s.exchange, s.symbol, s.google_topic_id)
@@ -2479,7 +2503,7 @@ class DatabaseManager(Singleton):
                 pass
 
         ## write only symbols with Google Topic IDs
-        src_tickers = self.getSymbols(googleTopicId=SQLHelpers.NOTNULL)
+        src_tickers = self.getSymbols(topicId=SQLHelpers.NOTNULL)
         for t in src_tickers:
             destination_cursor.execute(f'INSERT INTO symbols VALUES ({ generateCommaSeparatedQuestionMarkString(src_tickers[0]) })', list(t.values()))
 
