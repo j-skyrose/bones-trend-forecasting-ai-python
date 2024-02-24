@@ -304,7 +304,7 @@ def generateDatabaseAnnotationObjectsFile(propertiesDatabasePath=None, computedD
             initargsList = []
             initfuncString = ''
             for c in columns:
-                cname = convertToCamelCase(c.name)
+                cname = c.name
                 initargsList.append(f"{cname}Value{__generateArgTypeString(c['name'], c['type'])}")
                 initfuncString += f'{tab}{tab}self.{cname} = {cname}Value\n'
 

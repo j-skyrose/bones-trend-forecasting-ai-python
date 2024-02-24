@@ -43,28 +43,28 @@ class CboeVolatilityIndexRow():
 symbolsSnakeCaseTableColumns = ['exchange', 'symbol', 'name', 'asset_type', 'api_alphavantage', 'api_polygon', 'google_topic_id', 'sector', 'industry', 'founded', 'api_fmp', 'api_neo']
 symbolsCamelCaseTableColumns = ['exchange', 'symbol', 'name', 'assetType', 'apiAlphavantage', 'apiPolygon', 'googleTopicId', 'sector', 'industry', 'founded', 'apiFmp', 'apiNeo']
 class SymbolsRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, nameValue: str, assetTypeValue: str, apiAlphavantageValue: int, apiPolygonValue: int, googleTopicIdValue: str, sectorValue: int, industryValue: str, foundedValue: str, apiFmpValue: int, apiNeoValue: int):
+    def __init__(self, exchangeValue: str, symbolValue: str, nameValue: str, asset_typeValue: str, api_alphavantageValue: int, api_polygonValue: int, google_topic_idValue: str, sectorValue: int, industryValue: str, foundedValue: str, api_fmpValue: int, api_neoValue: int):
         self.exchange = exchangeValue
         self.symbol = symbolValue
         self.name = nameValue
-        self.assetType = assetTypeValue
-        self.apiAlphavantage = apiAlphavantageValue
-        self.apiPolygon = apiPolygonValue
-        self.googleTopicId = googleTopicIdValue
+        self.asset_type = asset_typeValue
+        self.api_alphavantage = api_alphavantageValue
+        self.api_polygon = api_polygonValue
+        self.google_topic_id = google_topic_idValue
         self.sector = sectorValue
         self.industry = industryValue
         self.founded = foundedValue
-        self.apiFmp = apiFmpValue
-        self.apiNeo = apiNeoValue
+        self.api_fmp = api_fmpValue
+        self.api_neo = api_neoValue
 
 ## TABLE: sectors ######################################
 sectorsSnakeCaseTableColumns = ['sector', 'icb_industry', 'gics_sector']
 sectorsCamelCaseTableColumns = ['sector', 'icbIndustry', 'gicsSector']
 class SectorsRow():
-    def __init__(self, sectorValue: str, icbIndustryValue: str, gicsSectorValue: str):
+    def __init__(self, sectorValue: str, icb_industryValue: str, gics_sectorValue: str):
         self.sector = sectorValue
-        self.icbIndustry = icbIndustryValue
-        self.gicsSector = gicsSectorValue
+        self.icb_industry = icb_industryValue
+        self.gics_sector = gics_sectorValue
 
 ## TABLE: input_vector_factories ######################################
 inputVectorFactoriesSnakeCaseTableColumns = ['id', 'factory', 'config']
@@ -122,9 +122,9 @@ class SqliteStat1Row():
 networkAccuraciesSnakeCaseTableColumns = ['network_id', 'accuracy_type', 'subtype1', 'subtype2', 'sum', 'count']
 networkAccuraciesCamelCaseTableColumns = ['networkId', 'accuracyType', 'subtype1', 'subtype2', 'sum', 'count']
 class NetworkAccuraciesRow():
-    def __init__(self, networkIdValue: int, accuracyTypeValue: str, subtype1Value: str, subtype2Value: str, sumValue: float, countValue: int):
-        self.networkId = networkIdValue
-        self.accuracyType = accuracyTypeValue
+    def __init__(self, network_idValue: int, accuracy_typeValue: str, subtype1Value: str, subtype2Value: str, sumValue: float, countValue: int):
+        self.network_id = network_idValue
+        self.accuracy_type = accuracy_typeValue
         self.subtype1 = subtype1Value
         self.subtype2 = subtype2Value
         self.sum = sumValue
@@ -134,19 +134,19 @@ class NetworkAccuraciesRow():
 tickerSplitsSnakeCaseTableColumns = ['network_id', 'set_count', 'ticker_count', 'pickled_split']
 tickerSplitsCamelCaseTableColumns = ['networkId', 'setCount', 'tickerCount', 'pickledSplit']
 class TickerSplitsRow():
-    def __init__(self, networkIdValue: int, setCountValue: int, tickerCountValue: int, pickledSplitValue: bytes):
-        self.networkId = networkIdValue
-        self.setCount = setCountValue
-        self.tickerCount = tickerCountValue
-        self.pickledSplit = pickledSplitValue
+    def __init__(self, network_idValue: int, set_countValue: int, ticker_countValue: int, pickled_splitValue: bytes):
+        self.network_id = network_idValue
+        self.set_count = set_countValue
+        self.ticker_count = ticker_countValue
+        self.pickled_split = pickled_splitValue
 
 ## TABLE: asset_subtypes ######################################
 assetSubtypesSnakeCaseTableColumns = ['asset_type', 'sub_type']
 assetSubtypesCamelCaseTableColumns = ['assetType', 'subType']
 class AssetSubtypesRow():
-    def __init__(self, assetTypeValue: str, subTypeValue: str):
-        self.assetType = assetTypeValue
-        self.subType = subTypeValue
+    def __init__(self, asset_typeValue: str, sub_typeValue: str):
+        self.asset_type = asset_typeValue
+        self.sub_type = sub_typeValue
 
 ## TABLE: status_key ######################################
 statusKeySnakeCaseTableColumns = ['status', 'description']
@@ -160,11 +160,11 @@ class StatusKeyRow():
 historicalDataSnakeCaseTableColumns = ['exchange', 'symbol', 'series_type', 'period_date', 'open', 'high', 'low', 'close', 'volume', 'artificial']
 historicalDataCamelCaseTableColumns = ['exchange', 'symbol', 'seriesType', 'periodDate', 'open', 'high', 'low', 'close', 'volume', 'artificial']
 class HistoricalDataRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, seriesTypeValue: str, periodDateValue: str, openValue: float, highValue: float, lowValue: float, closeValue: float, volumeValue: float, artificialValue: bool):
+    def __init__(self, exchangeValue: str, symbolValue: str, series_typeValue: str, period_dateValue: str, openValue: float, highValue: float, lowValue: float, closeValue: float, volumeValue: float, artificialValue: bool):
         self.exchange = exchangeValue
         self.symbol = symbolValue
-        self.seriesType = seriesTypeValue
-        self.periodDate = periodDateValue
+        self.series_type = series_typeValue
+        self.period_date = period_dateValue
         self.open = openValue
         self.high = highValue
         self.low = lowValue
@@ -206,35 +206,35 @@ class NetworksTempRow():
 networksSnakeCaseTableColumns = ['id', 'factory_id', 'accuracy_type', 'overall_accuracy', 'negative_accuracy', 'positive_accuracy', 'epochs']
 networksCamelCaseTableColumns = ['id', 'factoryId', 'accuracyType', 'overallAccuracy', 'negativeAccuracy', 'positiveAccuracy', 'epochs']
 class NetworksRow():
-    def __init__(self, idValue: int, factoryIdValue: int, accuracyTypeValue: str, overallAccuracyValue: float, negativeAccuracyValue: float, positiveAccuracyValue: float, epochsValue: int):
+    def __init__(self, idValue: int, factory_idValue: int, accuracy_typeValue: str, overall_accuracyValue: float, negative_accuracyValue: float, positive_accuracyValue: float, epochsValue: int):
         self.id = idValue
-        self.factoryId = factoryIdValue
-        self.accuracyType = accuracyTypeValue
-        self.overallAccuracy = overallAccuracyValue
-        self.negativeAccuracy = negativeAccuracyValue
-        self.positiveAccuracy = positiveAccuracyValue
+        self.factory_id = factory_idValue
+        self.accuracy_type = accuracy_typeValue
+        self.overall_accuracy = overall_accuracyValue
+        self.negative_accuracy = negative_accuracyValue
+        self.positive_accuracy = positive_accuracyValue
         self.epochs = epochsValue
 
 ## TABLE: network_training_config ######################################
 networkTrainingConfigSnakeCaseTableColumns = ['id', 'preceding_range', 'following_range', 'change_value', 'change_type', 'series_type', 'highest_historical_high', 'highest_historical_volume', 'minimum_historical_close_allowed']
 networkTrainingConfigCamelCaseTableColumns = ['id', 'precedingRange', 'followingRange', 'changeValue', 'changeType', 'seriesType', 'highestHistoricalHigh', 'highestHistoricalVolume', 'minimumHistoricalCloseAllowed']
 class NetworkTrainingConfigRow():
-    def __init__(self, idValue: int, precedingRangeValue: int, followingRangeValue: int, changeValueValue: int, changeTypeValue: str, seriesTypeValue: str, highestHistoricalHighValue: float, highestHistoricalVolumeValue: float, minimumHistoricalCloseAllowedValue: float):
+    def __init__(self, idValue: int, preceding_rangeValue: int, following_rangeValue: int, change_valueValue: int, change_typeValue: str, series_typeValue: str, highest_historical_highValue: float, highest_historical_volumeValue: float, minimum_historical_close_allowedValue: float):
         self.id = idValue
-        self.precedingRange = precedingRangeValue
-        self.followingRange = followingRangeValue
-        self.changeValue = changeValueValue
-        self.changeType = changeTypeValue
-        self.seriesType = seriesTypeValue
-        self.highestHistoricalHigh = highestHistoricalHighValue
-        self.highestHistoricalVolume = highestHistoricalVolumeValue
-        self.minimumHistoricalCloseAllowed = minimumHistoricalCloseAllowedValue
+        self.preceding_range = preceding_rangeValue
+        self.following_range = following_rangeValue
+        self.change_value = change_valueValue
+        self.change_type = change_typeValue
+        self.series_type = series_typeValue
+        self.highest_historical_high = highest_historical_highValue
+        self.highest_historical_volume = highest_historical_volumeValue
+        self.minimum_historical_close_allowed = minimum_historical_close_allowedValue
 
 ## TABLE: historical_data_minute ######################################
 historicalDataMinuteSnakeCaseTableColumns = ['exchange', 'symbol', 'timestamp', 'open', 'high', 'low', 'close', 'volume_weighted_average', 'volume', 'transactions', 'artificial']
 historicalDataMinuteCamelCaseTableColumns = ['exchange', 'symbol', 'timestamp', 'open', 'high', 'low', 'close', 'volumeWeightedAverage', 'volume', 'transactions', 'artificial']
 class HistoricalDataMinuteRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, timestampValue: datetime, openValue: float, highValue: float, lowValue: float, closeValue: float, volumeWeightedAverageValue: float, volumeValue: float, transactionsValue: float, artificialValue: bool):
+    def __init__(self, exchangeValue: str, symbolValue: str, timestampValue: datetime, openValue: float, highValue: float, lowValue: float, closeValue: float, volume_weighted_averageValue: float, volumeValue: float, transactionsValue: float, artificialValue: bool):
         self.exchange = exchangeValue
         self.symbol = symbolValue
         self.timestamp = timestampValue
@@ -242,7 +242,7 @@ class HistoricalDataMinuteRow():
         self.high = highValue
         self.low = lowValue
         self.close = closeValue
-        self.volumeWeightedAverage = volumeWeightedAverageValue
+        self.volume_weighted_average = volume_weighted_averageValue
         self.volume = volumeValue
         self.transactions = transactionsValue
         self.artificial = artificialValue
@@ -251,22 +251,22 @@ class HistoricalDataMinuteRow():
 accuracyLastUpdatesSnakeCaseTableColumns = ['network_id', 'accuracy_type', 'data_count', 'min_date', 'last_exchange', 'last_symbol']
 accuracyLastUpdatesCamelCaseTableColumns = ['networkId', 'accuracyType', 'dataCount', 'minDate', 'lastExchange', 'lastSymbol']
 class AccuracyLastUpdatesRow():
-    def __init__(self, networkIdValue: int, accuracyTypeValue: int, dataCountValue: int, minDateValue: int, lastExchangeValue: int, lastSymbolValue: int):
-        self.networkId = networkIdValue
-        self.accuracyType = accuracyTypeValue
-        self.dataCount = dataCountValue
-        self.minDate = minDateValue
-        self.lastExchange = lastExchangeValue
-        self.lastSymbol = lastSymbolValue
+    def __init__(self, network_idValue: int, accuracy_typeValue: int, data_countValue: int, min_dateValue: int, last_exchangeValue: int, last_symbolValue: int):
+        self.network_id = network_idValue
+        self.accuracy_type = accuracy_typeValue
+        self.data_count = data_countValue
+        self.min_date = min_dateValue
+        self.last_exchange = last_exchangeValue
+        self.last_symbol = last_symbolValue
 
 ## TABLE: technical_indicator_data_c ######################################
 technicalIndicatorDataCSnakeCaseTableColumns = ['exchange', 'symbol', 'date_type', 'date', 'indicator', 'period', 'value']
 technicalIndicatorDataCCamelCaseTableColumns = ['exchange', 'symbol', 'dateType', 'date', 'indicator', 'period', 'value']
 class TechnicalIndicatorDataCRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, dateTypeValue: str, dateValue: str, indicatorValue: str, periodValue: float, valueValue: float):
+    def __init__(self, exchangeValue: str, symbolValue: str, date_typeValue: str, dateValue: str, indicatorValue: str, periodValue: float, valueValue: float):
         self.exchange = exchangeValue
         self.symbol = symbolValue
-        self.dateType = dateTypeValue
+        self.date_type = date_typeValue
         self.date = dateValue
         self.indicator = indicatorValue
         self.period = periodValue
@@ -276,52 +276,52 @@ class TechnicalIndicatorDataCRow():
 earningsDatesCSnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'earnings_date']
 earningsDatesCCamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'earningsDate']
 class EarningsDatesCRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, inputDateValue: str, earningsDateValue: str):
+    def __init__(self, exchangeValue: str, symbolValue: str, input_dateValue: str, earnings_dateValue: str):
         self.exchange = exchangeValue
         self.symbol = symbolValue
-        self.inputDate = inputDateValue
-        self.earningsDate = earningsDateValue
+        self.input_date = input_dateValue
+        self.earnings_date = earnings_dateValue
 
 ## TABLE: google_interests_c ######################################
 googleInterestsCSnakeCaseTableColumns = ['exchange', 'symbol', 'date', 'relative_interest']
 googleInterestsCCamelCaseTableColumns = ['exchange', 'symbol', 'date', 'relativeInterest']
 class GoogleInterestsCRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, dateValue: str, relativeInterestValue: int):
+    def __init__(self, exchangeValue: str, symbolValue: str, dateValue: str, relative_interestValue: int):
         self.exchange = exchangeValue
         self.symbol = symbolValue
         self.date = dateValue
-        self.relativeInterest = relativeInterestValue
+        self.relative_interest = relative_interestValue
 
 ## TABLE: vector_similarities_c ######################################
 vectorSimilaritiesCSnakeCaseTableColumns = ['exchange', 'symbol', 'date_type', 'date', 'vector_class', 'preceding_range', 'following_range', 'change_value', 'change_type', 'value']
 vectorSimilaritiesCCamelCaseTableColumns = ['exchange', 'symbol', 'dateType', 'date', 'vectorClass', 'precedingRange', 'followingRange', 'changeValue', 'changeType', 'value']
 class VectorSimilaritiesCRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, dateTypeValue: str, dateValue: str, vectorClassValue: str, precedingRangeValue: float, followingRangeValue: float, changeValueValue: float, changeTypeValue: str, valueValue: float):
+    def __init__(self, exchangeValue: str, symbolValue: str, date_typeValue: str, dateValue: str, vector_classValue: str, preceding_rangeValue: float, following_rangeValue: float, change_valueValue: float, change_typeValue: str, valueValue: float):
         self.exchange = exchangeValue
         self.symbol = symbolValue
-        self.dateType = dateTypeValue
+        self.date_type = date_typeValue
         self.date = dateValue
-        self.vectorClass = vectorClassValue
-        self.precedingRange = precedingRangeValue
-        self.followingRange = followingRangeValue
-        self.changeValue = changeValueValue
-        self.changeType = changeTypeValue
+        self.vector_class = vector_classValue
+        self.preceding_range = preceding_rangeValue
+        self.following_range = following_rangeValue
+        self.change_value = change_valueValue
+        self.change_type = change_typeValue
         self.value = valueValue
 
 ## TABLE: stock_data_daily_c ######################################
 stockDataDailyCSnakeCaseTableColumns = ['exchange', 'symbol', 'period_date', 'pre_market', 'open', 'high', 'low', 'close', 'after_hours', 'volume', 'transactions', 'artificial']
 stockDataDailyCCamelCaseTableColumns = ['exchange', 'symbol', 'periodDate', 'preMarket', 'open', 'high', 'low', 'close', 'afterHours', 'volume', 'transactions', 'artificial']
 class StockDataDailyCRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, periodDateValue: str, preMarketValue: float, openValue: float, highValue: float, lowValue: float, closeValue: float, afterHoursValue: float, volumeValue: float, transactionsValue: float, artificialValue: bool):
+    def __init__(self, exchangeValue: str, symbolValue: str, period_dateValue: str, pre_marketValue: float, openValue: float, highValue: float, lowValue: float, closeValue: float, after_hoursValue: float, volumeValue: float, transactionsValue: float, artificialValue: bool):
         self.exchange = exchangeValue
         self.symbol = symbolValue
-        self.periodDate = periodDateValue
-        self.preMarket = preMarketValue
+        self.period_date = period_dateValue
+        self.pre_market = pre_marketValue
         self.open = openValue
         self.high = highValue
         self.low = lowValue
         self.close = closeValue
-        self.afterHours = afterHoursValue
+        self.after_hours = after_hoursValue
         self.volume = volumeValue
         self.transactions = transactionsValue
         self.artificial = artificialValue
@@ -422,552 +422,552 @@ class FinancialStmtsNumDataSetEdgarDRow():
 stockSplitsPolygonDSnakeCaseTableColumns = ['exchange', 'symbol', 'date', 'split_from', 'split_to']
 stockSplitsPolygonDCamelCaseTableColumns = ['exchange', 'symbol', 'date', 'splitFrom', 'splitTo']
 class StockSplitsPolygonDRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, dateValue: str, splitFromValue: float, splitToValue: float):
+    def __init__(self, exchangeValue: str, symbolValue: str, dateValue: str, split_fromValue: float, split_toValue: float):
         self.exchange = exchangeValue
         self.symbol = symbolValue
         self.date = dateValue
-        self.splitFrom = splitFromValue
-        self.splitTo = splitToValue
+        self.split_from = split_fromValue
+        self.split_to = split_toValue
 
 ## TABLE: google_interests_d ######################################
 googleInterestsDSnakeCaseTableColumns = ['exchange', 'symbol', 'date', 'type', 'stream', 'relative_interest', 'artificial']
 googleInterestsDCamelCaseTableColumns = ['exchange', 'symbol', 'date', 'type', 'stream', 'relativeInterest', 'artificial']
 class GoogleInterestsDRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, dateValue: str, typeValue: str, streamValue: int, relativeInterestValue: int, artificialValue: bool):
+    def __init__(self, exchangeValue: str, symbolValue: str, dateValue: str, typeValue: str, streamValue: int, relative_interestValue: int, artificialValue: bool):
         self.exchange = exchangeValue
         self.symbol = symbolValue
         self.date = dateValue
         self.type = typeValue
         self.stream = streamValue
-        self.relativeInterest = relativeInterestValue
+        self.relative_interest = relative_interestValue
         self.artificial = artificialValue
 
 ## TABLE: staging_financials_d ######################################
 stagingFinancialsDSnakeCaseTableColumns = ['exchange', 'symbol', 'period', 'calendarDate', 'polygon_reportPeriod', 'polygon_updated', 'polygon_dateKey', 'polygon_accumulatedOtherComprehensiveIncome', 'polygon_assets', 'polygon_assetsAverage', 'polygon_assetsCurrent', 'polygon_assetsNonCurrent', 'polygon_assetTurnover', 'polygon_bookValuePerShare', 'polygon_capitalExpenditure', 'polygon_cashAndEquivalents', 'polygon_cashAndEquivalentsUSD', 'polygon_costOfRevenue', 'polygon_consolidatedIncome', 'polygon_currentRatio', 'polygon_debtToEquityRatio', 'polygon_debt', 'polygon_debtCurrent', 'polygon_debtNonCurrent', 'polygon_debtUSD', 'polygon_deferredRevenue', 'polygon_depreciationAmortizationAndAccretion', 'polygon_deposits', 'polygon_dividendYield', 'polygon_dividendsPerBasicCommonShare', 'polygon_earningBeforeInterestTaxes', 'polygon_earningsBeforeInterestTaxesDepreciationAmortization', 'polygon_EBITDAMargin', 'polygon_earningsBeforeInterestTaxesDepreciationAmortizationUSD', 'polygon_earningBeforeInterestTaxesUSD', 'polygon_earningsBeforeTax', 'polygon_earningsPerBasicShare', 'polygon_earningsPerDilutedShare', 'polygon_earningsPerBasicShareUSD', 'polygon_shareholdersEquity', 'polygon_averageEquity', 'polygon_shareholdersEquityUSD', 'polygon_enterpriseValue', 'polygon_enterpriseValueOverEBIT', 'polygon_enterpriseValueOverEBITDA', 'polygon_freeCashFlow', 'polygon_freeCashFlowPerShare', 'polygon_foreignCurrencyUSDExchangeRate', 'polygon_grossProfit', 'polygon_grossMargin', 'polygon_goodwillAndIntangibleAssets', 'polygon_interestExpense', 'polygon_investedCapital', 'polygon_investedCapitalAverage', 'polygon_inventory', 'polygon_investments', 'polygon_investmentsCurrent', 'polygon_investmentsNonCurrent', 'polygon_totalLiabilities', 'polygon_currentLiabilities', 'polygon_liabilitiesNonCurrent', 'polygon_marketCapitalization', 'polygon_netCashFlow', 'polygon_netCashFlowBusinessAcquisitionsDisposals', 'polygon_issuanceEquityShares', 'polygon_issuanceDebtSecurities', 'polygon_paymentDividendsOtherCashDistributions', 'polygon_netCashFlowFromFinancing', 'polygon_netCashFlowFromInvesting', 'polygon_netCashFlowInvestmentAcquisitionsDisposals', 'polygon_netCashFlowFromOperations', 'polygon_effectOfExchangeRateChangesOnCash', 'polygon_netIncome', 'polygon_netIncomeCommonStock', 'polygon_netIncomeCommonStockUSD', 'polygon_netLossIncomeFromDiscontinuedOperations', 'polygon_netIncomeToNonControllingInterests', 'polygon_profitMargin', 'polygon_operatingExpenses', 'polygon_operatingIncome', 'polygon_tradeAndNonTradePayables', 'polygon_payoutRatio', 'polygon_priceToBookValue', 'polygon_priceEarnings', 'polygon_priceToEarningsRatio', 'polygon_propertyPlantEquipmentNet', 'polygon_preferredDividendsIncomeStatementImpact', 'polygon_sharePriceAdjustedClose', 'polygon_priceSales', 'polygon_priceToSalesRatio', 'polygon_tradeAndNonTradeReceivables', 'polygon_accumulatedRetainedEarningsDeficit', 'polygon_revenues', 'polygon_revenuesUSD', 'polygon_researchAndDevelopmentExpense', 'polygon_returnOnAverageAssets', 'polygon_returnOnAverageEquity', 'polygon_returnOnInvestedCapital', 'polygon_returnOnSales', 'polygon_shareBasedCompensation', 'polygon_sellingGeneralAndAdministrativeExpense', 'polygon_shareFactor', 'polygon_shares', 'polygon_weightedAverageShares', 'polygon_salesPerShare', 'polygon_tangibleAssetValue', 'polygon_taxAssets', 'polygon_incomeTaxExpense', 'polygon_taxLiabilities', 'polygon_tangibleAssetsBookValuePerShare', 'polygon_workingCapital', 'polygon_weightedAverageSharesDiluted', 'fmp', 'alphavantage', 'polygon', 'alphavantage_fiscalDateEnding', 'alphavantage_reportedCurrency', 'alphavantage_grossProfit', 'alphavantage_totalRevenue', 'alphavantage_costOfRevenue', 'alphavantage_costofGoodsAndServicesSold', 'alphavantage_operatingIncome', 'alphavantage_sellingGeneralAndAdministrative', 'alphavantage_researchAndDevelopment', 'alphavantage_operatingExpenses', 'alphavantage_investmentIncomeNet', 'alphavantage_netInterestIncome', 'alphavantage_interestIncome', 'alphavantage_interestExpense', 'alphavantage_nonInterestIncome', 'alphavantage_otherNonOperatingIncome', 'alphavantage_depreciation', 'alphavantage_depreciationAndAmortization', 'alphavantage_incomeBeforeTax', 'alphavantage_incomeTaxExpense', 'alphavantage_interestAndDebtExpense', 'alphavantage_netIncomeFromContinuingOperations', 'alphavantage_comprehensiveIncomeNetOfTax', 'alphavantage_ebit', 'alphavantage_ebitda', 'alphavantage_netIncome', 'alphavantage_totalAssets', 'alphavantage_totalCurrentAssets', 'alphavantage_cashAndCashEquivalentsAtCarryingValue', 'alphavantage_cashAndShortTermInvestments', 'alphavantage_inventory', 'alphavantage_currentNetReceivables', 'alphavantage_totalNonCurrentAssets', 'alphavantage_propertyPlantEquipment', 'alphavantage_accumulatedDepreciationAmortizationPPE', 'alphavantage_intangibleAssets', 'alphavantage_intangibleAssetsExcludingGoodwill', 'alphavantage_goodwill', 'alphavantage_investments', 'alphavantage_longTermInvestments', 'alphavantage_shortTermInvestments', 'alphavantage_otherCurrentAssets', 'alphavantage_otherNonCurrrentAssets', 'alphavantage_totalLiabilities', 'alphavantage_totalCurrentLiabilities', 'alphavantage_currentAccountsPayable', 'alphavantage_deferredRevenue', 'alphavantage_currentDebt', 'alphavantage_shortTermDebt', 'alphavantage_totalNonCurrentLiabilities', 'alphavantage_capitalLeaseObligations', 'alphavantage_longTermDebt', 'alphavantage_currentLongTermDebt', 'alphavantage_longTermDebtNoncurrent', 'alphavantage_shortLongTermDebtTotal', 'alphavantage_otherCurrentLiabilities', 'alphavantage_otherNonCurrentLiabilities', 'alphavantage_totalShareholderEquity', 'alphavantage_treasuryStock', 'alphavantage_retainedEarnings', 'alphavantage_commonStock', 'alphavantage_commonStockSharesOutstanding', 'alphavantage_operatingCashflow', 'alphavantage_paymentsForOperatingActivities', 'alphavantage_proceedsFromOperatingActivities', 'alphavantage_changeInOperatingLiabilities', 'alphavantage_changeInOperatingAssets', 'alphavantage_depreciationDepletionAndAmortization', 'alphavantage_capitalExpenditures', 'alphavantage_changeInReceivables', 'alphavantage_changeInInventory', 'alphavantage_profitLoss', 'alphavantage_cashflowFromInvestment', 'alphavantage_cashflowFromFinancing', 'alphavantage_proceedsFromRepaymentsOfShortTermDebt', 'alphavantage_paymentsForRepurchaseOfCommonStock', 'alphavantage_paymentsForRepurchaseOfEquity', 'alphavantage_paymentsForRepurchaseOfPreferredStock', 'alphavantage_dividendPayout', 'alphavantage_dividendPayoutCommonStock', 'alphavantage_dividendPayoutPreferredStock', 'alphavantage_proceedsFromIssuanceOfCommonStock', 'alphavantage_proceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNet', 'alphavantage_proceedsFromIssuanceOfPreferredStock', 'alphavantage_proceedsFromRepurchaseOfEquity', 'alphavantage_proceedsFromSaleOfTreasuryStock', 'alphavantage_changeInCashAndCashEquivalents', 'alphavantage_changeInExchangeRate', 'polygon_logo', 'polygon_listdate', 'polygon_cik', 'polygon_bloomberg', 'polygon_figi', 'polygon_lei', 'polygon_sic', 'polygon_country', 'polygon_industry', 'polygon_sector', 'polygon_marketcap', 'polygon_employees', 'polygon_phone', 'polygon_ceo', 'polygon_url', 'polygon_description', 'polygon_name', 'polygon_exchangeSymbol', 'polygon_hq_address', 'polygon_hq_state', 'polygon_hq_country', 'polygon_type', 'polygon_tags', 'polygon_similar', 'polygon_active']
 stagingFinancialsDCamelCaseTableColumns = ['exchange', 'symbol', 'period', 'calendarDate', 'polygonReportPeriod', 'polygonUpdated', 'polygonDateKey', 'polygonAccumulatedOtherComprehensiveIncome', 'polygonAssets', 'polygonAssetsAverage', 'polygonAssetsCurrent', 'polygonAssetsNonCurrent', 'polygonAssetTurnover', 'polygonBookValuePerShare', 'polygonCapitalExpenditure', 'polygonCashAndEquivalents', 'polygonCashAndEquivalentsUSD', 'polygonCostOfRevenue', 'polygonConsolidatedIncome', 'polygonCurrentRatio', 'polygonDebtToEquityRatio', 'polygonDebt', 'polygonDebtCurrent', 'polygonDebtNonCurrent', 'polygonDebtUSD', 'polygonDeferredRevenue', 'polygonDepreciationAmortizationAndAccretion', 'polygonDeposits', 'polygonDividendYield', 'polygonDividendsPerBasicCommonShare', 'polygonEarningBeforeInterestTaxes', 'polygonEarningsBeforeInterestTaxesDepreciationAmortization', 'polygonEBITDAMargin', 'polygonEarningsBeforeInterestTaxesDepreciationAmortizationUSD', 'polygonEarningBeforeInterestTaxesUSD', 'polygonEarningsBeforeTax', 'polygonEarningsPerBasicShare', 'polygonEarningsPerDilutedShare', 'polygonEarningsPerBasicShareUSD', 'polygonShareholdersEquity', 'polygonAverageEquity', 'polygonShareholdersEquityUSD', 'polygonEnterpriseValue', 'polygonEnterpriseValueOverEBIT', 'polygonEnterpriseValueOverEBITDA', 'polygonFreeCashFlow', 'polygonFreeCashFlowPerShare', 'polygonForeignCurrencyUSDExchangeRate', 'polygonGrossProfit', 'polygonGrossMargin', 'polygonGoodwillAndIntangibleAssets', 'polygonInterestExpense', 'polygonInvestedCapital', 'polygonInvestedCapitalAverage', 'polygonInventory', 'polygonInvestments', 'polygonInvestmentsCurrent', 'polygonInvestmentsNonCurrent', 'polygonTotalLiabilities', 'polygonCurrentLiabilities', 'polygonLiabilitiesNonCurrent', 'polygonMarketCapitalization', 'polygonNetCashFlow', 'polygonNetCashFlowBusinessAcquisitionsDisposals', 'polygonIssuanceEquityShares', 'polygonIssuanceDebtSecurities', 'polygonPaymentDividendsOtherCashDistributions', 'polygonNetCashFlowFromFinancing', 'polygonNetCashFlowFromInvesting', 'polygonNetCashFlowInvestmentAcquisitionsDisposals', 'polygonNetCashFlowFromOperations', 'polygonEffectOfExchangeRateChangesOnCash', 'polygonNetIncome', 'polygonNetIncomeCommonStock', 'polygonNetIncomeCommonStockUSD', 'polygonNetLossIncomeFromDiscontinuedOperations', 'polygonNetIncomeToNonControllingInterests', 'polygonProfitMargin', 'polygonOperatingExpenses', 'polygonOperatingIncome', 'polygonTradeAndNonTradePayables', 'polygonPayoutRatio', 'polygonPriceToBookValue', 'polygonPriceEarnings', 'polygonPriceToEarningsRatio', 'polygonPropertyPlantEquipmentNet', 'polygonPreferredDividendsIncomeStatementImpact', 'polygonSharePriceAdjustedClose', 'polygonPriceSales', 'polygonPriceToSalesRatio', 'polygonTradeAndNonTradeReceivables', 'polygonAccumulatedRetainedEarningsDeficit', 'polygonRevenues', 'polygonRevenuesUSD', 'polygonResearchAndDevelopmentExpense', 'polygonReturnOnAverageAssets', 'polygonReturnOnAverageEquity', 'polygonReturnOnInvestedCapital', 'polygonReturnOnSales', 'polygonShareBasedCompensation', 'polygonSellingGeneralAndAdministrativeExpense', 'polygonShareFactor', 'polygonShares', 'polygonWeightedAverageShares', 'polygonSalesPerShare', 'polygonTangibleAssetValue', 'polygonTaxAssets', 'polygonIncomeTaxExpense', 'polygonTaxLiabilities', 'polygonTangibleAssetsBookValuePerShare', 'polygonWorkingCapital', 'polygonWeightedAverageSharesDiluted', 'fmp', 'alphavantage', 'polygon', 'alphavantageFiscalDateEnding', 'alphavantageReportedCurrency', 'alphavantageGrossProfit', 'alphavantageTotalRevenue', 'alphavantageCostOfRevenue', 'alphavantageCostofGoodsAndServicesSold', 'alphavantageOperatingIncome', 'alphavantageSellingGeneralAndAdministrative', 'alphavantageResearchAndDevelopment', 'alphavantageOperatingExpenses', 'alphavantageInvestmentIncomeNet', 'alphavantageNetInterestIncome', 'alphavantageInterestIncome', 'alphavantageInterestExpense', 'alphavantageNonInterestIncome', 'alphavantageOtherNonOperatingIncome', 'alphavantageDepreciation', 'alphavantageDepreciationAndAmortization', 'alphavantageIncomeBeforeTax', 'alphavantageIncomeTaxExpense', 'alphavantageInterestAndDebtExpense', 'alphavantageNetIncomeFromContinuingOperations', 'alphavantageComprehensiveIncomeNetOfTax', 'alphavantageEbit', 'alphavantageEbitda', 'alphavantageNetIncome', 'alphavantageTotalAssets', 'alphavantageTotalCurrentAssets', 'alphavantageCashAndCashEquivalentsAtCarryingValue', 'alphavantageCashAndShortTermInvestments', 'alphavantageInventory', 'alphavantageCurrentNetReceivables', 'alphavantageTotalNonCurrentAssets', 'alphavantagePropertyPlantEquipment', 'alphavantageAccumulatedDepreciationAmortizationPPE', 'alphavantageIntangibleAssets', 'alphavantageIntangibleAssetsExcludingGoodwill', 'alphavantageGoodwill', 'alphavantageInvestments', 'alphavantageLongTermInvestments', 'alphavantageShortTermInvestments', 'alphavantageOtherCurrentAssets', 'alphavantageOtherNonCurrrentAssets', 'alphavantageTotalLiabilities', 'alphavantageTotalCurrentLiabilities', 'alphavantageCurrentAccountsPayable', 'alphavantageDeferredRevenue', 'alphavantageCurrentDebt', 'alphavantageShortTermDebt', 'alphavantageTotalNonCurrentLiabilities', 'alphavantageCapitalLeaseObligations', 'alphavantageLongTermDebt', 'alphavantageCurrentLongTermDebt', 'alphavantageLongTermDebtNoncurrent', 'alphavantageShortLongTermDebtTotal', 'alphavantageOtherCurrentLiabilities', 'alphavantageOtherNonCurrentLiabilities', 'alphavantageTotalShareholderEquity', 'alphavantageTreasuryStock', 'alphavantageRetainedEarnings', 'alphavantageCommonStock', 'alphavantageCommonStockSharesOutstanding', 'alphavantageOperatingCashflow', 'alphavantagePaymentsForOperatingActivities', 'alphavantageProceedsFromOperatingActivities', 'alphavantageChangeInOperatingLiabilities', 'alphavantageChangeInOperatingAssets', 'alphavantageDepreciationDepletionAndAmortization', 'alphavantageCapitalExpenditures', 'alphavantageChangeInReceivables', 'alphavantageChangeInInventory', 'alphavantageProfitLoss', 'alphavantageCashflowFromInvestment', 'alphavantageCashflowFromFinancing', 'alphavantageProceedsFromRepaymentsOfShortTermDebt', 'alphavantagePaymentsForRepurchaseOfCommonStock', 'alphavantagePaymentsForRepurchaseOfEquity', 'alphavantagePaymentsForRepurchaseOfPreferredStock', 'alphavantageDividendPayout', 'alphavantageDividendPayoutCommonStock', 'alphavantageDividendPayoutPreferredStock', 'alphavantageProceedsFromIssuanceOfCommonStock', 'alphavantageProceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNet', 'alphavantageProceedsFromIssuanceOfPreferredStock', 'alphavantageProceedsFromRepurchaseOfEquity', 'alphavantageProceedsFromSaleOfTreasuryStock', 'alphavantageChangeInCashAndCashEquivalents', 'alphavantageChangeInExchangeRate', 'polygonLogo', 'polygonListdate', 'polygonCik', 'polygonBloomberg', 'polygonFigi', 'polygonLei', 'polygonSic', 'polygonCountry', 'polygonIndustry', 'polygonSector', 'polygonMarketcap', 'polygonEmployees', 'polygonPhone', 'polygonCeo', 'polygonUrl', 'polygonDescription', 'polygonName', 'polygonExchangeSymbol', 'polygonHqAddress', 'polygonHqState', 'polygonHqCountry', 'polygonType', 'polygonTags', 'polygonSimilar', 'polygonActive']
 class StagingFinancialsDRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, periodValue: str, calendarDateValue: str, polygonReportPeriodValue: str, polygonUpdatedValue: str, polygonDateKeyValue: str, polygonAccumulatedOtherComprehensiveIncomeValue: str, polygonAssetsValue: str, polygonAssetsAverageValue: str, polygonAssetsCurrentValue: str, polygonAssetsNonCurrentValue: str, polygonAssetTurnoverValue: str, polygonBookValuePerShareValue: str, polygonCapitalExpenditureValue: str, polygonCashAndEquivalentsValue: str, polygonCashAndEquivalentsUSDValue: str, polygonCostOfRevenueValue: str, polygonConsolidatedIncomeValue: str, polygonCurrentRatioValue: str, polygonDebtToEquityRatioValue: str, polygonDebtValue: str, polygonDebtCurrentValue: str, polygonDebtNonCurrentValue: str, polygonDebtUSDValue: str, polygonDeferredRevenueValue: str, polygonDepreciationAmortizationAndAccretionValue: str, polygonDepositsValue: str, polygonDividendYieldValue: str, polygonDividendsPerBasicCommonShareValue: str, polygonEarningBeforeInterestTaxesValue: str, polygonEarningsBeforeInterestTaxesDepreciationAmortizationValue: str, polygonEBITDAMarginValue: str, polygonEarningsBeforeInterestTaxesDepreciationAmortizationUSDValue: str, polygonEarningBeforeInterestTaxesUSDValue: str, polygonEarningsBeforeTaxValue: str, polygonEarningsPerBasicShareValue: str, polygonEarningsPerDilutedShareValue: str, polygonEarningsPerBasicShareUSDValue: str, polygonShareholdersEquityValue: str, polygonAverageEquityValue: str, polygonShareholdersEquityUSDValue: str, polygonEnterpriseValueValue: str, polygonEnterpriseValueOverEBITValue: str, polygonEnterpriseValueOverEBITDAValue: str, polygonFreeCashFlowValue: str, polygonFreeCashFlowPerShareValue: str, polygonForeignCurrencyUSDExchangeRateValue: str, polygonGrossProfitValue: str, polygonGrossMarginValue: str, polygonGoodwillAndIntangibleAssetsValue: str, polygonInterestExpenseValue: str, polygonInvestedCapitalValue: str, polygonInvestedCapitalAverageValue: str, polygonInventoryValue: str, polygonInvestmentsValue: str, polygonInvestmentsCurrentValue: str, polygonInvestmentsNonCurrentValue: str, polygonTotalLiabilitiesValue: str, polygonCurrentLiabilitiesValue: str, polygonLiabilitiesNonCurrentValue: str, polygonMarketCapitalizationValue: str, polygonNetCashFlowValue: str, polygonNetCashFlowBusinessAcquisitionsDisposalsValue: str, polygonIssuanceEquitySharesValue: str, polygonIssuanceDebtSecuritiesValue: str, polygonPaymentDividendsOtherCashDistributionsValue: str, polygonNetCashFlowFromFinancingValue: str, polygonNetCashFlowFromInvestingValue: str, polygonNetCashFlowInvestmentAcquisitionsDisposalsValue: str, polygonNetCashFlowFromOperationsValue: str, polygonEffectOfExchangeRateChangesOnCashValue: str, polygonNetIncomeValue: str, polygonNetIncomeCommonStockValue: str, polygonNetIncomeCommonStockUSDValue: str, polygonNetLossIncomeFromDiscontinuedOperationsValue: str, polygonNetIncomeToNonControllingInterestsValue: str, polygonProfitMarginValue: str, polygonOperatingExpensesValue: str, polygonOperatingIncomeValue: str, polygonTradeAndNonTradePayablesValue: str, polygonPayoutRatioValue: str, polygonPriceToBookValueValue: str, polygonPriceEarningsValue: str, polygonPriceToEarningsRatioValue: str, polygonPropertyPlantEquipmentNetValue: str, polygonPreferredDividendsIncomeStatementImpactValue: str, polygonSharePriceAdjustedCloseValue: str, polygonPriceSalesValue: str, polygonPriceToSalesRatioValue: str, polygonTradeAndNonTradeReceivablesValue: str, polygonAccumulatedRetainedEarningsDeficitValue: str, polygonRevenuesValue: str, polygonRevenuesUSDValue: str, polygonResearchAndDevelopmentExpenseValue: str, polygonReturnOnAverageAssetsValue: str, polygonReturnOnAverageEquityValue: str, polygonReturnOnInvestedCapitalValue: str, polygonReturnOnSalesValue: str, polygonShareBasedCompensationValue: str, polygonSellingGeneralAndAdministrativeExpenseValue: str, polygonShareFactorValue: str, polygonSharesValue: str, polygonWeightedAverageSharesValue: str, polygonSalesPerShareValue: str, polygonTangibleAssetValueValue: str, polygonTaxAssetsValue: str, polygonIncomeTaxExpenseValue: str, polygonTaxLiabilitiesValue: str, polygonTangibleAssetsBookValuePerShareValue: str, polygonWorkingCapitalValue: str, polygonWeightedAverageSharesDilutedValue: str, fmpValue: int, alphavantageValue: int, polygonValue: int, alphavantageFiscalDateEndingValue: str, alphavantageReportedCurrencyValue: str, alphavantageGrossProfitValue: str, alphavantageTotalRevenueValue: str, alphavantageCostOfRevenueValue: str, alphavantageCostofGoodsAndServicesSoldValue: str, alphavantageOperatingIncomeValue: str, alphavantageSellingGeneralAndAdministrativeValue: str, alphavantageResearchAndDevelopmentValue: str, alphavantageOperatingExpensesValue: str, alphavantageInvestmentIncomeNetValue: str, alphavantageNetInterestIncomeValue: str, alphavantageInterestIncomeValue: str, alphavantageInterestExpenseValue: str, alphavantageNonInterestIncomeValue: str, alphavantageOtherNonOperatingIncomeValue: str, alphavantageDepreciationValue: str, alphavantageDepreciationAndAmortizationValue: str, alphavantageIncomeBeforeTaxValue: str, alphavantageIncomeTaxExpenseValue: str, alphavantageInterestAndDebtExpenseValue: str, alphavantageNetIncomeFromContinuingOperationsValue: str, alphavantageComprehensiveIncomeNetOfTaxValue: str, alphavantageEbitValue: str, alphavantageEbitdaValue: str, alphavantageNetIncomeValue: str, alphavantageTotalAssetsValue: str, alphavantageTotalCurrentAssetsValue: str, alphavantageCashAndCashEquivalentsAtCarryingValueValue: str, alphavantageCashAndShortTermInvestmentsValue: str, alphavantageInventoryValue: str, alphavantageCurrentNetReceivablesValue: str, alphavantageTotalNonCurrentAssetsValue: str, alphavantagePropertyPlantEquipmentValue: str, alphavantageAccumulatedDepreciationAmortizationPPEValue: str, alphavantageIntangibleAssetsValue: str, alphavantageIntangibleAssetsExcludingGoodwillValue: str, alphavantageGoodwillValue: str, alphavantageInvestmentsValue: str, alphavantageLongTermInvestmentsValue: str, alphavantageShortTermInvestmentsValue: str, alphavantageOtherCurrentAssetsValue: str, alphavantageOtherNonCurrrentAssetsValue: str, alphavantageTotalLiabilitiesValue: str, alphavantageTotalCurrentLiabilitiesValue: str, alphavantageCurrentAccountsPayableValue: str, alphavantageDeferredRevenueValue: str, alphavantageCurrentDebtValue: str, alphavantageShortTermDebtValue: str, alphavantageTotalNonCurrentLiabilitiesValue: str, alphavantageCapitalLeaseObligationsValue: str, alphavantageLongTermDebtValue: str, alphavantageCurrentLongTermDebtValue: str, alphavantageLongTermDebtNoncurrentValue: str, alphavantageShortLongTermDebtTotalValue: str, alphavantageOtherCurrentLiabilitiesValue: str, alphavantageOtherNonCurrentLiabilitiesValue: str, alphavantageTotalShareholderEquityValue: str, alphavantageTreasuryStockValue: str, alphavantageRetainedEarningsValue: str, alphavantageCommonStockValue: str, alphavantageCommonStockSharesOutstandingValue: str, alphavantageOperatingCashflowValue: str, alphavantagePaymentsForOperatingActivitiesValue: str, alphavantageProceedsFromOperatingActivitiesValue: str, alphavantageChangeInOperatingLiabilitiesValue: str, alphavantageChangeInOperatingAssetsValue: str, alphavantageDepreciationDepletionAndAmortizationValue: str, alphavantageCapitalExpendituresValue: str, alphavantageChangeInReceivablesValue: str, alphavantageChangeInInventoryValue: str, alphavantageProfitLossValue: str, alphavantageCashflowFromInvestmentValue: str, alphavantageCashflowFromFinancingValue: str, alphavantageProceedsFromRepaymentsOfShortTermDebtValue: str, alphavantagePaymentsForRepurchaseOfCommonStockValue: str, alphavantagePaymentsForRepurchaseOfEquityValue: str, alphavantagePaymentsForRepurchaseOfPreferredStockValue: str, alphavantageDividendPayoutValue: str, alphavantageDividendPayoutCommonStockValue: str, alphavantageDividendPayoutPreferredStockValue: str, alphavantageProceedsFromIssuanceOfCommonStockValue: str, alphavantageProceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNetValue: str, alphavantageProceedsFromIssuanceOfPreferredStockValue: str, alphavantageProceedsFromRepurchaseOfEquityValue: str, alphavantageProceedsFromSaleOfTreasuryStockValue: str, alphavantageChangeInCashAndCashEquivalentsValue: str, alphavantageChangeInExchangeRateValue: str, polygonLogoValue: str, polygonListdateValue: str, polygonCikValue: str, polygonBloombergValue: str, polygonFigiValue: str, polygonLeiValue: str, polygonSicValue: str, polygonCountryValue: str, polygonIndustryValue: str, polygonSectorValue: str, polygonMarketcapValue: str, polygonEmployeesValue: str, polygonPhoneValue: str, polygonCeoValue: str, polygonUrlValue: str, polygonDescriptionValue: str, polygonNameValue: str, polygonExchangeSymbolValue: str, polygonHqAddressValue: str, polygonHqStateValue: str, polygonHqCountryValue: str, polygonTypeValue: str, polygonTagsValue: str, polygonSimilarValue: str, polygonActiveValue: str):
+    def __init__(self, exchangeValue: str, symbolValue: str, periodValue: str, calendarDateValue: str, polygon_reportPeriodValue: str, polygon_updatedValue: str, polygon_dateKeyValue: str, polygon_accumulatedOtherComprehensiveIncomeValue: str, polygon_assetsValue: str, polygon_assetsAverageValue: str, polygon_assetsCurrentValue: str, polygon_assetsNonCurrentValue: str, polygon_assetTurnoverValue: str, polygon_bookValuePerShareValue: str, polygon_capitalExpenditureValue: str, polygon_cashAndEquivalentsValue: str, polygon_cashAndEquivalentsUSDValue: str, polygon_costOfRevenueValue: str, polygon_consolidatedIncomeValue: str, polygon_currentRatioValue: str, polygon_debtToEquityRatioValue: str, polygon_debtValue: str, polygon_debtCurrentValue: str, polygon_debtNonCurrentValue: str, polygon_debtUSDValue: str, polygon_deferredRevenueValue: str, polygon_depreciationAmortizationAndAccretionValue: str, polygon_depositsValue: str, polygon_dividendYieldValue: str, polygon_dividendsPerBasicCommonShareValue: str, polygon_earningBeforeInterestTaxesValue: str, polygon_earningsBeforeInterestTaxesDepreciationAmortizationValue: str, polygon_EBITDAMarginValue: str, polygon_earningsBeforeInterestTaxesDepreciationAmortizationUSDValue: str, polygon_earningBeforeInterestTaxesUSDValue: str, polygon_earningsBeforeTaxValue: str, polygon_earningsPerBasicShareValue: str, polygon_earningsPerDilutedShareValue: str, polygon_earningsPerBasicShareUSDValue: str, polygon_shareholdersEquityValue: str, polygon_averageEquityValue: str, polygon_shareholdersEquityUSDValue: str, polygon_enterpriseValueValue: str, polygon_enterpriseValueOverEBITValue: str, polygon_enterpriseValueOverEBITDAValue: str, polygon_freeCashFlowValue: str, polygon_freeCashFlowPerShareValue: str, polygon_foreignCurrencyUSDExchangeRateValue: str, polygon_grossProfitValue: str, polygon_grossMarginValue: str, polygon_goodwillAndIntangibleAssetsValue: str, polygon_interestExpenseValue: str, polygon_investedCapitalValue: str, polygon_investedCapitalAverageValue: str, polygon_inventoryValue: str, polygon_investmentsValue: str, polygon_investmentsCurrentValue: str, polygon_investmentsNonCurrentValue: str, polygon_totalLiabilitiesValue: str, polygon_currentLiabilitiesValue: str, polygon_liabilitiesNonCurrentValue: str, polygon_marketCapitalizationValue: str, polygon_netCashFlowValue: str, polygon_netCashFlowBusinessAcquisitionsDisposalsValue: str, polygon_issuanceEquitySharesValue: str, polygon_issuanceDebtSecuritiesValue: str, polygon_paymentDividendsOtherCashDistributionsValue: str, polygon_netCashFlowFromFinancingValue: str, polygon_netCashFlowFromInvestingValue: str, polygon_netCashFlowInvestmentAcquisitionsDisposalsValue: str, polygon_netCashFlowFromOperationsValue: str, polygon_effectOfExchangeRateChangesOnCashValue: str, polygon_netIncomeValue: str, polygon_netIncomeCommonStockValue: str, polygon_netIncomeCommonStockUSDValue: str, polygon_netLossIncomeFromDiscontinuedOperationsValue: str, polygon_netIncomeToNonControllingInterestsValue: str, polygon_profitMarginValue: str, polygon_operatingExpensesValue: str, polygon_operatingIncomeValue: str, polygon_tradeAndNonTradePayablesValue: str, polygon_payoutRatioValue: str, polygon_priceToBookValueValue: str, polygon_priceEarningsValue: str, polygon_priceToEarningsRatioValue: str, polygon_propertyPlantEquipmentNetValue: str, polygon_preferredDividendsIncomeStatementImpactValue: str, polygon_sharePriceAdjustedCloseValue: str, polygon_priceSalesValue: str, polygon_priceToSalesRatioValue: str, polygon_tradeAndNonTradeReceivablesValue: str, polygon_accumulatedRetainedEarningsDeficitValue: str, polygon_revenuesValue: str, polygon_revenuesUSDValue: str, polygon_researchAndDevelopmentExpenseValue: str, polygon_returnOnAverageAssetsValue: str, polygon_returnOnAverageEquityValue: str, polygon_returnOnInvestedCapitalValue: str, polygon_returnOnSalesValue: str, polygon_shareBasedCompensationValue: str, polygon_sellingGeneralAndAdministrativeExpenseValue: str, polygon_shareFactorValue: str, polygon_sharesValue: str, polygon_weightedAverageSharesValue: str, polygon_salesPerShareValue: str, polygon_tangibleAssetValueValue: str, polygon_taxAssetsValue: str, polygon_incomeTaxExpenseValue: str, polygon_taxLiabilitiesValue: str, polygon_tangibleAssetsBookValuePerShareValue: str, polygon_workingCapitalValue: str, polygon_weightedAverageSharesDilutedValue: str, fmpValue: int, alphavantageValue: int, polygonValue: int, alphavantage_fiscalDateEndingValue: str, alphavantage_reportedCurrencyValue: str, alphavantage_grossProfitValue: str, alphavantage_totalRevenueValue: str, alphavantage_costOfRevenueValue: str, alphavantage_costofGoodsAndServicesSoldValue: str, alphavantage_operatingIncomeValue: str, alphavantage_sellingGeneralAndAdministrativeValue: str, alphavantage_researchAndDevelopmentValue: str, alphavantage_operatingExpensesValue: str, alphavantage_investmentIncomeNetValue: str, alphavantage_netInterestIncomeValue: str, alphavantage_interestIncomeValue: str, alphavantage_interestExpenseValue: str, alphavantage_nonInterestIncomeValue: str, alphavantage_otherNonOperatingIncomeValue: str, alphavantage_depreciationValue: str, alphavantage_depreciationAndAmortizationValue: str, alphavantage_incomeBeforeTaxValue: str, alphavantage_incomeTaxExpenseValue: str, alphavantage_interestAndDebtExpenseValue: str, alphavantage_netIncomeFromContinuingOperationsValue: str, alphavantage_comprehensiveIncomeNetOfTaxValue: str, alphavantage_ebitValue: str, alphavantage_ebitdaValue: str, alphavantage_netIncomeValue: str, alphavantage_totalAssetsValue: str, alphavantage_totalCurrentAssetsValue: str, alphavantage_cashAndCashEquivalentsAtCarryingValueValue: str, alphavantage_cashAndShortTermInvestmentsValue: str, alphavantage_inventoryValue: str, alphavantage_currentNetReceivablesValue: str, alphavantage_totalNonCurrentAssetsValue: str, alphavantage_propertyPlantEquipmentValue: str, alphavantage_accumulatedDepreciationAmortizationPPEValue: str, alphavantage_intangibleAssetsValue: str, alphavantage_intangibleAssetsExcludingGoodwillValue: str, alphavantage_goodwillValue: str, alphavantage_investmentsValue: str, alphavantage_longTermInvestmentsValue: str, alphavantage_shortTermInvestmentsValue: str, alphavantage_otherCurrentAssetsValue: str, alphavantage_otherNonCurrrentAssetsValue: str, alphavantage_totalLiabilitiesValue: str, alphavantage_totalCurrentLiabilitiesValue: str, alphavantage_currentAccountsPayableValue: str, alphavantage_deferredRevenueValue: str, alphavantage_currentDebtValue: str, alphavantage_shortTermDebtValue: str, alphavantage_totalNonCurrentLiabilitiesValue: str, alphavantage_capitalLeaseObligationsValue: str, alphavantage_longTermDebtValue: str, alphavantage_currentLongTermDebtValue: str, alphavantage_longTermDebtNoncurrentValue: str, alphavantage_shortLongTermDebtTotalValue: str, alphavantage_otherCurrentLiabilitiesValue: str, alphavantage_otherNonCurrentLiabilitiesValue: str, alphavantage_totalShareholderEquityValue: str, alphavantage_treasuryStockValue: str, alphavantage_retainedEarningsValue: str, alphavantage_commonStockValue: str, alphavantage_commonStockSharesOutstandingValue: str, alphavantage_operatingCashflowValue: str, alphavantage_paymentsForOperatingActivitiesValue: str, alphavantage_proceedsFromOperatingActivitiesValue: str, alphavantage_changeInOperatingLiabilitiesValue: str, alphavantage_changeInOperatingAssetsValue: str, alphavantage_depreciationDepletionAndAmortizationValue: str, alphavantage_capitalExpendituresValue: str, alphavantage_changeInReceivablesValue: str, alphavantage_changeInInventoryValue: str, alphavantage_profitLossValue: str, alphavantage_cashflowFromInvestmentValue: str, alphavantage_cashflowFromFinancingValue: str, alphavantage_proceedsFromRepaymentsOfShortTermDebtValue: str, alphavantage_paymentsForRepurchaseOfCommonStockValue: str, alphavantage_paymentsForRepurchaseOfEquityValue: str, alphavantage_paymentsForRepurchaseOfPreferredStockValue: str, alphavantage_dividendPayoutValue: str, alphavantage_dividendPayoutCommonStockValue: str, alphavantage_dividendPayoutPreferredStockValue: str, alphavantage_proceedsFromIssuanceOfCommonStockValue: str, alphavantage_proceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNetValue: str, alphavantage_proceedsFromIssuanceOfPreferredStockValue: str, alphavantage_proceedsFromRepurchaseOfEquityValue: str, alphavantage_proceedsFromSaleOfTreasuryStockValue: str, alphavantage_changeInCashAndCashEquivalentsValue: str, alphavantage_changeInExchangeRateValue: str, polygon_logoValue: str, polygon_listdateValue: str, polygon_cikValue: str, polygon_bloombergValue: str, polygon_figiValue: str, polygon_leiValue: str, polygon_sicValue: str, polygon_countryValue: str, polygon_industryValue: str, polygon_sectorValue: str, polygon_marketcapValue: str, polygon_employeesValue: str, polygon_phoneValue: str, polygon_ceoValue: str, polygon_urlValue: str, polygon_descriptionValue: str, polygon_nameValue: str, polygon_exchangeSymbolValue: str, polygon_hq_addressValue: str, polygon_hq_stateValue: str, polygon_hq_countryValue: str, polygon_typeValue: str, polygon_tagsValue: str, polygon_similarValue: str, polygon_activeValue: str):
         self.exchange = exchangeValue
         self.symbol = symbolValue
         self.period = periodValue
         self.calendarDate = calendarDateValue
-        self.polygonReportPeriod = polygonReportPeriodValue
-        self.polygonUpdated = polygonUpdatedValue
-        self.polygonDateKey = polygonDateKeyValue
-        self.polygonAccumulatedOtherComprehensiveIncome = polygonAccumulatedOtherComprehensiveIncomeValue
-        self.polygonAssets = polygonAssetsValue
-        self.polygonAssetsAverage = polygonAssetsAverageValue
-        self.polygonAssetsCurrent = polygonAssetsCurrentValue
-        self.polygonAssetsNonCurrent = polygonAssetsNonCurrentValue
-        self.polygonAssetTurnover = polygonAssetTurnoverValue
-        self.polygonBookValuePerShare = polygonBookValuePerShareValue
-        self.polygonCapitalExpenditure = polygonCapitalExpenditureValue
-        self.polygonCashAndEquivalents = polygonCashAndEquivalentsValue
-        self.polygonCashAndEquivalentsUSD = polygonCashAndEquivalentsUSDValue
-        self.polygonCostOfRevenue = polygonCostOfRevenueValue
-        self.polygonConsolidatedIncome = polygonConsolidatedIncomeValue
-        self.polygonCurrentRatio = polygonCurrentRatioValue
-        self.polygonDebtToEquityRatio = polygonDebtToEquityRatioValue
-        self.polygonDebt = polygonDebtValue
-        self.polygonDebtCurrent = polygonDebtCurrentValue
-        self.polygonDebtNonCurrent = polygonDebtNonCurrentValue
-        self.polygonDebtUSD = polygonDebtUSDValue
-        self.polygonDeferredRevenue = polygonDeferredRevenueValue
-        self.polygonDepreciationAmortizationAndAccretion = polygonDepreciationAmortizationAndAccretionValue
-        self.polygonDeposits = polygonDepositsValue
-        self.polygonDividendYield = polygonDividendYieldValue
-        self.polygonDividendsPerBasicCommonShare = polygonDividendsPerBasicCommonShareValue
-        self.polygonEarningBeforeInterestTaxes = polygonEarningBeforeInterestTaxesValue
-        self.polygonEarningsBeforeInterestTaxesDepreciationAmortization = polygonEarningsBeforeInterestTaxesDepreciationAmortizationValue
-        self.polygonEBITDAMargin = polygonEBITDAMarginValue
-        self.polygonEarningsBeforeInterestTaxesDepreciationAmortizationUSD = polygonEarningsBeforeInterestTaxesDepreciationAmortizationUSDValue
-        self.polygonEarningBeforeInterestTaxesUSD = polygonEarningBeforeInterestTaxesUSDValue
-        self.polygonEarningsBeforeTax = polygonEarningsBeforeTaxValue
-        self.polygonEarningsPerBasicShare = polygonEarningsPerBasicShareValue
-        self.polygonEarningsPerDilutedShare = polygonEarningsPerDilutedShareValue
-        self.polygonEarningsPerBasicShareUSD = polygonEarningsPerBasicShareUSDValue
-        self.polygonShareholdersEquity = polygonShareholdersEquityValue
-        self.polygonAverageEquity = polygonAverageEquityValue
-        self.polygonShareholdersEquityUSD = polygonShareholdersEquityUSDValue
-        self.polygonEnterpriseValue = polygonEnterpriseValueValue
-        self.polygonEnterpriseValueOverEBIT = polygonEnterpriseValueOverEBITValue
-        self.polygonEnterpriseValueOverEBITDA = polygonEnterpriseValueOverEBITDAValue
-        self.polygonFreeCashFlow = polygonFreeCashFlowValue
-        self.polygonFreeCashFlowPerShare = polygonFreeCashFlowPerShareValue
-        self.polygonForeignCurrencyUSDExchangeRate = polygonForeignCurrencyUSDExchangeRateValue
-        self.polygonGrossProfit = polygonGrossProfitValue
-        self.polygonGrossMargin = polygonGrossMarginValue
-        self.polygonGoodwillAndIntangibleAssets = polygonGoodwillAndIntangibleAssetsValue
-        self.polygonInterestExpense = polygonInterestExpenseValue
-        self.polygonInvestedCapital = polygonInvestedCapitalValue
-        self.polygonInvestedCapitalAverage = polygonInvestedCapitalAverageValue
-        self.polygonInventory = polygonInventoryValue
-        self.polygonInvestments = polygonInvestmentsValue
-        self.polygonInvestmentsCurrent = polygonInvestmentsCurrentValue
-        self.polygonInvestmentsNonCurrent = polygonInvestmentsNonCurrentValue
-        self.polygonTotalLiabilities = polygonTotalLiabilitiesValue
-        self.polygonCurrentLiabilities = polygonCurrentLiabilitiesValue
-        self.polygonLiabilitiesNonCurrent = polygonLiabilitiesNonCurrentValue
-        self.polygonMarketCapitalization = polygonMarketCapitalizationValue
-        self.polygonNetCashFlow = polygonNetCashFlowValue
-        self.polygonNetCashFlowBusinessAcquisitionsDisposals = polygonNetCashFlowBusinessAcquisitionsDisposalsValue
-        self.polygonIssuanceEquityShares = polygonIssuanceEquitySharesValue
-        self.polygonIssuanceDebtSecurities = polygonIssuanceDebtSecuritiesValue
-        self.polygonPaymentDividendsOtherCashDistributions = polygonPaymentDividendsOtherCashDistributionsValue
-        self.polygonNetCashFlowFromFinancing = polygonNetCashFlowFromFinancingValue
-        self.polygonNetCashFlowFromInvesting = polygonNetCashFlowFromInvestingValue
-        self.polygonNetCashFlowInvestmentAcquisitionsDisposals = polygonNetCashFlowInvestmentAcquisitionsDisposalsValue
-        self.polygonNetCashFlowFromOperations = polygonNetCashFlowFromOperationsValue
-        self.polygonEffectOfExchangeRateChangesOnCash = polygonEffectOfExchangeRateChangesOnCashValue
-        self.polygonNetIncome = polygonNetIncomeValue
-        self.polygonNetIncomeCommonStock = polygonNetIncomeCommonStockValue
-        self.polygonNetIncomeCommonStockUSD = polygonNetIncomeCommonStockUSDValue
-        self.polygonNetLossIncomeFromDiscontinuedOperations = polygonNetLossIncomeFromDiscontinuedOperationsValue
-        self.polygonNetIncomeToNonControllingInterests = polygonNetIncomeToNonControllingInterestsValue
-        self.polygonProfitMargin = polygonProfitMarginValue
-        self.polygonOperatingExpenses = polygonOperatingExpensesValue
-        self.polygonOperatingIncome = polygonOperatingIncomeValue
-        self.polygonTradeAndNonTradePayables = polygonTradeAndNonTradePayablesValue
-        self.polygonPayoutRatio = polygonPayoutRatioValue
-        self.polygonPriceToBookValue = polygonPriceToBookValueValue
-        self.polygonPriceEarnings = polygonPriceEarningsValue
-        self.polygonPriceToEarningsRatio = polygonPriceToEarningsRatioValue
-        self.polygonPropertyPlantEquipmentNet = polygonPropertyPlantEquipmentNetValue
-        self.polygonPreferredDividendsIncomeStatementImpact = polygonPreferredDividendsIncomeStatementImpactValue
-        self.polygonSharePriceAdjustedClose = polygonSharePriceAdjustedCloseValue
-        self.polygonPriceSales = polygonPriceSalesValue
-        self.polygonPriceToSalesRatio = polygonPriceToSalesRatioValue
-        self.polygonTradeAndNonTradeReceivables = polygonTradeAndNonTradeReceivablesValue
-        self.polygonAccumulatedRetainedEarningsDeficit = polygonAccumulatedRetainedEarningsDeficitValue
-        self.polygonRevenues = polygonRevenuesValue
-        self.polygonRevenuesUSD = polygonRevenuesUSDValue
-        self.polygonResearchAndDevelopmentExpense = polygonResearchAndDevelopmentExpenseValue
-        self.polygonReturnOnAverageAssets = polygonReturnOnAverageAssetsValue
-        self.polygonReturnOnAverageEquity = polygonReturnOnAverageEquityValue
-        self.polygonReturnOnInvestedCapital = polygonReturnOnInvestedCapitalValue
-        self.polygonReturnOnSales = polygonReturnOnSalesValue
-        self.polygonShareBasedCompensation = polygonShareBasedCompensationValue
-        self.polygonSellingGeneralAndAdministrativeExpense = polygonSellingGeneralAndAdministrativeExpenseValue
-        self.polygonShareFactor = polygonShareFactorValue
-        self.polygonShares = polygonSharesValue
-        self.polygonWeightedAverageShares = polygonWeightedAverageSharesValue
-        self.polygonSalesPerShare = polygonSalesPerShareValue
-        self.polygonTangibleAssetValue = polygonTangibleAssetValueValue
-        self.polygonTaxAssets = polygonTaxAssetsValue
-        self.polygonIncomeTaxExpense = polygonIncomeTaxExpenseValue
-        self.polygonTaxLiabilities = polygonTaxLiabilitiesValue
-        self.polygonTangibleAssetsBookValuePerShare = polygonTangibleAssetsBookValuePerShareValue
-        self.polygonWorkingCapital = polygonWorkingCapitalValue
-        self.polygonWeightedAverageSharesDiluted = polygonWeightedAverageSharesDilutedValue
+        self.polygon_reportPeriod = polygon_reportPeriodValue
+        self.polygon_updated = polygon_updatedValue
+        self.polygon_dateKey = polygon_dateKeyValue
+        self.polygon_accumulatedOtherComprehensiveIncome = polygon_accumulatedOtherComprehensiveIncomeValue
+        self.polygon_assets = polygon_assetsValue
+        self.polygon_assetsAverage = polygon_assetsAverageValue
+        self.polygon_assetsCurrent = polygon_assetsCurrentValue
+        self.polygon_assetsNonCurrent = polygon_assetsNonCurrentValue
+        self.polygon_assetTurnover = polygon_assetTurnoverValue
+        self.polygon_bookValuePerShare = polygon_bookValuePerShareValue
+        self.polygon_capitalExpenditure = polygon_capitalExpenditureValue
+        self.polygon_cashAndEquivalents = polygon_cashAndEquivalentsValue
+        self.polygon_cashAndEquivalentsUSD = polygon_cashAndEquivalentsUSDValue
+        self.polygon_costOfRevenue = polygon_costOfRevenueValue
+        self.polygon_consolidatedIncome = polygon_consolidatedIncomeValue
+        self.polygon_currentRatio = polygon_currentRatioValue
+        self.polygon_debtToEquityRatio = polygon_debtToEquityRatioValue
+        self.polygon_debt = polygon_debtValue
+        self.polygon_debtCurrent = polygon_debtCurrentValue
+        self.polygon_debtNonCurrent = polygon_debtNonCurrentValue
+        self.polygon_debtUSD = polygon_debtUSDValue
+        self.polygon_deferredRevenue = polygon_deferredRevenueValue
+        self.polygon_depreciationAmortizationAndAccretion = polygon_depreciationAmortizationAndAccretionValue
+        self.polygon_deposits = polygon_depositsValue
+        self.polygon_dividendYield = polygon_dividendYieldValue
+        self.polygon_dividendsPerBasicCommonShare = polygon_dividendsPerBasicCommonShareValue
+        self.polygon_earningBeforeInterestTaxes = polygon_earningBeforeInterestTaxesValue
+        self.polygon_earningsBeforeInterestTaxesDepreciationAmortization = polygon_earningsBeforeInterestTaxesDepreciationAmortizationValue
+        self.polygon_EBITDAMargin = polygon_EBITDAMarginValue
+        self.polygon_earningsBeforeInterestTaxesDepreciationAmortizationUSD = polygon_earningsBeforeInterestTaxesDepreciationAmortizationUSDValue
+        self.polygon_earningBeforeInterestTaxesUSD = polygon_earningBeforeInterestTaxesUSDValue
+        self.polygon_earningsBeforeTax = polygon_earningsBeforeTaxValue
+        self.polygon_earningsPerBasicShare = polygon_earningsPerBasicShareValue
+        self.polygon_earningsPerDilutedShare = polygon_earningsPerDilutedShareValue
+        self.polygon_earningsPerBasicShareUSD = polygon_earningsPerBasicShareUSDValue
+        self.polygon_shareholdersEquity = polygon_shareholdersEquityValue
+        self.polygon_averageEquity = polygon_averageEquityValue
+        self.polygon_shareholdersEquityUSD = polygon_shareholdersEquityUSDValue
+        self.polygon_enterpriseValue = polygon_enterpriseValueValue
+        self.polygon_enterpriseValueOverEBIT = polygon_enterpriseValueOverEBITValue
+        self.polygon_enterpriseValueOverEBITDA = polygon_enterpriseValueOverEBITDAValue
+        self.polygon_freeCashFlow = polygon_freeCashFlowValue
+        self.polygon_freeCashFlowPerShare = polygon_freeCashFlowPerShareValue
+        self.polygon_foreignCurrencyUSDExchangeRate = polygon_foreignCurrencyUSDExchangeRateValue
+        self.polygon_grossProfit = polygon_grossProfitValue
+        self.polygon_grossMargin = polygon_grossMarginValue
+        self.polygon_goodwillAndIntangibleAssets = polygon_goodwillAndIntangibleAssetsValue
+        self.polygon_interestExpense = polygon_interestExpenseValue
+        self.polygon_investedCapital = polygon_investedCapitalValue
+        self.polygon_investedCapitalAverage = polygon_investedCapitalAverageValue
+        self.polygon_inventory = polygon_inventoryValue
+        self.polygon_investments = polygon_investmentsValue
+        self.polygon_investmentsCurrent = polygon_investmentsCurrentValue
+        self.polygon_investmentsNonCurrent = polygon_investmentsNonCurrentValue
+        self.polygon_totalLiabilities = polygon_totalLiabilitiesValue
+        self.polygon_currentLiabilities = polygon_currentLiabilitiesValue
+        self.polygon_liabilitiesNonCurrent = polygon_liabilitiesNonCurrentValue
+        self.polygon_marketCapitalization = polygon_marketCapitalizationValue
+        self.polygon_netCashFlow = polygon_netCashFlowValue
+        self.polygon_netCashFlowBusinessAcquisitionsDisposals = polygon_netCashFlowBusinessAcquisitionsDisposalsValue
+        self.polygon_issuanceEquityShares = polygon_issuanceEquitySharesValue
+        self.polygon_issuanceDebtSecurities = polygon_issuanceDebtSecuritiesValue
+        self.polygon_paymentDividendsOtherCashDistributions = polygon_paymentDividendsOtherCashDistributionsValue
+        self.polygon_netCashFlowFromFinancing = polygon_netCashFlowFromFinancingValue
+        self.polygon_netCashFlowFromInvesting = polygon_netCashFlowFromInvestingValue
+        self.polygon_netCashFlowInvestmentAcquisitionsDisposals = polygon_netCashFlowInvestmentAcquisitionsDisposalsValue
+        self.polygon_netCashFlowFromOperations = polygon_netCashFlowFromOperationsValue
+        self.polygon_effectOfExchangeRateChangesOnCash = polygon_effectOfExchangeRateChangesOnCashValue
+        self.polygon_netIncome = polygon_netIncomeValue
+        self.polygon_netIncomeCommonStock = polygon_netIncomeCommonStockValue
+        self.polygon_netIncomeCommonStockUSD = polygon_netIncomeCommonStockUSDValue
+        self.polygon_netLossIncomeFromDiscontinuedOperations = polygon_netLossIncomeFromDiscontinuedOperationsValue
+        self.polygon_netIncomeToNonControllingInterests = polygon_netIncomeToNonControllingInterestsValue
+        self.polygon_profitMargin = polygon_profitMarginValue
+        self.polygon_operatingExpenses = polygon_operatingExpensesValue
+        self.polygon_operatingIncome = polygon_operatingIncomeValue
+        self.polygon_tradeAndNonTradePayables = polygon_tradeAndNonTradePayablesValue
+        self.polygon_payoutRatio = polygon_payoutRatioValue
+        self.polygon_priceToBookValue = polygon_priceToBookValueValue
+        self.polygon_priceEarnings = polygon_priceEarningsValue
+        self.polygon_priceToEarningsRatio = polygon_priceToEarningsRatioValue
+        self.polygon_propertyPlantEquipmentNet = polygon_propertyPlantEquipmentNetValue
+        self.polygon_preferredDividendsIncomeStatementImpact = polygon_preferredDividendsIncomeStatementImpactValue
+        self.polygon_sharePriceAdjustedClose = polygon_sharePriceAdjustedCloseValue
+        self.polygon_priceSales = polygon_priceSalesValue
+        self.polygon_priceToSalesRatio = polygon_priceToSalesRatioValue
+        self.polygon_tradeAndNonTradeReceivables = polygon_tradeAndNonTradeReceivablesValue
+        self.polygon_accumulatedRetainedEarningsDeficit = polygon_accumulatedRetainedEarningsDeficitValue
+        self.polygon_revenues = polygon_revenuesValue
+        self.polygon_revenuesUSD = polygon_revenuesUSDValue
+        self.polygon_researchAndDevelopmentExpense = polygon_researchAndDevelopmentExpenseValue
+        self.polygon_returnOnAverageAssets = polygon_returnOnAverageAssetsValue
+        self.polygon_returnOnAverageEquity = polygon_returnOnAverageEquityValue
+        self.polygon_returnOnInvestedCapital = polygon_returnOnInvestedCapitalValue
+        self.polygon_returnOnSales = polygon_returnOnSalesValue
+        self.polygon_shareBasedCompensation = polygon_shareBasedCompensationValue
+        self.polygon_sellingGeneralAndAdministrativeExpense = polygon_sellingGeneralAndAdministrativeExpenseValue
+        self.polygon_shareFactor = polygon_shareFactorValue
+        self.polygon_shares = polygon_sharesValue
+        self.polygon_weightedAverageShares = polygon_weightedAverageSharesValue
+        self.polygon_salesPerShare = polygon_salesPerShareValue
+        self.polygon_tangibleAssetValue = polygon_tangibleAssetValueValue
+        self.polygon_taxAssets = polygon_taxAssetsValue
+        self.polygon_incomeTaxExpense = polygon_incomeTaxExpenseValue
+        self.polygon_taxLiabilities = polygon_taxLiabilitiesValue
+        self.polygon_tangibleAssetsBookValuePerShare = polygon_tangibleAssetsBookValuePerShareValue
+        self.polygon_workingCapital = polygon_workingCapitalValue
+        self.polygon_weightedAverageSharesDiluted = polygon_weightedAverageSharesDilutedValue
         self.fmp = fmpValue
         self.alphavantage = alphavantageValue
         self.polygon = polygonValue
-        self.alphavantageFiscalDateEnding = alphavantageFiscalDateEndingValue
-        self.alphavantageReportedCurrency = alphavantageReportedCurrencyValue
-        self.alphavantageGrossProfit = alphavantageGrossProfitValue
-        self.alphavantageTotalRevenue = alphavantageTotalRevenueValue
-        self.alphavantageCostOfRevenue = alphavantageCostOfRevenueValue
-        self.alphavantageCostofGoodsAndServicesSold = alphavantageCostofGoodsAndServicesSoldValue
-        self.alphavantageOperatingIncome = alphavantageOperatingIncomeValue
-        self.alphavantageSellingGeneralAndAdministrative = alphavantageSellingGeneralAndAdministrativeValue
-        self.alphavantageResearchAndDevelopment = alphavantageResearchAndDevelopmentValue
-        self.alphavantageOperatingExpenses = alphavantageOperatingExpensesValue
-        self.alphavantageInvestmentIncomeNet = alphavantageInvestmentIncomeNetValue
-        self.alphavantageNetInterestIncome = alphavantageNetInterestIncomeValue
-        self.alphavantageInterestIncome = alphavantageInterestIncomeValue
-        self.alphavantageInterestExpense = alphavantageInterestExpenseValue
-        self.alphavantageNonInterestIncome = alphavantageNonInterestIncomeValue
-        self.alphavantageOtherNonOperatingIncome = alphavantageOtherNonOperatingIncomeValue
-        self.alphavantageDepreciation = alphavantageDepreciationValue
-        self.alphavantageDepreciationAndAmortization = alphavantageDepreciationAndAmortizationValue
-        self.alphavantageIncomeBeforeTax = alphavantageIncomeBeforeTaxValue
-        self.alphavantageIncomeTaxExpense = alphavantageIncomeTaxExpenseValue
-        self.alphavantageInterestAndDebtExpense = alphavantageInterestAndDebtExpenseValue
-        self.alphavantageNetIncomeFromContinuingOperations = alphavantageNetIncomeFromContinuingOperationsValue
-        self.alphavantageComprehensiveIncomeNetOfTax = alphavantageComprehensiveIncomeNetOfTaxValue
-        self.alphavantageEbit = alphavantageEbitValue
-        self.alphavantageEbitda = alphavantageEbitdaValue
-        self.alphavantageNetIncome = alphavantageNetIncomeValue
-        self.alphavantageTotalAssets = alphavantageTotalAssetsValue
-        self.alphavantageTotalCurrentAssets = alphavantageTotalCurrentAssetsValue
-        self.alphavantageCashAndCashEquivalentsAtCarryingValue = alphavantageCashAndCashEquivalentsAtCarryingValueValue
-        self.alphavantageCashAndShortTermInvestments = alphavantageCashAndShortTermInvestmentsValue
-        self.alphavantageInventory = alphavantageInventoryValue
-        self.alphavantageCurrentNetReceivables = alphavantageCurrentNetReceivablesValue
-        self.alphavantageTotalNonCurrentAssets = alphavantageTotalNonCurrentAssetsValue
-        self.alphavantagePropertyPlantEquipment = alphavantagePropertyPlantEquipmentValue
-        self.alphavantageAccumulatedDepreciationAmortizationPPE = alphavantageAccumulatedDepreciationAmortizationPPEValue
-        self.alphavantageIntangibleAssets = alphavantageIntangibleAssetsValue
-        self.alphavantageIntangibleAssetsExcludingGoodwill = alphavantageIntangibleAssetsExcludingGoodwillValue
-        self.alphavantageGoodwill = alphavantageGoodwillValue
-        self.alphavantageInvestments = alphavantageInvestmentsValue
-        self.alphavantageLongTermInvestments = alphavantageLongTermInvestmentsValue
-        self.alphavantageShortTermInvestments = alphavantageShortTermInvestmentsValue
-        self.alphavantageOtherCurrentAssets = alphavantageOtherCurrentAssetsValue
-        self.alphavantageOtherNonCurrrentAssets = alphavantageOtherNonCurrrentAssetsValue
-        self.alphavantageTotalLiabilities = alphavantageTotalLiabilitiesValue
-        self.alphavantageTotalCurrentLiabilities = alphavantageTotalCurrentLiabilitiesValue
-        self.alphavantageCurrentAccountsPayable = alphavantageCurrentAccountsPayableValue
-        self.alphavantageDeferredRevenue = alphavantageDeferredRevenueValue
-        self.alphavantageCurrentDebt = alphavantageCurrentDebtValue
-        self.alphavantageShortTermDebt = alphavantageShortTermDebtValue
-        self.alphavantageTotalNonCurrentLiabilities = alphavantageTotalNonCurrentLiabilitiesValue
-        self.alphavantageCapitalLeaseObligations = alphavantageCapitalLeaseObligationsValue
-        self.alphavantageLongTermDebt = alphavantageLongTermDebtValue
-        self.alphavantageCurrentLongTermDebt = alphavantageCurrentLongTermDebtValue
-        self.alphavantageLongTermDebtNoncurrent = alphavantageLongTermDebtNoncurrentValue
-        self.alphavantageShortLongTermDebtTotal = alphavantageShortLongTermDebtTotalValue
-        self.alphavantageOtherCurrentLiabilities = alphavantageOtherCurrentLiabilitiesValue
-        self.alphavantageOtherNonCurrentLiabilities = alphavantageOtherNonCurrentLiabilitiesValue
-        self.alphavantageTotalShareholderEquity = alphavantageTotalShareholderEquityValue
-        self.alphavantageTreasuryStock = alphavantageTreasuryStockValue
-        self.alphavantageRetainedEarnings = alphavantageRetainedEarningsValue
-        self.alphavantageCommonStock = alphavantageCommonStockValue
-        self.alphavantageCommonStockSharesOutstanding = alphavantageCommonStockSharesOutstandingValue
-        self.alphavantageOperatingCashflow = alphavantageOperatingCashflowValue
-        self.alphavantagePaymentsForOperatingActivities = alphavantagePaymentsForOperatingActivitiesValue
-        self.alphavantageProceedsFromOperatingActivities = alphavantageProceedsFromOperatingActivitiesValue
-        self.alphavantageChangeInOperatingLiabilities = alphavantageChangeInOperatingLiabilitiesValue
-        self.alphavantageChangeInOperatingAssets = alphavantageChangeInOperatingAssetsValue
-        self.alphavantageDepreciationDepletionAndAmortization = alphavantageDepreciationDepletionAndAmortizationValue
-        self.alphavantageCapitalExpenditures = alphavantageCapitalExpendituresValue
-        self.alphavantageChangeInReceivables = alphavantageChangeInReceivablesValue
-        self.alphavantageChangeInInventory = alphavantageChangeInInventoryValue
-        self.alphavantageProfitLoss = alphavantageProfitLossValue
-        self.alphavantageCashflowFromInvestment = alphavantageCashflowFromInvestmentValue
-        self.alphavantageCashflowFromFinancing = alphavantageCashflowFromFinancingValue
-        self.alphavantageProceedsFromRepaymentsOfShortTermDebt = alphavantageProceedsFromRepaymentsOfShortTermDebtValue
-        self.alphavantagePaymentsForRepurchaseOfCommonStock = alphavantagePaymentsForRepurchaseOfCommonStockValue
-        self.alphavantagePaymentsForRepurchaseOfEquity = alphavantagePaymentsForRepurchaseOfEquityValue
-        self.alphavantagePaymentsForRepurchaseOfPreferredStock = alphavantagePaymentsForRepurchaseOfPreferredStockValue
-        self.alphavantageDividendPayout = alphavantageDividendPayoutValue
-        self.alphavantageDividendPayoutCommonStock = alphavantageDividendPayoutCommonStockValue
-        self.alphavantageDividendPayoutPreferredStock = alphavantageDividendPayoutPreferredStockValue
-        self.alphavantageProceedsFromIssuanceOfCommonStock = alphavantageProceedsFromIssuanceOfCommonStockValue
-        self.alphavantageProceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNet = alphavantageProceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNetValue
-        self.alphavantageProceedsFromIssuanceOfPreferredStock = alphavantageProceedsFromIssuanceOfPreferredStockValue
-        self.alphavantageProceedsFromRepurchaseOfEquity = alphavantageProceedsFromRepurchaseOfEquityValue
-        self.alphavantageProceedsFromSaleOfTreasuryStock = alphavantageProceedsFromSaleOfTreasuryStockValue
-        self.alphavantageChangeInCashAndCashEquivalents = alphavantageChangeInCashAndCashEquivalentsValue
-        self.alphavantageChangeInExchangeRate = alphavantageChangeInExchangeRateValue
-        self.polygonLogo = polygonLogoValue
-        self.polygonListdate = polygonListdateValue
-        self.polygonCik = polygonCikValue
-        self.polygonBloomberg = polygonBloombergValue
-        self.polygonFigi = polygonFigiValue
-        self.polygonLei = polygonLeiValue
-        self.polygonSic = polygonSicValue
-        self.polygonCountry = polygonCountryValue
-        self.polygonIndustry = polygonIndustryValue
-        self.polygonSector = polygonSectorValue
-        self.polygonMarketcap = polygonMarketcapValue
-        self.polygonEmployees = polygonEmployeesValue
-        self.polygonPhone = polygonPhoneValue
-        self.polygonCeo = polygonCeoValue
-        self.polygonUrl = polygonUrlValue
-        self.polygonDescription = polygonDescriptionValue
-        self.polygonName = polygonNameValue
-        self.polygonExchangeSymbol = polygonExchangeSymbolValue
-        self.polygonHqAddress = polygonHqAddressValue
-        self.polygonHqState = polygonHqStateValue
-        self.polygonHqCountry = polygonHqCountryValue
-        self.polygonType = polygonTypeValue
-        self.polygonTags = polygonTagsValue
-        self.polygonSimilar = polygonSimilarValue
-        self.polygonActive = polygonActiveValue
+        self.alphavantage_fiscalDateEnding = alphavantage_fiscalDateEndingValue
+        self.alphavantage_reportedCurrency = alphavantage_reportedCurrencyValue
+        self.alphavantage_grossProfit = alphavantage_grossProfitValue
+        self.alphavantage_totalRevenue = alphavantage_totalRevenueValue
+        self.alphavantage_costOfRevenue = alphavantage_costOfRevenueValue
+        self.alphavantage_costofGoodsAndServicesSold = alphavantage_costofGoodsAndServicesSoldValue
+        self.alphavantage_operatingIncome = alphavantage_operatingIncomeValue
+        self.alphavantage_sellingGeneralAndAdministrative = alphavantage_sellingGeneralAndAdministrativeValue
+        self.alphavantage_researchAndDevelopment = alphavantage_researchAndDevelopmentValue
+        self.alphavantage_operatingExpenses = alphavantage_operatingExpensesValue
+        self.alphavantage_investmentIncomeNet = alphavantage_investmentIncomeNetValue
+        self.alphavantage_netInterestIncome = alphavantage_netInterestIncomeValue
+        self.alphavantage_interestIncome = alphavantage_interestIncomeValue
+        self.alphavantage_interestExpense = alphavantage_interestExpenseValue
+        self.alphavantage_nonInterestIncome = alphavantage_nonInterestIncomeValue
+        self.alphavantage_otherNonOperatingIncome = alphavantage_otherNonOperatingIncomeValue
+        self.alphavantage_depreciation = alphavantage_depreciationValue
+        self.alphavantage_depreciationAndAmortization = alphavantage_depreciationAndAmortizationValue
+        self.alphavantage_incomeBeforeTax = alphavantage_incomeBeforeTaxValue
+        self.alphavantage_incomeTaxExpense = alphavantage_incomeTaxExpenseValue
+        self.alphavantage_interestAndDebtExpense = alphavantage_interestAndDebtExpenseValue
+        self.alphavantage_netIncomeFromContinuingOperations = alphavantage_netIncomeFromContinuingOperationsValue
+        self.alphavantage_comprehensiveIncomeNetOfTax = alphavantage_comprehensiveIncomeNetOfTaxValue
+        self.alphavantage_ebit = alphavantage_ebitValue
+        self.alphavantage_ebitda = alphavantage_ebitdaValue
+        self.alphavantage_netIncome = alphavantage_netIncomeValue
+        self.alphavantage_totalAssets = alphavantage_totalAssetsValue
+        self.alphavantage_totalCurrentAssets = alphavantage_totalCurrentAssetsValue
+        self.alphavantage_cashAndCashEquivalentsAtCarryingValue = alphavantage_cashAndCashEquivalentsAtCarryingValueValue
+        self.alphavantage_cashAndShortTermInvestments = alphavantage_cashAndShortTermInvestmentsValue
+        self.alphavantage_inventory = alphavantage_inventoryValue
+        self.alphavantage_currentNetReceivables = alphavantage_currentNetReceivablesValue
+        self.alphavantage_totalNonCurrentAssets = alphavantage_totalNonCurrentAssetsValue
+        self.alphavantage_propertyPlantEquipment = alphavantage_propertyPlantEquipmentValue
+        self.alphavantage_accumulatedDepreciationAmortizationPPE = alphavantage_accumulatedDepreciationAmortizationPPEValue
+        self.alphavantage_intangibleAssets = alphavantage_intangibleAssetsValue
+        self.alphavantage_intangibleAssetsExcludingGoodwill = alphavantage_intangibleAssetsExcludingGoodwillValue
+        self.alphavantage_goodwill = alphavantage_goodwillValue
+        self.alphavantage_investments = alphavantage_investmentsValue
+        self.alphavantage_longTermInvestments = alphavantage_longTermInvestmentsValue
+        self.alphavantage_shortTermInvestments = alphavantage_shortTermInvestmentsValue
+        self.alphavantage_otherCurrentAssets = alphavantage_otherCurrentAssetsValue
+        self.alphavantage_otherNonCurrrentAssets = alphavantage_otherNonCurrrentAssetsValue
+        self.alphavantage_totalLiabilities = alphavantage_totalLiabilitiesValue
+        self.alphavantage_totalCurrentLiabilities = alphavantage_totalCurrentLiabilitiesValue
+        self.alphavantage_currentAccountsPayable = alphavantage_currentAccountsPayableValue
+        self.alphavantage_deferredRevenue = alphavantage_deferredRevenueValue
+        self.alphavantage_currentDebt = alphavantage_currentDebtValue
+        self.alphavantage_shortTermDebt = alphavantage_shortTermDebtValue
+        self.alphavantage_totalNonCurrentLiabilities = alphavantage_totalNonCurrentLiabilitiesValue
+        self.alphavantage_capitalLeaseObligations = alphavantage_capitalLeaseObligationsValue
+        self.alphavantage_longTermDebt = alphavantage_longTermDebtValue
+        self.alphavantage_currentLongTermDebt = alphavantage_currentLongTermDebtValue
+        self.alphavantage_longTermDebtNoncurrent = alphavantage_longTermDebtNoncurrentValue
+        self.alphavantage_shortLongTermDebtTotal = alphavantage_shortLongTermDebtTotalValue
+        self.alphavantage_otherCurrentLiabilities = alphavantage_otherCurrentLiabilitiesValue
+        self.alphavantage_otherNonCurrentLiabilities = alphavantage_otherNonCurrentLiabilitiesValue
+        self.alphavantage_totalShareholderEquity = alphavantage_totalShareholderEquityValue
+        self.alphavantage_treasuryStock = alphavantage_treasuryStockValue
+        self.alphavantage_retainedEarnings = alphavantage_retainedEarningsValue
+        self.alphavantage_commonStock = alphavantage_commonStockValue
+        self.alphavantage_commonStockSharesOutstanding = alphavantage_commonStockSharesOutstandingValue
+        self.alphavantage_operatingCashflow = alphavantage_operatingCashflowValue
+        self.alphavantage_paymentsForOperatingActivities = alphavantage_paymentsForOperatingActivitiesValue
+        self.alphavantage_proceedsFromOperatingActivities = alphavantage_proceedsFromOperatingActivitiesValue
+        self.alphavantage_changeInOperatingLiabilities = alphavantage_changeInOperatingLiabilitiesValue
+        self.alphavantage_changeInOperatingAssets = alphavantage_changeInOperatingAssetsValue
+        self.alphavantage_depreciationDepletionAndAmortization = alphavantage_depreciationDepletionAndAmortizationValue
+        self.alphavantage_capitalExpenditures = alphavantage_capitalExpendituresValue
+        self.alphavantage_changeInReceivables = alphavantage_changeInReceivablesValue
+        self.alphavantage_changeInInventory = alphavantage_changeInInventoryValue
+        self.alphavantage_profitLoss = alphavantage_profitLossValue
+        self.alphavantage_cashflowFromInvestment = alphavantage_cashflowFromInvestmentValue
+        self.alphavantage_cashflowFromFinancing = alphavantage_cashflowFromFinancingValue
+        self.alphavantage_proceedsFromRepaymentsOfShortTermDebt = alphavantage_proceedsFromRepaymentsOfShortTermDebtValue
+        self.alphavantage_paymentsForRepurchaseOfCommonStock = alphavantage_paymentsForRepurchaseOfCommonStockValue
+        self.alphavantage_paymentsForRepurchaseOfEquity = alphavantage_paymentsForRepurchaseOfEquityValue
+        self.alphavantage_paymentsForRepurchaseOfPreferredStock = alphavantage_paymentsForRepurchaseOfPreferredStockValue
+        self.alphavantage_dividendPayout = alphavantage_dividendPayoutValue
+        self.alphavantage_dividendPayoutCommonStock = alphavantage_dividendPayoutCommonStockValue
+        self.alphavantage_dividendPayoutPreferredStock = alphavantage_dividendPayoutPreferredStockValue
+        self.alphavantage_proceedsFromIssuanceOfCommonStock = alphavantage_proceedsFromIssuanceOfCommonStockValue
+        self.alphavantage_proceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNet = alphavantage_proceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNetValue
+        self.alphavantage_proceedsFromIssuanceOfPreferredStock = alphavantage_proceedsFromIssuanceOfPreferredStockValue
+        self.alphavantage_proceedsFromRepurchaseOfEquity = alphavantage_proceedsFromRepurchaseOfEquityValue
+        self.alphavantage_proceedsFromSaleOfTreasuryStock = alphavantage_proceedsFromSaleOfTreasuryStockValue
+        self.alphavantage_changeInCashAndCashEquivalents = alphavantage_changeInCashAndCashEquivalentsValue
+        self.alphavantage_changeInExchangeRate = alphavantage_changeInExchangeRateValue
+        self.polygon_logo = polygon_logoValue
+        self.polygon_listdate = polygon_listdateValue
+        self.polygon_cik = polygon_cikValue
+        self.polygon_bloomberg = polygon_bloombergValue
+        self.polygon_figi = polygon_figiValue
+        self.polygon_lei = polygon_leiValue
+        self.polygon_sic = polygon_sicValue
+        self.polygon_country = polygon_countryValue
+        self.polygon_industry = polygon_industryValue
+        self.polygon_sector = polygon_sectorValue
+        self.polygon_marketcap = polygon_marketcapValue
+        self.polygon_employees = polygon_employeesValue
+        self.polygon_phone = polygon_phoneValue
+        self.polygon_ceo = polygon_ceoValue
+        self.polygon_url = polygon_urlValue
+        self.polygon_description = polygon_descriptionValue
+        self.polygon_name = polygon_nameValue
+        self.polygon_exchangeSymbol = polygon_exchangeSymbolValue
+        self.polygon_hq_address = polygon_hq_addressValue
+        self.polygon_hq_state = polygon_hq_stateValue
+        self.polygon_hq_country = polygon_hq_countryValue
+        self.polygon_type = polygon_typeValue
+        self.polygon_tags = polygon_tagsValue
+        self.polygon_similar = polygon_similarValue
+        self.polygon_active = polygon_activeValue
 
 ## TABLE: earnings_dates_nasdaq_d ######################################
 earningsDatesNasdaqDSnakeCaseTableColumns = ['symbol', 'input_date', 'earnings_date', 'eps', 'surprise_percentage', 'time', 'name', 'last_year_report_date', 'last_year_eps', 'market_cap', 'fiscal_quarter_ending', 'eps_forecast', 'number_of_estimates']
 earningsDatesNasdaqDCamelCaseTableColumns = ['symbol', 'inputDate', 'earningsDate', 'eps', 'surprisePercentage', 'time', 'name', 'lastYearReportDate', 'lastYearEps', 'marketCap', 'fiscalQuarterEnding', 'epsForecast', 'numberOfEstimates']
 class EarningsDatesNasdaqDRow():
-    def __init__(self, symbolValue: str, inputDateValue: str, earningsDateValue: str, epsValue: float, surprisePercentageValue: float, timeValue: str, nameValue: str, lastYearReportDateValue: str, lastYearEpsValue: int, marketCapValue: int, fiscalQuarterEndingValue: str, epsForecastValue: str, numberOfEstimatesValue: int):
+    def __init__(self, symbolValue: str, input_dateValue: str, earnings_dateValue: str, epsValue: float, surprise_percentageValue: float, timeValue: str, nameValue: str, last_year_report_dateValue: str, last_year_epsValue: int, market_capValue: int, fiscal_quarter_endingValue: str, eps_forecastValue: str, number_of_estimatesValue: int):
         self.symbol = symbolValue
-        self.inputDate = inputDateValue
-        self.earningsDate = earningsDateValue
+        self.input_date = input_dateValue
+        self.earnings_date = earnings_dateValue
         self.eps = epsValue
-        self.surprisePercentage = surprisePercentageValue
+        self.surprise_percentage = surprise_percentageValue
         self.time = timeValue
         self.name = nameValue
-        self.lastYearReportDate = lastYearReportDateValue
-        self.lastYearEps = lastYearEpsValue
-        self.marketCap = marketCapValue
-        self.fiscalQuarterEnding = fiscalQuarterEndingValue
-        self.epsForecast = epsForecastValue
-        self.numberOfEstimates = numberOfEstimatesValue
+        self.last_year_report_date = last_year_report_dateValue
+        self.last_year_eps = last_year_epsValue
+        self.market_cap = market_capValue
+        self.fiscal_quarter_ending = fiscal_quarter_endingValue
+        self.eps_forecast = eps_forecastValue
+        self.number_of_estimates = number_of_estimatesValue
 
 ## TABLE: symbol_statistics_yahoo_d ######################################
 symbolStatisticsYahooDSnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'quote_type', 'currency', 'shares_outstanding', 'market_cap', 'full_exchange_name', 'first_trade_date_milliseconds', 'tradeable', 'crypto_tradeable']
 symbolStatisticsYahooDCamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'quoteType', 'currency', 'sharesOutstanding', 'marketCap', 'fullExchangeName', 'firstTradeDateMilliseconds', 'tradeable', 'cryptoTradeable']
 class SymbolStatisticsYahooDRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, inputDateValue: str, quoteTypeValue: str, currencyValue: str, sharesOutstandingValue: int, marketCapValue: int, fullExchangeNameValue: str, firstTradeDateMillisecondsValue: int, tradeableValue: bool, cryptoTradeableValue: bool):
+    def __init__(self, exchangeValue: str, symbolValue: str, input_dateValue: str, quote_typeValue: str, currencyValue: str, shares_outstandingValue: int, market_capValue: int, full_exchange_nameValue: str, first_trade_date_millisecondsValue: int, tradeableValue: bool, crypto_tradeableValue: bool):
         self.exchange = exchangeValue
         self.symbol = symbolValue
-        self.inputDate = inputDateValue
-        self.quoteType = quoteTypeValue
+        self.input_date = input_dateValue
+        self.quote_type = quote_typeValue
         self.currency = currencyValue
-        self.sharesOutstanding = sharesOutstandingValue
-        self.marketCap = marketCapValue
-        self.fullExchangeName = fullExchangeNameValue
-        self.firstTradeDateMilliseconds = firstTradeDateMillisecondsValue
+        self.shares_outstanding = shares_outstandingValue
+        self.market_cap = market_capValue
+        self.full_exchange_name = full_exchange_nameValue
+        self.first_trade_date_milliseconds = first_trade_date_millisecondsValue
         self.tradeable = tradeableValue
-        self.cryptoTradeable = cryptoTradeableValue
+        self.crypto_tradeable = crypto_tradeableValue
 
 ## TABLE: short_interest_finra_d ######################################
 shortInterestFinraDSnakeCaseTableColumns = ['market_class_code', 'symbol_code', 'settlement_date', 'revision_flag', 'issue_name', 'current_short_position_quantity', 'days_to_cover_quantity', 'previous_short_position_quantity', 'issuer_services_group_exchange_code', 'stock_split_flag']
 shortInterestFinraDCamelCaseTableColumns = ['marketClassCode', 'symbolCode', 'settlementDate', 'revisionFlag', 'issueName', 'currentShortPositionQuantity', 'daysToCoverQuantity', 'previousShortPositionQuantity', 'issuerServicesGroupExchangeCode', 'stockSplitFlag']
 class ShortInterestFinraDRow():
-    def __init__(self, marketClassCodeValue: str, symbolCodeValue: str, settlementDateValue: str, revisionFlagValue: float, issueNameValue: str, currentShortPositionQuantityValue: int, daysToCoverQuantityValue: int, previousShortPositionQuantityValue: int, issuerServicesGroupExchangeCodeValue: str, stockSplitFlagValue: float):
-        self.marketClassCode = marketClassCodeValue
-        self.symbolCode = symbolCodeValue
-        self.settlementDate = settlementDateValue
-        self.revisionFlag = revisionFlagValue
-        self.issueName = issueNameValue
-        self.currentShortPositionQuantity = currentShortPositionQuantityValue
-        self.daysToCoverQuantity = daysToCoverQuantityValue
-        self.previousShortPositionQuantity = previousShortPositionQuantityValue
-        self.issuerServicesGroupExchangeCode = issuerServicesGroupExchangeCodeValue
-        self.stockSplitFlag = stockSplitFlagValue
+    def __init__(self, market_class_codeValue: str, symbol_codeValue: str, settlement_dateValue: str, revision_flagValue: float, issue_nameValue: str, current_short_position_quantityValue: int, days_to_cover_quantityValue: int, previous_short_position_quantityValue: int, issuer_services_group_exchange_codeValue: str, stock_split_flagValue: float):
+        self.market_class_code = market_class_codeValue
+        self.symbol_code = symbol_codeValue
+        self.settlement_date = settlement_dateValue
+        self.revision_flag = revision_flagValue
+        self.issue_name = issue_nameValue
+        self.current_short_position_quantity = current_short_position_quantityValue
+        self.days_to_cover_quantity = days_to_cover_quantityValue
+        self.previous_short_position_quantity = previous_short_position_quantityValue
+        self.issuer_services_group_exchange_code = issuer_services_group_exchange_codeValue
+        self.stock_split_flag = stock_split_flagValue
 
 ## TABLE: earnings_dates_marketwatch_d ######################################
 earningsDatesMarketwatchDSnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'earnings_date', 'name', 'fiscal_quarter_ending', 'eps_forecast', 'eps', 'surprise_percentage']
 earningsDatesMarketwatchDCamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'earningsDate', 'name', 'fiscalQuarterEnding', 'epsForecast', 'eps', 'surprisePercentage']
 class EarningsDatesMarketwatchDRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, inputDateValue: str, earningsDateValue: str, nameValue: str, fiscalQuarterEndingValue: str, epsForecastValue: str, epsValue: float, surprisePercentageValue: float):
+    def __init__(self, exchangeValue: str, symbolValue: str, input_dateValue: str, earnings_dateValue: str, nameValue: str, fiscal_quarter_endingValue: str, eps_forecastValue: str, epsValue: float, surprise_percentageValue: float):
         self.exchange = exchangeValue
         self.symbol = symbolValue
-        self.inputDate = inputDateValue
-        self.earningsDate = earningsDateValue
+        self.input_date = input_dateValue
+        self.earnings_date = earnings_dateValue
         self.name = nameValue
-        self.fiscalQuarterEnding = fiscalQuarterEndingValue
-        self.epsForecast = epsForecastValue
+        self.fiscal_quarter_ending = fiscal_quarter_endingValue
+        self.eps_forecast = eps_forecastValue
         self.eps = epsValue
-        self.surprisePercentage = surprisePercentageValue
+        self.surprise_percentage = surprise_percentageValue
 
 ## TABLE: earnings_dates_yahoo_d ######################################
 earningsDatesYahooDSnakeCaseTableColumns = ['exchange', 'symbol', 'input_date', 'earnings_date', 'name', 'event_name', 'eps_forecast', 'eps', 'surprise_percentage', 'start_date_time', 'start_date_time_type', 'time_zone_short_name', 'gmt_offset_milli_seconds']
 earningsDatesYahooDCamelCaseTableColumns = ['exchange', 'symbol', 'inputDate', 'earningsDate', 'name', 'eventName', 'epsForecast', 'eps', 'surprisePercentage', 'startDateTime', 'startDateTimeType', 'timeZoneShortName', 'gmtOffsetMilliSeconds']
 class EarningsDatesYahooDRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, inputDateValue: str, earningsDateValue: str, nameValue: str, eventNameValue: str, epsForecastValue: str, epsValue: float, surprisePercentageValue: float, startDateTimeValue: str, startDateTimeTypeValue: str, timeZoneShortNameValue: str, gmtOffsetMilliSecondsValue: float):
+    def __init__(self, exchangeValue: str, symbolValue: str, input_dateValue: str, earnings_dateValue: str, nameValue: str, event_nameValue: str, eps_forecastValue: str, epsValue: float, surprise_percentageValue: float, start_date_timeValue: str, start_date_time_typeValue: str, time_zone_short_nameValue: str, gmt_offset_milli_secondsValue: float):
         self.exchange = exchangeValue
         self.symbol = symbolValue
-        self.inputDate = inputDateValue
-        self.earningsDate = earningsDateValue
+        self.input_date = input_dateValue
+        self.earnings_date = earnings_dateValue
         self.name = nameValue
-        self.eventName = eventNameValue
-        self.epsForecast = epsForecastValue
+        self.event_name = event_nameValue
+        self.eps_forecast = eps_forecastValue
         self.eps = epsValue
-        self.surprisePercentage = surprisePercentageValue
-        self.startDateTime = startDateTimeValue
-        self.startDateTimeType = startDateTimeTypeValue
-        self.timeZoneShortName = timeZoneShortNameValue
-        self.gmtOffsetMilliSeconds = gmtOffsetMilliSecondsValue
+        self.surprise_percentage = surprise_percentageValue
+        self.start_date_time = start_date_timeValue
+        self.start_date_time_type = start_date_time_typeValue
+        self.time_zone_short_name = time_zone_short_nameValue
+        self.gmt_offset_milli_seconds = gmt_offset_milli_secondsValue
 
 ## TABLE: symbol_info_yahoo_d ######################################
 symbolInfoYahooDSnakeCaseTableColumns = ['exchange', 'symbol', 'quote_type', 'short_name', 'long_name', 'message_board_id', 'exchange_timezone_name', 'exchange_timezone_short_name', 'gmt_off_set_milliseconds', 'market', 'is_esg_populated']
 symbolInfoYahooDCamelCaseTableColumns = ['exchange', 'symbol', 'quoteType', 'shortName', 'longName', 'messageBoardId', 'exchangeTimezoneName', 'exchangeTimezoneShortName', 'gmtOffSetMilliseconds', 'market', 'isEsgPopulated']
 class SymbolInfoYahooDRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, quoteTypeValue: str, shortNameValue: str, longNameValue: str, messageBoardIdValue: str, exchangeTimezoneNameValue: str, exchangeTimezoneShortNameValue: str, gmtOffSetMillisecondsValue: float, marketValue: str, isEsgPopulatedValue):
+    def __init__(self, exchangeValue: str, symbolValue: str, quote_typeValue: str, short_nameValue: str, long_nameValue: str, message_board_idValue: str, exchange_timezone_nameValue: str, exchange_timezone_short_nameValue: str, gmt_off_set_millisecondsValue: float, marketValue: str, is_esg_populatedValue):
         self.exchange = exchangeValue
         self.symbol = symbolValue
-        self.quoteType = quoteTypeValue
-        self.shortName = shortNameValue
-        self.longName = longNameValue
-        self.messageBoardId = messageBoardIdValue
-        self.exchangeTimezoneName = exchangeTimezoneNameValue
-        self.exchangeTimezoneShortName = exchangeTimezoneShortNameValue
-        self.gmtOffSetMilliseconds = gmtOffSetMillisecondsValue
+        self.quote_type = quote_typeValue
+        self.short_name = short_nameValue
+        self.long_name = long_nameValue
+        self.message_board_id = message_board_idValue
+        self.exchange_timezone_name = exchange_timezone_nameValue
+        self.exchange_timezone_short_name = exchange_timezone_short_nameValue
+        self.gmt_off_set_milliseconds = gmt_off_set_millisecondsValue
         self.market = marketValue
-        self.isEsgPopulated = isEsgPopulatedValue
+        self.is_esg_populated = is_esg_populatedValue
 
 ## TABLE: staging_symbol_info_d ######################################
 stagingSymbolInfoDSnakeCaseTableColumns = ['exchange', 'symbol', 'migrated', 'founded', 'ipo', 'sector', 'polygon_sector', 'fmp_sector', 'alphavantage_sector', 'polygon_industry', 'fmp_industry', 'alphavantage_industry', 'polygon_description', 'fmp_description', 'alphavantage_description', 'polygon_ipo', 'fmp_ipo', 'alphavantage_assettype', 'fmp_isetf']
 stagingSymbolInfoDCamelCaseTableColumns = ['exchange', 'symbol', 'migrated', 'founded', 'ipo', 'sector', 'polygonSector', 'fmpSector', 'alphavantageSector', 'polygonIndustry', 'fmpIndustry', 'alphavantageIndustry', 'polygonDescription', 'fmpDescription', 'alphavantageDescription', 'polygonIpo', 'fmpIpo', 'alphavantageAssettype', 'fmpIsetf']
 class StagingSymbolInfoDRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, migratedValue: bool, foundedValue: str, ipoValue: str, sectorValue: str, polygonSectorValue: str, fmpSectorValue: str, alphavantageSectorValue: str, polygonIndustryValue: str, fmpIndustryValue: str, alphavantageIndustryValue: str, polygonDescriptionValue: str, fmpDescriptionValue: str, alphavantageDescriptionValue: str, polygonIpoValue: str, fmpIpoValue: str, alphavantageAssettypeValue: str, fmpIsetfValue: bool):
+    def __init__(self, exchangeValue: str, symbolValue: str, migratedValue: bool, foundedValue: str, ipoValue: str, sectorValue: str, polygon_sectorValue: str, fmp_sectorValue: str, alphavantage_sectorValue: str, polygon_industryValue: str, fmp_industryValue: str, alphavantage_industryValue: str, polygon_descriptionValue: str, fmp_descriptionValue: str, alphavantage_descriptionValue: str, polygon_ipoValue: str, fmp_ipoValue: str, alphavantage_assettypeValue: str, fmp_isetfValue: bool):
         self.exchange = exchangeValue
         self.symbol = symbolValue
         self.migrated = migratedValue
         self.founded = foundedValue
         self.ipo = ipoValue
         self.sector = sectorValue
-        self.polygonSector = polygonSectorValue
-        self.fmpSector = fmpSectorValue
-        self.alphavantageSector = alphavantageSectorValue
-        self.polygonIndustry = polygonIndustryValue
-        self.fmpIndustry = fmpIndustryValue
-        self.alphavantageIndustry = alphavantageIndustryValue
-        self.polygonDescription = polygonDescriptionValue
-        self.fmpDescription = fmpDescriptionValue
-        self.alphavantageDescription = alphavantageDescriptionValue
-        self.polygonIpo = polygonIpoValue
-        self.fmpIpo = fmpIpoValue
-        self.alphavantageAssettype = alphavantageAssettypeValue
-        self.fmpIsetf = fmpIsetfValue
+        self.polygon_sector = polygon_sectorValue
+        self.fmp_sector = fmp_sectorValue
+        self.alphavantage_sector = alphavantage_sectorValue
+        self.polygon_industry = polygon_industryValue
+        self.fmp_industry = fmp_industryValue
+        self.alphavantage_industry = alphavantage_industryValue
+        self.polygon_description = polygon_descriptionValue
+        self.fmp_description = fmp_descriptionValue
+        self.alphavantage_description = alphavantage_descriptionValue
+        self.polygon_ipo = polygon_ipoValue
+        self.fmp_ipo = fmp_ipoValue
+        self.alphavantage_assettype = alphavantage_assettypeValue
+        self.fmp_isetf = fmp_isetfValue
 
 ## TABLE: symbol_info_polygon_d_old ######################################
 symbolInfoPolygonDOldSnakeCaseTableColumns = ['exchange', 'symbol', 'alphavantage', 'fmp', 'polygon', 'polygon_logo', 'polygon_listdate', 'polygon_cik', 'polygon_bloomberg', 'polygon_figi', 'polygon_lei', 'polygon_sic', 'polygon_country', 'polygon_industry', 'polygon_sector', 'polygon_marketcap', 'polygon_employees', 'polygon_phone', 'polygon_ceo', 'polygon_url', 'polygon_description', 'polygon_name', 'polygon_exchangeSymbol', 'polygon_hq_address', 'polygon_hq_state', 'polygon_hq_country', 'polygon_type', 'polygon_updated', 'polygon_tags', 'polygon_similar', 'polygon_active']
 symbolInfoPolygonDOldCamelCaseTableColumns = ['exchange', 'symbol', 'alphavantage', 'fmp', 'polygon', 'polygonLogo', 'polygonListdate', 'polygonCik', 'polygonBloomberg', 'polygonFigi', 'polygonLei', 'polygonSic', 'polygonCountry', 'polygonIndustry', 'polygonSector', 'polygonMarketcap', 'polygonEmployees', 'polygonPhone', 'polygonCeo', 'polygonUrl', 'polygonDescription', 'polygonName', 'polygonExchangeSymbol', 'polygonHqAddress', 'polygonHqState', 'polygonHqCountry', 'polygonType', 'polygonUpdated', 'polygonTags', 'polygonSimilar', 'polygonActive']
 class SymbolInfoPolygonDOldRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, alphavantageValue: int, fmpValue: int, polygonValue: int, polygonLogoValue: str, polygonListdateValue: str, polygonCikValue: str, polygonBloombergValue: str, polygonFigiValue: str, polygonLeiValue: str, polygonSicValue: str, polygonCountryValue: str, polygonIndustryValue: str, polygonSectorValue: str, polygonMarketcapValue: str, polygonEmployeesValue: str, polygonPhoneValue: str, polygonCeoValue: str, polygonUrlValue: str, polygonDescriptionValue: str, polygonNameValue: str, polygonExchangeSymbolValue: str, polygonHqAddressValue: str, polygonHqStateValue: str, polygonHqCountryValue: str, polygonTypeValue: str, polygonUpdatedValue: str, polygonTagsValue: str, polygonSimilarValue: str, polygonActiveValue: str):
+    def __init__(self, exchangeValue: str, symbolValue: str, alphavantageValue: int, fmpValue: int, polygonValue: int, polygon_logoValue: str, polygon_listdateValue: str, polygon_cikValue: str, polygon_bloombergValue: str, polygon_figiValue: str, polygon_leiValue: str, polygon_sicValue: str, polygon_countryValue: str, polygon_industryValue: str, polygon_sectorValue: str, polygon_marketcapValue: str, polygon_employeesValue: str, polygon_phoneValue: str, polygon_ceoValue: str, polygon_urlValue: str, polygon_descriptionValue: str, polygon_nameValue: str, polygon_exchangeSymbolValue: str, polygon_hq_addressValue: str, polygon_hq_stateValue: str, polygon_hq_countryValue: str, polygon_typeValue: str, polygon_updatedValue: str, polygon_tagsValue: str, polygon_similarValue: str, polygon_activeValue: str):
         self.exchange = exchangeValue
         self.symbol = symbolValue
         self.alphavantage = alphavantageValue
         self.fmp = fmpValue
         self.polygon = polygonValue
-        self.polygonLogo = polygonLogoValue
-        self.polygonListdate = polygonListdateValue
-        self.polygonCik = polygonCikValue
-        self.polygonBloomberg = polygonBloombergValue
-        self.polygonFigi = polygonFigiValue
-        self.polygonLei = polygonLeiValue
-        self.polygonSic = polygonSicValue
-        self.polygonCountry = polygonCountryValue
-        self.polygonIndustry = polygonIndustryValue
-        self.polygonSector = polygonSectorValue
-        self.polygonMarketcap = polygonMarketcapValue
-        self.polygonEmployees = polygonEmployeesValue
-        self.polygonPhone = polygonPhoneValue
-        self.polygonCeo = polygonCeoValue
-        self.polygonUrl = polygonUrlValue
-        self.polygonDescription = polygonDescriptionValue
-        self.polygonName = polygonNameValue
-        self.polygonExchangeSymbol = polygonExchangeSymbolValue
-        self.polygonHqAddress = polygonHqAddressValue
-        self.polygonHqState = polygonHqStateValue
-        self.polygonHqCountry = polygonHqCountryValue
-        self.polygonType = polygonTypeValue
-        self.polygonUpdated = polygonUpdatedValue
-        self.polygonTags = polygonTagsValue
-        self.polygonSimilar = polygonSimilarValue
-        self.polygonActive = polygonActiveValue
+        self.polygon_logo = polygon_logoValue
+        self.polygon_listdate = polygon_listdateValue
+        self.polygon_cik = polygon_cikValue
+        self.polygon_bloomberg = polygon_bloombergValue
+        self.polygon_figi = polygon_figiValue
+        self.polygon_lei = polygon_leiValue
+        self.polygon_sic = polygon_sicValue
+        self.polygon_country = polygon_countryValue
+        self.polygon_industry = polygon_industryValue
+        self.polygon_sector = polygon_sectorValue
+        self.polygon_marketcap = polygon_marketcapValue
+        self.polygon_employees = polygon_employeesValue
+        self.polygon_phone = polygon_phoneValue
+        self.polygon_ceo = polygon_ceoValue
+        self.polygon_url = polygon_urlValue
+        self.polygon_description = polygon_descriptionValue
+        self.polygon_name = polygon_nameValue
+        self.polygon_exchangeSymbol = polygon_exchangeSymbolValue
+        self.polygon_hq_address = polygon_hq_addressValue
+        self.polygon_hq_state = polygon_hq_stateValue
+        self.polygon_hq_country = polygon_hq_countryValue
+        self.polygon_type = polygon_typeValue
+        self.polygon_updated = polygon_updatedValue
+        self.polygon_tags = polygon_tagsValue
+        self.polygon_similar = polygon_similarValue
+        self.polygon_active = polygon_activeValue
 
 ## TABLE: symbol_info_polygon_d ######################################
 symbolInfoPolygonDSnakeCaseTableColumns = ['exchange_alias', 'ticker', 'primary_exchange', 'delisted_utc', 'name', 'market', 'locale', 'type', 'active', 'currency_name', 'cik', 'composite_figi', 'share_class_figi', 'last_updated_utc', 'postal_code', 'round_lot', 'market_cap', 'city', 'homepage_url', 'state', 'description', 'address1', 'list_date', 'share_class_shares_outstanding', 'weighted_shares_outstanding', 'sic_code', 'sic_description', 'ticker_root', 'total_employees', 'phone_number', 'ticker_suffix', 'address2']
 symbolInfoPolygonDCamelCaseTableColumns = ['exchangeAlias', 'ticker', 'primaryExchange', 'delistedUtc', 'name', 'market', 'locale', 'type', 'active', 'currencyName', 'cik', 'compositeFigi', 'shareClassFigi', 'lastUpdatedUtc', 'postalCode', 'roundLot', 'marketCap', 'city', 'homepageUrl', 'state', 'description', 'address1', 'listDate', 'shareClassSharesOutstanding', 'weightedSharesOutstanding', 'sicCode', 'sicDescription', 'tickerRoot', 'totalEmployees', 'phoneNumber', 'tickerSuffix', 'address2']
 class SymbolInfoPolygonDRow():
-    def __init__(self, exchangeAliasValue: str, tickerValue: str, primaryExchangeValue: str, delistedUtcValue: str, nameValue: str, marketValue: str, localeValue: str, typeValue: str, activeValue, currencyNameValue: str, cikValue: str, compositeFigiValue: str, shareClassFigiValue: str, lastUpdatedUtcValue: str, postalCodeValue: str, roundLotValue: float, marketCapValue: float, cityValue: str, homepageUrlValue: str, stateValue: str, descriptionValue: str, address1Value: str, listDateValue: str, shareClassSharesOutstandingValue: float, weightedSharesOutstandingValue: float, sicCodeValue: str, sicDescriptionValue: str, tickerRootValue: str, totalEmployeesValue: float, phoneNumberValue: str, tickerSuffixValue: str, address2Value: str):
-        self.exchangeAlias = exchangeAliasValue
+    def __init__(self, exchange_aliasValue: str, tickerValue: str, primary_exchangeValue: str, delisted_utcValue: str, nameValue: str, marketValue: str, localeValue: str, typeValue: str, activeValue, currency_nameValue: str, cikValue: str, composite_figiValue: str, share_class_figiValue: str, last_updated_utcValue: str, postal_codeValue: str, round_lotValue: float, market_capValue: float, cityValue: str, homepage_urlValue: str, stateValue: str, descriptionValue: str, address1Value: str, list_dateValue: str, share_class_shares_outstandingValue: float, weighted_shares_outstandingValue: float, sic_codeValue: str, sic_descriptionValue: str, ticker_rootValue: str, total_employeesValue: float, phone_numberValue: str, ticker_suffixValue: str, address2Value: str):
+        self.exchange_alias = exchange_aliasValue
         self.ticker = tickerValue
-        self.primaryExchange = primaryExchangeValue
-        self.delistedUtc = delistedUtcValue
+        self.primary_exchange = primary_exchangeValue
+        self.delisted_utc = delisted_utcValue
         self.name = nameValue
         self.market = marketValue
         self.locale = localeValue
         self.type = typeValue
         self.active = activeValue
-        self.currencyName = currencyNameValue
+        self.currency_name = currency_nameValue
         self.cik = cikValue
-        self.compositeFigi = compositeFigiValue
-        self.shareClassFigi = shareClassFigiValue
-        self.lastUpdatedUtc = lastUpdatedUtcValue
-        self.postalCode = postalCodeValue
-        self.roundLot = roundLotValue
-        self.marketCap = marketCapValue
+        self.composite_figi = composite_figiValue
+        self.share_class_figi = share_class_figiValue
+        self.last_updated_utc = last_updated_utcValue
+        self.postal_code = postal_codeValue
+        self.round_lot = round_lotValue
+        self.market_cap = market_capValue
         self.city = cityValue
-        self.homepageUrl = homepageUrlValue
+        self.homepage_url = homepage_urlValue
         self.state = stateValue
         self.description = descriptionValue
         self.address1 = address1Value
-        self.listDate = listDateValue
-        self.shareClassSharesOutstanding = shareClassSharesOutstandingValue
-        self.weightedSharesOutstanding = weightedSharesOutstandingValue
-        self.sicCode = sicCodeValue
-        self.sicDescription = sicDescriptionValue
-        self.tickerRoot = tickerRootValue
-        self.totalEmployees = totalEmployeesValue
-        self.phoneNumber = phoneNumberValue
-        self.tickerSuffix = tickerSuffixValue
+        self.list_date = list_dateValue
+        self.share_class_shares_outstanding = share_class_shares_outstandingValue
+        self.weighted_shares_outstanding = weighted_shares_outstandingValue
+        self.sic_code = sic_codeValue
+        self.sic_description = sic_descriptionValue
+        self.ticker_root = ticker_rootValue
+        self.total_employees = total_employeesValue
+        self.phone_number = phone_numberValue
+        self.ticker_suffix = ticker_suffixValue
         self.address2 = address2Value
 
 ## TABLE: symbol_info_polygon_d_bk_activesonly ######################################
 symbolInfoPolygonDBkActivesonlySnakeCaseTableColumns = ['exchange_alias', 'ticker', 'primary_exchange', 'delisted_utc', 'name', 'market', 'locale', 'type', 'active', 'currency_name', 'cik', 'composite_figi', 'share_class_figi', 'last_updated_utc', 'postal_code', 'round_lot', 'market_cap', 'city', 'homepage_url', 'state', 'description', 'address1', 'list_date', 'share_class_shares_outstanding', 'weighted_shares_outstanding', 'sic_code', 'sic_description', 'ticker_root', 'total_employees', 'phone_number', 'ticker_suffix', 'address2']
 symbolInfoPolygonDBkActivesonlyCamelCaseTableColumns = ['exchangeAlias', 'ticker', 'primaryExchange', 'delistedUtc', 'name', 'market', 'locale', 'type', 'active', 'currencyName', 'cik', 'compositeFigi', 'shareClassFigi', 'lastUpdatedUtc', 'postalCode', 'roundLot', 'marketCap', 'city', 'homepageUrl', 'state', 'description', 'address1', 'listDate', 'shareClassSharesOutstanding', 'weightedSharesOutstanding', 'sicCode', 'sicDescription', 'tickerRoot', 'totalEmployees', 'phoneNumber', 'tickerSuffix', 'address2']
 class SymbolInfoPolygonDBkActivesonlyRow():
-    def __init__(self, exchangeAliasValue: str, tickerValue: str, primaryExchangeValue: str, delistedUtcValue: str, nameValue: str, marketValue: str, localeValue: str, typeValue: str, activeValue, currencyNameValue: str, cikValue: str, compositeFigiValue: str, shareClassFigiValue: str, lastUpdatedUtcValue: str, postalCodeValue: str, roundLotValue: int, marketCapValue: int, cityValue: str, homepageUrlValue: str, stateValue: str, descriptionValue: str, address1Value: str, listDateValue: str, shareClassSharesOutstandingValue: int, weightedSharesOutstandingValue: int, sicCodeValue: str, sicDescriptionValue: str, tickerRootValue: str, totalEmployeesValue: int, phoneNumberValue: str, tickerSuffixValue: str, address2Value: str):
-        self.exchangeAlias = exchangeAliasValue
+    def __init__(self, exchange_aliasValue: str, tickerValue: str, primary_exchangeValue: str, delisted_utcValue: str, nameValue: str, marketValue: str, localeValue: str, typeValue: str, activeValue, currency_nameValue: str, cikValue: str, composite_figiValue: str, share_class_figiValue: str, last_updated_utcValue: str, postal_codeValue: str, round_lotValue: int, market_capValue: int, cityValue: str, homepage_urlValue: str, stateValue: str, descriptionValue: str, address1Value: str, list_dateValue: str, share_class_shares_outstandingValue: int, weighted_shares_outstandingValue: int, sic_codeValue: str, sic_descriptionValue: str, ticker_rootValue: str, total_employeesValue: int, phone_numberValue: str, ticker_suffixValue: str, address2Value: str):
+        self.exchange_alias = exchange_aliasValue
         self.ticker = tickerValue
-        self.primaryExchange = primaryExchangeValue
-        self.delistedUtc = delistedUtcValue
+        self.primary_exchange = primary_exchangeValue
+        self.delisted_utc = delisted_utcValue
         self.name = nameValue
         self.market = marketValue
         self.locale = localeValue
         self.type = typeValue
         self.active = activeValue
-        self.currencyName = currencyNameValue
+        self.currency_name = currency_nameValue
         self.cik = cikValue
-        self.compositeFigi = compositeFigiValue
-        self.shareClassFigi = shareClassFigiValue
-        self.lastUpdatedUtc = lastUpdatedUtcValue
-        self.postalCode = postalCodeValue
-        self.roundLot = roundLotValue
-        self.marketCap = marketCapValue
+        self.composite_figi = composite_figiValue
+        self.share_class_figi = share_class_figiValue
+        self.last_updated_utc = last_updated_utcValue
+        self.postal_code = postal_codeValue
+        self.round_lot = round_lotValue
+        self.market_cap = market_capValue
         self.city = cityValue
-        self.homepageUrl = homepageUrlValue
+        self.homepage_url = homepage_urlValue
         self.state = stateValue
         self.description = descriptionValue
         self.address1 = address1Value
-        self.listDate = listDateValue
-        self.shareClassSharesOutstanding = shareClassSharesOutstandingValue
-        self.weightedSharesOutstanding = weightedSharesOutstandingValue
-        self.sicCode = sicCodeValue
-        self.sicDescription = sicDescriptionValue
-        self.tickerRoot = tickerRootValue
-        self.totalEmployees = totalEmployeesValue
-        self.phoneNumber = phoneNumberValue
-        self.tickerSuffix = tickerSuffixValue
+        self.list_date = list_dateValue
+        self.share_class_shares_outstanding = share_class_shares_outstandingValue
+        self.weighted_shares_outstanding = weighted_shares_outstandingValue
+        self.sic_code = sic_codeValue
+        self.sic_description = sic_descriptionValue
+        self.ticker_root = ticker_rootValue
+        self.total_employees = total_employeesValue
+        self.phone_number = phone_numberValue
+        self.ticker_suffix = ticker_suffixValue
         self.address2 = address2Value
 
 ## TABLE: symbol_info_polygon_d_bk_inactivesonly ######################################
 symbolInfoPolygonDBkInactivesonlySnakeCaseTableColumns = ['exchange_alias', 'ticker', 'primary_exchange', 'delisted_utc', 'name', 'market', 'locale', 'type', 'active', 'currency_name', 'cik', 'composite_figi', 'share_class_figi', 'last_updated_utc', 'postal_code', 'round_lot', 'market_cap', 'city', 'homepage_url', 'state', 'description', 'address1', 'list_date', 'share_class_shares_outstanding', 'weighted_shares_outstanding', 'sic_code', 'sic_description', 'ticker_root', 'total_employees', 'phone_number', 'ticker_suffix', 'address2']
 symbolInfoPolygonDBkInactivesonlyCamelCaseTableColumns = ['exchangeAlias', 'ticker', 'primaryExchange', 'delistedUtc', 'name', 'market', 'locale', 'type', 'active', 'currencyName', 'cik', 'compositeFigi', 'shareClassFigi', 'lastUpdatedUtc', 'postalCode', 'roundLot', 'marketCap', 'city', 'homepageUrl', 'state', 'description', 'address1', 'listDate', 'shareClassSharesOutstanding', 'weightedSharesOutstanding', 'sicCode', 'sicDescription', 'tickerRoot', 'totalEmployees', 'phoneNumber', 'tickerSuffix', 'address2']
 class SymbolInfoPolygonDBkInactivesonlyRow():
-    def __init__(self, exchangeAliasValue: str, tickerValue: str, primaryExchangeValue: str, delistedUtcValue: str, nameValue: str, marketValue: str, localeValue: str, typeValue: str, activeValue, currencyNameValue: str, cikValue: str, compositeFigiValue: str, shareClassFigiValue: str, lastUpdatedUtcValue: str, postalCodeValue: str, roundLotValue: int, marketCapValue: int, cityValue: str, homepageUrlValue: str, stateValue: str, descriptionValue: str, address1Value: str, listDateValue: str, shareClassSharesOutstandingValue: int, weightedSharesOutstandingValue: int, sicCodeValue: str, sicDescriptionValue: str, tickerRootValue: str, totalEmployeesValue: int, phoneNumberValue: str, tickerSuffixValue: str, address2Value: str):
-        self.exchangeAlias = exchangeAliasValue
+    def __init__(self, exchange_aliasValue: str, tickerValue: str, primary_exchangeValue: str, delisted_utcValue: str, nameValue: str, marketValue: str, localeValue: str, typeValue: str, activeValue, currency_nameValue: str, cikValue: str, composite_figiValue: str, share_class_figiValue: str, last_updated_utcValue: str, postal_codeValue: str, round_lotValue: int, market_capValue: int, cityValue: str, homepage_urlValue: str, stateValue: str, descriptionValue: str, address1Value: str, list_dateValue: str, share_class_shares_outstandingValue: int, weighted_shares_outstandingValue: int, sic_codeValue: str, sic_descriptionValue: str, ticker_rootValue: str, total_employeesValue: int, phone_numberValue: str, ticker_suffixValue: str, address2Value: str):
+        self.exchange_alias = exchange_aliasValue
         self.ticker = tickerValue
-        self.primaryExchange = primaryExchangeValue
-        self.delistedUtc = delistedUtcValue
+        self.primary_exchange = primary_exchangeValue
+        self.delisted_utc = delisted_utcValue
         self.name = nameValue
         self.market = marketValue
         self.locale = localeValue
         self.type = typeValue
         self.active = activeValue
-        self.currencyName = currencyNameValue
+        self.currency_name = currency_nameValue
         self.cik = cikValue
-        self.compositeFigi = compositeFigiValue
-        self.shareClassFigi = shareClassFigiValue
-        self.lastUpdatedUtc = lastUpdatedUtcValue
-        self.postalCode = postalCodeValue
-        self.roundLot = roundLotValue
-        self.marketCap = marketCapValue
+        self.composite_figi = composite_figiValue
+        self.share_class_figi = share_class_figiValue
+        self.last_updated_utc = last_updated_utcValue
+        self.postal_code = postal_codeValue
+        self.round_lot = round_lotValue
+        self.market_cap = market_capValue
         self.city = cityValue
-        self.homepageUrl = homepageUrlValue
+        self.homepage_url = homepage_urlValue
         self.state = stateValue
         self.description = descriptionValue
         self.address1 = address1Value
-        self.listDate = listDateValue
-        self.shareClassSharesOutstanding = shareClassSharesOutstandingValue
-        self.weightedSharesOutstanding = weightedSharesOutstandingValue
-        self.sicCode = sicCodeValue
-        self.sicDescription = sicDescriptionValue
-        self.tickerRoot = tickerRootValue
-        self.totalEmployees = totalEmployeesValue
-        self.phoneNumber = phoneNumberValue
-        self.tickerSuffix = tickerSuffixValue
+        self.list_date = list_dateValue
+        self.share_class_shares_outstanding = share_class_shares_outstandingValue
+        self.weighted_shares_outstanding = weighted_shares_outstandingValue
+        self.sic_code = sic_codeValue
+        self.sic_description = sic_descriptionValue
+        self.ticker_root = ticker_rootValue
+        self.total_employees = total_employeesValue
+        self.phone_number = phone_numberValue
+        self.ticker_suffix = ticker_suffixValue
         self.address2 = address2Value
 
 ## TABLE: stock_data_daily_polygon_d ######################################
 stockDataDailyPolygonDSnakeCaseTableColumns = ['ticker', 'period_date', 'pre_market', 'open', 'high', 'low', 'close', 'after_hours', 'volume', 'transactions']
 stockDataDailyPolygonDCamelCaseTableColumns = ['ticker', 'periodDate', 'preMarket', 'open', 'high', 'low', 'close', 'afterHours', 'volume', 'transactions']
 class StockDataDailyPolygonDRow():
-    def __init__(self, tickerValue: str, periodDateValue: str, preMarketValue: float, openValue: float, highValue: float, lowValue: float, closeValue: float, afterHoursValue: float, volumeValue: float, transactionsValue: float):
+    def __init__(self, tickerValue: str, period_dateValue: str, pre_marketValue: float, openValue: float, highValue: float, lowValue: float, closeValue: float, after_hoursValue: float, volumeValue: float, transactionsValue: float):
         self.ticker = tickerValue
-        self.periodDate = periodDateValue
-        self.preMarket = preMarketValue
+        self.period_date = period_dateValue
+        self.pre_market = pre_marketValue
         self.open = openValue
         self.high = highValue
         self.low = lowValue
         self.close = closeValue
-        self.afterHours = afterHoursValue
+        self.after_hours = after_hoursValue
         self.volume = volumeValue
         self.transactions = transactionsValue
 
@@ -975,62 +975,62 @@ class StockDataDailyPolygonDRow():
 symbolInfoAlphavantageDSnakeCaseTableColumns = ['exchange', 'symbol', 'delisting_date', 'name', 'asset_type', 'ipo_date', 'status', 'as_of_date', 'description', 'ev_to_revenue', 'trailing_pe', 'pe_ratio', 'price_to_book_ratio', 'dividend_date', 'country', 'currency', 'market_capitalization', 'beta', 'quarterly_revenue_growth_yoy', 'operating_margin_ttm', 'peg_ratio', 'industry', 'ex_dividend_date', 'address', 'price_to_sales_ratio_ttm', 'ev_to_ebitda', 'revenue_per_share_ttm', 'gross_profit_ttm', 'diluted_epsttm', 'return_on_assets_ttm', 'fiscal_year_end', 'cik', 'ebitda', 'book_value', 'profit_margin', 'latest_quarter', 'analyst_target_price', 'return_on_equity_ttm', 'shares_outstanding', 'quarterly_earnings_growth_yoy', 'forward_pe', 'revenue_ttm', 'eps', 'dividend_yield', 'dividend_per_share', 'sector']
 symbolInfoAlphavantageDCamelCaseTableColumns = ['exchange', 'symbol', 'delistingDate', 'name', 'assetType', 'ipoDate', 'status', 'asOfDate', 'description', 'evToRevenue', 'trailingPe', 'peRatio', 'priceToBookRatio', 'dividendDate', 'country', 'currency', 'marketCapitalization', 'beta', 'quarterlyRevenueGrowthYoy', 'operatingMarginTtm', 'pegRatio', 'industry', 'exDividendDate', 'address', 'priceToSalesRatioTtm', 'evToEbitda', 'revenuePerShareTtm', 'grossProfitTtm', 'dilutedEpsttm', 'returnOnAssetsTtm', 'fiscalYearEnd', 'cik', 'ebitda', 'bookValue', 'profitMargin', 'latestQuarter', 'analystTargetPrice', 'returnOnEquityTtm', 'sharesOutstanding', 'quarterlyEarningsGrowthYoy', 'forwardPe', 'revenueTtm', 'eps', 'dividendYield', 'dividendPerShare', 'sector']
 class SymbolInfoAlphavantageDRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, delistingDateValue: str, nameValue: str, assetTypeValue: str, ipoDateValue: str, statusValue: str, asOfDateValue: str, descriptionValue: str, evToRevenueValue: str, trailingPeValue: str, peRatioValue: str, priceToBookRatioValue: str, dividendDateValue: str, countryValue: str, currencyValue: str, marketCapitalizationValue: str, betaValue: str, quarterlyRevenueGrowthYoyValue: str, operatingMarginTtmValue: str, pegRatioValue: str, industryValue: str, exDividendDateValue: str, addressValue: str, priceToSalesRatioTtmValue: str, evToEbitdaValue: str, revenuePerShareTtmValue: str, grossProfitTtmValue: str, dilutedEpsttmValue: str, returnOnAssetsTtmValue: str, fiscalYearEndValue: str, cikValue: str, ebitdaValue: str, bookValueValue: str, profitMarginValue: str, latestQuarterValue: str, analystTargetPriceValue: str, returnOnEquityTtmValue: str, sharesOutstandingValue: str, quarterlyEarningsGrowthYoyValue: str, forwardPeValue: str, revenueTtmValue: str, epsValue: str, dividendYieldValue: str, dividendPerShareValue: str, sectorValue: str):
+    def __init__(self, exchangeValue: str, symbolValue: str, delisting_dateValue: str, nameValue: str, asset_typeValue: str, ipo_dateValue: str, statusValue: str, as_of_dateValue: str, descriptionValue: str, ev_to_revenueValue: str, trailing_peValue: str, pe_ratioValue: str, price_to_book_ratioValue: str, dividend_dateValue: str, countryValue: str, currencyValue: str, market_capitalizationValue: str, betaValue: str, quarterly_revenue_growth_yoyValue: str, operating_margin_ttmValue: str, peg_ratioValue: str, industryValue: str, ex_dividend_dateValue: str, addressValue: str, price_to_sales_ratio_ttmValue: str, ev_to_ebitdaValue: str, revenue_per_share_ttmValue: str, gross_profit_ttmValue: str, diluted_epsttmValue: str, return_on_assets_ttmValue: str, fiscal_year_endValue: str, cikValue: str, ebitdaValue: str, book_valueValue: str, profit_marginValue: str, latest_quarterValue: str, analyst_target_priceValue: str, return_on_equity_ttmValue: str, shares_outstandingValue: str, quarterly_earnings_growth_yoyValue: str, forward_peValue: str, revenue_ttmValue: str, epsValue: str, dividend_yieldValue: str, dividend_per_shareValue: str, sectorValue: str):
         self.exchange = exchangeValue
         self.symbol = symbolValue
-        self.delistingDate = delistingDateValue
+        self.delisting_date = delisting_dateValue
         self.name = nameValue
-        self.assetType = assetTypeValue
-        self.ipoDate = ipoDateValue
+        self.asset_type = asset_typeValue
+        self.ipo_date = ipo_dateValue
         self.status = statusValue
-        self.asOfDate = asOfDateValue
+        self.as_of_date = as_of_dateValue
         self.description = descriptionValue
-        self.evToRevenue = evToRevenueValue
-        self.trailingPe = trailingPeValue
-        self.peRatio = peRatioValue
-        self.priceToBookRatio = priceToBookRatioValue
-        self.dividendDate = dividendDateValue
+        self.ev_to_revenue = ev_to_revenueValue
+        self.trailing_pe = trailing_peValue
+        self.pe_ratio = pe_ratioValue
+        self.price_to_book_ratio = price_to_book_ratioValue
+        self.dividend_date = dividend_dateValue
         self.country = countryValue
         self.currency = currencyValue
-        self.marketCapitalization = marketCapitalizationValue
+        self.market_capitalization = market_capitalizationValue
         self.beta = betaValue
-        self.quarterlyRevenueGrowthYoy = quarterlyRevenueGrowthYoyValue
-        self.operatingMarginTtm = operatingMarginTtmValue
-        self.pegRatio = pegRatioValue
+        self.quarterly_revenue_growth_yoy = quarterly_revenue_growth_yoyValue
+        self.operating_margin_ttm = operating_margin_ttmValue
+        self.peg_ratio = peg_ratioValue
         self.industry = industryValue
-        self.exDividendDate = exDividendDateValue
+        self.ex_dividend_date = ex_dividend_dateValue
         self.address = addressValue
-        self.priceToSalesRatioTtm = priceToSalesRatioTtmValue
-        self.evToEbitda = evToEbitdaValue
-        self.revenuePerShareTtm = revenuePerShareTtmValue
-        self.grossProfitTtm = grossProfitTtmValue
-        self.dilutedEpsttm = dilutedEpsttmValue
-        self.returnOnAssetsTtm = returnOnAssetsTtmValue
-        self.fiscalYearEnd = fiscalYearEndValue
+        self.price_to_sales_ratio_ttm = price_to_sales_ratio_ttmValue
+        self.ev_to_ebitda = ev_to_ebitdaValue
+        self.revenue_per_share_ttm = revenue_per_share_ttmValue
+        self.gross_profit_ttm = gross_profit_ttmValue
+        self.diluted_epsttm = diluted_epsttmValue
+        self.return_on_assets_ttm = return_on_assets_ttmValue
+        self.fiscal_year_end = fiscal_year_endValue
         self.cik = cikValue
         self.ebitda = ebitdaValue
-        self.bookValue = bookValueValue
-        self.profitMargin = profitMarginValue
-        self.latestQuarter = latestQuarterValue
-        self.analystTargetPrice = analystTargetPriceValue
-        self.returnOnEquityTtm = returnOnEquityTtmValue
-        self.sharesOutstanding = sharesOutstandingValue
-        self.quarterlyEarningsGrowthYoy = quarterlyEarningsGrowthYoyValue
-        self.forwardPe = forwardPeValue
-        self.revenueTtm = revenueTtmValue
+        self.book_value = book_valueValue
+        self.profit_margin = profit_marginValue
+        self.latest_quarter = latest_quarterValue
+        self.analyst_target_price = analyst_target_priceValue
+        self.return_on_equity_ttm = return_on_equity_ttmValue
+        self.shares_outstanding = shares_outstandingValue
+        self.quarterly_earnings_growth_yoy = quarterly_earnings_growth_yoyValue
+        self.forward_pe = forward_peValue
+        self.revenue_ttm = revenue_ttmValue
         self.eps = epsValue
-        self.dividendYield = dividendYieldValue
-        self.dividendPerShare = dividendPerShareValue
+        self.dividend_yield = dividend_yieldValue
+        self.dividend_per_share = dividend_per_shareValue
         self.sector = sectorValue
 
 ## TABLE: stock_data_daily_alphavantage_d ######################################
 stockDataDailyAlphavantageDSnakeCaseTableColumns = ['exchange', 'symbol', 'period_date', 'open', 'high', 'low', 'close', 'volume']
 stockDataDailyAlphavantageDCamelCaseTableColumns = ['exchange', 'symbol', 'periodDate', 'open', 'high', 'low', 'close', 'volume']
 class StockDataDailyAlphavantageDRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, periodDateValue: str, openValue: float, highValue: float, lowValue: float, closeValue: float, volumeValue: float):
+    def __init__(self, exchangeValue: str, symbolValue: str, period_dateValue: str, openValue: float, highValue: float, lowValue: float, closeValue: float, volumeValue: float):
         self.exchange = exchangeValue
         self.symbol = symbolValue
-        self.periodDate = periodDateValue
+        self.period_date = period_dateValue
         self.open = openValue
         self.high = highValue
         self.low = lowValue
@@ -1050,10 +1050,10 @@ class QueueStockDataDailyDRow():
 googleTopicIdsDSnakeCaseTableColumns = ['exchange', 'symbol', 'topic_id', 'input_date', 'last_checked_date']
 googleTopicIdsDCamelCaseTableColumns = ['exchange', 'symbol', 'topicId', 'inputDate', 'lastCheckedDate']
 class GoogleTopicIdsDRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, topicIdValue: str, inputDateValue: str, lastCheckedDateValue: str):
+    def __init__(self, exchangeValue: str, symbolValue: str, topic_idValue: str, input_dateValue: str, last_checked_dateValue: str):
         self.exchange = exchangeValue
         self.symbol = symbolValue
-        self.topicId = topicIdValue
-        self.inputDate = inputDateValue
-        self.lastCheckedDate = lastCheckedDateValue
+        self.topic_id = topic_idValue
+        self.input_date = input_dateValue
+        self.last_checked_date = last_checked_dateValue
 
