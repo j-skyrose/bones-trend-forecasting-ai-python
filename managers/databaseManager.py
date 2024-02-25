@@ -468,6 +468,7 @@ class DatabaseManager(Singleton):
         aoAlias = 'o'
         gtAlias = 'g'
 
+        selectColumns = ['exchange', 'symbol', 'name']
         groupByColumns = ['exchange', 'symbol']
 
         symbolInfoDumpStmts = []
@@ -496,13 +497,15 @@ class DatabaseManager(Singleton):
             elif a == 'yahoo':
                 specificKWArgs = {
                     'exchange': exchange,
-                    'symbol': symbol
+                    'symbol': symbol,
+                    'sqlColumns': '*, long_name AS name'
                 }
             stmt, args = getattr(self, f'getDumpSymbolInfo{a.capitalize()}_basic')(**specificKWArgs, **lkwargs, rawStatement=True)
             symbolInfoDumpStmts.append(stmt)
             symbolInfoDumpArgs.append(args)
 
-        stmt = f"SELECT * FROM (SELECT exchange,symbol FROM ({') UNION SELECT exchange,symbol FROM ('.join(symbolInfoDumpStmts)})) {siAlias} "
+        unionSelectStmt = f") UNION SELECT {','.join(selectColumns)} FROM (".join(symbolInfoDumpStmts)
+        stmt = f"SELECT * FROM (SELECT {','.join(selectColumns)} FROM ({unionSelectStmt})) {siAlias} "
         args = flatten(symbolInfoDumpArgs)
         whereConditions = []
 
@@ -563,8 +566,8 @@ class DatabaseManager(Singleton):
         if whereConditions:
             stmt += ' WHERE ' + ' AND '.join(whereConditions)
 
-        if referenceDailyData:
-            stmt += f' GROUP BY {",".join([f"{siAlias}.{c}" for c in groupByColumns])} '
+        # if referenceDailyData:
+        stmt += f' GROUP BY {",".join([f"{siAlias}.{c}" for c in groupByColumns])} '
 
         ## so query can be inserted into other queries before execution
         if rawStatement:
