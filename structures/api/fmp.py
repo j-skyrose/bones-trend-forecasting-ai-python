@@ -1,4 +1,3 @@
-from constants.enums import FinancialReportType
 import os, sys
 path = os.path.dirname(os.path.abspath(__file__))
 while ".vscode" not in os.listdir(path):
@@ -8,17 +7,16 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-
-import requests
+import requests, json
 from requests.models import Response
+
+from constants.enums import FinancialReportType
 from constants.exceptions import APIError, APILimitReached, APITimeout
-import json
+from structures.api.apiBase import APIBase
+from utils.support import Singleton
 
 ## financial modeling prep
-class FMP:
-    def __init__(self, url, key, **kwargs):
-        self.url = url
-        self.apiKey = key
+class FMP(APIBase, Singleton):
 
     def __responseHandler(self, resp: Response):
         print('made request', resp.url)

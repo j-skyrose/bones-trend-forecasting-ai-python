@@ -19,10 +19,7 @@ from typing import List
 from managers.databaseManager import DatabaseManager
 from managers.apiManager import APIManager
 from managers.marketDayManager import MarketDayManager
-from structures.api.google import Google
 from structures.api.googleTrends.gt_exceptions import ResponseError
-from structures.api.googleTrends.request import GoogleAPI
-from structures.api.nasdaq import Nasdaq
 from structures.sql.sqlArgumentObj import SQLArgumentObj
 
 from constants.exceptions import APILimitReached, APIError, APITimeout, NotSupportedYet
@@ -30,7 +27,7 @@ from utils.collectorSupport import getYahooExchangeForSymbol
 from utils.dbSupport import convertToSnakeCase, getTableString
 from utils.other import parseCommandLineOptions
 from utils.support import asDate, asDatetime, asISOFormat, asList, getIndex, getItem, recdotdict, shortcdict, tqdmLoopHandleWrapper
-from constants.enums import APIState, EarningsCollectionAPI, FinancialReportType, FinancialStatementType, InterestType, MarketType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
+from constants.enums import APIState, Api, FinancialReportType, FinancialStatementType, InterestType, MarketType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
 from constants.values import tseNoCommissionSymbols, minGoogleDate
 
 dbm: DatabaseManager = DatabaseManager()
@@ -193,11 +190,11 @@ class Collector:
                     raise e
             # break # do one at a time
 
-    def _loopCollectByDate_new(self, api, direction: Direction=Direction.ASCENDING, startDate=None, symbol=None, limit=None, dryrun=False, verbose=1):
-        if api not in ['polygon']: raise NotSupportedYet
+    def _loopCollectByDate_new(self, api:Api, direction:Direction=Direction.ASCENDING, startDate=None, symbol=None, limit=None, dryrun=False, verbose=1):
+        if api not in [Api.POLYGON]: raise NotSupportedYet
 
-        getFunction = getattr(dbm, f'getDumpStockDataDaily{api.capitalize()}_basic')
-        insertFunction = getattr(dbm, f'insertStockDataDump_{api}')
+        getFunction = getattr(dbm, f'getDumpStockDataDaily{api.name.capitalize()}_basic')
+        insertFunction = getattr(dbm, f'insertStockDataDump_{api.name.lower()}')
 
         ## determine starting date
         dstep = timedelta(days=1) * (1 if direction == Direction.ASCENDING else -1)
@@ -257,12 +254,12 @@ class Collector:
         if verbose:
             print(f"{'Would insert' if dryrun else 'Inserted'} {insertCount} rows for {dayCount} days ({daysWithData} actual)")
         
-    def _loopCollectBySymbol_new(self, api='alphavantage', symbol=None, seriesType: SeriesType=SeriesType.DAILY, active=True, limit=None, dryrun=False, verbose=1):
-        if api not in ['alphavantage']: raise NotSupportedYet
+    def _loopCollectBySymbol_new(self, api:Api=Api.ALPHAVANTAGE, symbol=None, seriesType: SeriesType=SeriesType.DAILY, active=True, limit=None, dryrun=False, verbose=1):
+        if api not in [Api.ALPHAVANTAGE]: raise NotSupportedYet
 
-        getStockDataFunction = getattr(dbm, f'getDumpStockDataDaily{api.capitalize()}_basic')
-        getTickerInfoFunction = getattr(dbm, f'getDumpSymbolInfo{api.capitalize()}_basic')
-        insertFunction = getattr(dbm, f'insertStockDataDump_{api}')
+        getStockDataFunction = getattr(dbm, f'getDumpStockDataDaily{api.name.capitalize()}_basic')
+        getTickerInfoFunction = getattr(dbm, f'getDumpSymbolInfo{api.name.capitalize()}_basic')
+        insertFunction = getattr(dbm, f'insertStockDataDump_{api.name.lower()}')
 
         ## determine symbols to collect for
         symbol = asList(symbol)
@@ -338,18 +335,18 @@ class Collector:
             if noDataErrors: print(f'{len(noDataErrors)} symbols had no data returned: {noDataErrors}')
             print(f"{'Would insert' if dryrun else 'Inserted'} {insertCount if not dryrun else '?'} rows for {successCount - len(exchangeErrors) - len(apiErrors) - len(noDataErrors)}/{len(symbol)} symbols")
 
-    def collectDailyStockData(self, api='polygon', seriesType: SeriesType=SeriesType.DAILY, direction: Direction=Direction.ASCENDING, startDate=None, symbol=None, active=True, limit=None, dryrun=False, verbose=1):
-        if api not in ['polygon', 'alphavantage']: raise NotSupportedYet
+    def collectDailyStockData(self, api:Api=Api.POLYGON, seriesType: SeriesType=SeriesType.DAILY, direction: Direction=Direction.ASCENDING, startDate=None, symbol=None, active=True, limit=None, dryrun=False, verbose=1):
+        if api not in [Api.POLYGON, Api.ALPHAVANTAGE]: raise NotSupportedYet
 
-        if api in ['polygon']:
+        if api in [Api.POLYGON]:
             ## date-based data APIs
             self._loopCollectByDate_new(api, direction=direction, startDate=startDate, symbol=symbol, limit=limit, dryrun=dryrun, verbose=verbose)
-        elif api in 'alphavantage':
+        elif api in [Api.ALPHAVANTAGE]:
             ## symbol-based data APIs
             self._loopCollectBySymbol_new(api, symbol=symbol, seriesType=seriesType, active=active, limit=limit, dryrun=dryrun, verbose=verbose)
 
-    def collectDailyNonMarketHoursStockData(self, api='polygon', ticker=None, dt=None, verbose=1):
-        if api != 'polygon': raise NotSupportedYet
+    def collectDailyNonMarketHoursStockData(self, api:Api=Api.POLYGON, ticker=None, dt=None, verbose=1):
+        if api != Api.POLYGON: raise NotSupportedYet
 
         ## get tickers missing pre-market data
         basickwargs = {}
@@ -453,7 +450,7 @@ class Collector:
         print('API Errors:',self.apiErrors)
 
     def __loopCollectDateRangebySymbol(self, api, symbol, sdate: date):
-        if api == 'neo':
+        if api == Api.NEO:
             chunkSize = 90
             results = []
             while sdate < self.currentDate:
@@ -586,16 +583,16 @@ class Collector:
         if verbose > 0: print(f'Added {len(columnsAdded)} columns: {columnsAdded}')
         return columnsAdded
 
-    def _verifyActiveTickerIntegrity(self, api, mock=False, verbose=1):
+    def _verifyActiveTickerIntegrity(self, api:Api, mock=False, verbose=1):
         '''verifies all active tickers are still active by checking for any delisted entries that would supercede'''
 
-        if api not in ['polygon', 'alphavantage']: raise NotSupportedYet()
+        if api not in [Api.POLYGON, Api.ALPHAVANTAGE]: raise NotSupportedYet()
 
-        getFunction = getattr(dbm, f'getDumpSymbolInfo{api.capitalize()}_basic')
-        deleteFunction = getattr(dbm, f'deleteDumpTicker_{api}')
+        getFunction = getattr(dbm, f'getDumpSymbolInfo{api.name.capitalize()}_basic')
+        deleteFunction = getattr(dbm, f'deleteDumpTicker_{api.name.lower()}')
 
         corrections = []
-        if api == 'polygon':
+        if api == Api.POLYGON:
             activeTickers = getFunction(active=True, delistedUtc='NA')
             delistDateKey = 'delisted_utc'
             timestampKey = 'last_updated_utc'
@@ -605,7 +602,7 @@ class Collector:
                 'ticker': t.ticker,
                 'delisted_utc': t.delisted_utc
             }
-        elif api == 'alphavantage':
+        elif api == Api.ALPHAVANTAGE:
             activeTickers = getFunction(status='Active', delistingDate='null')
             delistDateKey = 'delisting_date'
             timestampKey = 'as_of_date'
@@ -617,16 +614,16 @@ class Collector:
             }
 
         for t in tqdmLoopHandleWrapper(activeTickers, verbose=verbose, desc='Verifying active statuses'):
-            if api == 'polygon':
+            if api == Api.POLYGON:
                 otherTickerRows = getFunction(primaryExchange=t.primary_exchange, ticker=t.ticker, active=False, delistedUtc=SQLArgumentObj('NA', OperatorDict.NOTEQUAL))
-            elif api == 'alphavantage':
+            elif api == Api.ALPHAVANTAGE:
                 otherTickerRows = getFunction(exchange=t.exchange, symbol=t.symbol, status='Delisted', delistingDate=SQLArgumentObj('NA', OperatorDict.NOTEQUAL))
 
             if len(otherTickerRows):
                 otherTickerRows.sort(key=lambda x: x[delistDateKey])
                 latest = otherTickerRows[0]
                 if latest[delistDateKey] > t[timestampKey]: ## delisted after latest update to 'active' row
-                    if not api == 'polygon' or latest.cik == t.cik:
+                    if not api == Api.POLYGON or latest.cik == t.cik:
                         if not mock: deleteFunction(**generateDeleteKWArgs(t))
                         corrections.append(t[symbolKey])
                     else:
@@ -634,13 +631,13 @@ class Collector:
         
         if verbose: print(f'Corrected {len(corrections)} active tickers: {corrections}')
 
-    def startTickerCollection(self, api, active=True, limit=None, verbose=1, **kwargs):
+    def startTickerCollection(self, api:Api, active=True, limit=None, verbose=1, **kwargs):
         '''collects all ticker symbols (basic info only) which are supported by the given API and inserts into the respective symbol_info_{api}_d table'''
 
-        if api not in ['polygon', 'alphavantage']: raise NotSupportedYet()
+        if api not in [Api.POLYGON, Api.ALPHAVANTAGE, Api.YAHOO]: raise NotSupportedYet()
 
-        tableName = f'symbol_info_{api}_d'
-        insertFunction = getattr(dbm, f'insertTickersDump_{api}')
+        tableName = f'symbol_info_{api.name.lower()}_d'
+        insertFunction = getattr(dbm, f'insertTickersDump_{api.name.lower()}')
 
         #region collect tickers
         tickers = self.apiManager.getTickers(api, verbose=verbose, 
@@ -654,7 +651,7 @@ class Collector:
             print(f'{len(tickers)} total tickers collected')
         #endregion
 
-        if api == 'alphavantage':
+        if api == Api.ALPHAVANTAGE:
             ## inject asOfDate
             todaydtstr = date.today().isoformat()
             for r in tickers:
@@ -677,15 +674,15 @@ class Collector:
         if not active:
             self._verifyActiveTickerIntegrity(api, verbose=verbose)
 
-    def startTickerDetailsCollection(self, api, active=True, limit=None, verbose=1, **kwargs):
+    def startTickerDetailsCollection(self, api:Api, active=True, limit=None, verbose=1, **kwargs):
         '''collects individual ticker details (extended) for those supported by the given API and updates the symbol_info_polygon_d table'''
 
-        if api not in ['polygon', 'alphavantage']: raise NotSupportedYet()
+        if api not in [Api.POLYGON, Api.ALPHAVANTAGE]: raise NotSupportedYet()
 
-        tableName = f'symbol_info_{api}_d'
-        getFunction = getattr(dbm, f'getDumpSymbolInfo{api.capitalize()}_basic')
-        insertFunction = getattr(dbm, f'insertTickersDump_{api}')
-        if api == 'polygon':
+        tableName = f'symbol_info_{api.name.lower()}_d'
+        getFunction = getattr(dbm, f'getDumpSymbolInfo{api.name.capitalize()}_basic')
+        insertFunction = getattr(dbm, f'insertTickersDump_{api.name.lower()}')
+        if api == Api.POLYGON:
             kwargs['active'] = active
             kwargs['tickerRoot'] = SQLHelpers.NULL
             exchangeKey = 'primary_exchange'
@@ -695,7 +692,7 @@ class Collector:
             }
             excludeKeys = ['branding']
             flattenKeys = ['address']
-        elif api == 'alphavantage':
+        elif api == Api.ALPHAVANTAGE:
             kwargs['status'] = 'Active' if active else 'Delisted'
             kwargs['currency'] = SQLHelpers.NULL
             exchangeKey = 'exchange'
@@ -719,14 +716,14 @@ class Collector:
             for t in tqdmLoopHandleWrapper(tickers, verbose, desc='Collecting ticker details'):
                 try:
                     res = self.apiManager.getTickerDetails(api, t[tickerKey], verbose=verbose, **getDetailsKWArgBuilder(t))
-                    if not active and api == 'polygon': 
+                    if not active and api == Api.POLYGON: 
                         ## asOfDate means inactive ticker details come back as active
                         res['active'] = False
                         ## also needs to be matched back to the db row
                         res['delisted_utc'] = t.delisted_utc
                     tickerDetails.append(res)
                 except APIError:
-                    if api == 'alphavantage':
+                    if api == Api.ALPHAVANTAGE:
                         ## mark the row to track that this has been attempted and there was no data
                         tickerDetails.append({
                             'exchange': t['exchange'],
@@ -773,13 +770,13 @@ class Collector:
         '''ignores tickers without a determined exchange'''
         if (exchange or symbol) and tickers: raise ValueError
         if (exchange or symbol) and not tickers: tickers = [(exchange, symbol)]
-        gapi = GoogleAPI()
+        gapi = self.apiManager.get(Api.GOOGLE)
 
         if not tickers:
             tickerSet = set()
-            for api in ['alphavantage', 'polygon', 'yahoo']:
-                getFunction = getattr(dbm, f'getDumpSymbolInfo{api.capitalize()}_basic')
-                if api == 'polygon':
+            for api in [Api.ALPHAVANTAGE, Api.POLYGON, Api.YAHOO]:
+                getFunction = getattr(dbm, f'getDumpSymbolInfo{api.name.capitalize()}_basic')
+                if api == Api.POLYGON:
                     getkwargs = {
                         'sqlColumns': 'DISTINCT exchange_alias as exchange,ticker as symbol',
                         'exchangeAlias': SQLHelpers.NOTNULL
@@ -903,7 +900,7 @@ class Collector:
 
 
     def collectPolygonFinancials(self, ftype: FinancialReportType, **kwargs):
-        api = 'polygon'
+        api = Api.POLYGON
         tickers = dbm.getSymbols_forFinancialStaging(api, ftype)
         print('collecting for',len(tickers),'tickers')
         for t in tickers:
@@ -916,7 +913,7 @@ class Collector:
 
     ## financials seem to be premium APIs
     def collectFMPFinancials(self, ftype: FinancialReportType, stype: FinancialStatementType, **kwargs):
-        api = 'fmp'
+        api = Api.FMP
         tickers = dbm.getSymbols_forFinancialStaging(api)
 
         return
@@ -931,7 +928,7 @@ class Collector:
 
     ## annual and quarterly come in same response
     def collectAlphavantageFinancials(self, stype: FinancialStatementType, **kwargs):
-        api = 'alphavantage'
+        api = Api.ALPHAVANTAGE
         tickers = dbm.getSymbols_forFinancialStaging(api)
         # tickers = [recdotdict({'exchange': 'NASDAQ', 'symbol': 'AAL'})]
         for t in tickers:
@@ -953,8 +950,8 @@ class Collector:
             # break
 
     ## collect stock split dates/amounts and insert to DB
-    def startSplitsCollection(self, api, **kwargs):
-        if api != 'polygon': raise 'Splits retrieval not supported by non-polygon API at the moment'
+    def startSplitsCollection(self, api:Api, **kwargs):
+        if api != Api.POLYGON: raise 'Splits retrieval not supported by non-polygon API at the moment'
 
         insertcount = 0
 
@@ -998,32 +995,22 @@ class Collector:
 
         print('inserted {} splits'.format(insertcount))
 
-    def startEarningsDateCollection(self, api: EarningsCollectionAPI=None, dryrun=False, verbose=1, **kwargs):
+    def startEarningsDateCollection(self, api:Api=None, dryrun=False, verbose=1, **kwargs):
         collectorHandleKey = 'collector'
         currentCollectDateKey = 'startDate'
         previousCollectDateKey = 'previousDate'
         rawDataKey = 'rawData'
         backCollectionRawDataKey = 'bcRawData'
         parsedDataKey = 'parsedData'
-        collectionConfig = recdotdict({})
+
+        if api is not None and api not in APIManager.getEarningsCollectionAPIs(): raise NotSupportedYet
 
         ## determine APIs which will be collecting
-        if api:
-            try: collectionConfig[api if type(api) is EarningsCollectionAPI else EarningsCollectionAPI[api.upper()]] = {}
-            except KeyError: raise ValueError(f'Earnings date retrieval not supported by {api} API at the moment')
-        else:
-            # for a in [EarningsCollectionAPI.NASDAQ, EarningsCollectionAPI.YAHOO]: ## MARKETWATCH covered by these two
-            for a in EarningsCollectionAPI:
-                collectionConfig[a] = {}
+        collectionConfig = recdotdict({ a: {} for a in (asList(api) if api else APIManager.getEarningsCollectionAPIs()) })
 
         ## initialize API collector handles
         for api in collectionConfig.keys():
-            if api == EarningsCollectionAPI.NASDAQ:
-                collectionConfig[api][collectorHandleKey] = Nasdaq()
-            elif api == EarningsCollectionAPI.MARKETWATCH:
-                collectionConfig[api][collectorHandleKey] = MarketWatch()
-            elif api == EarningsCollectionAPI.YAHOO:
-                collectionConfig[api][collectorHandleKey] = Yahoo()
+            collectionConfig[api][collectorHandleKey] = self.apiManager.get(api)
 
         ## initialize data keys
         for api in collectionConfig.keys():
@@ -1044,7 +1031,7 @@ class Collector:
                 indx = getIndex(previousCollectDates, apiCurrentCollectDate)
                 previousCollectDate = previousCollectDates[indx-1] if indx else None
 
-                if api == EarningsCollectionAPI.MARKETWATCH: ## adjust back to start of week as collection will only be done on Mondays (since full week returned)
+                if api == Api.MARKETWATCH: ## adjust back to start of week as collection will only be done on Mondays (since full week returned)
                     apiCurrentCollectDate -= timedelta(days=apiCurrentCollectDate.weekday())
                     if indx: previousCollectDate -= timedelta(days=previousCollectDate.weekday())
             collectionConfig[api][currentCollectDateKey] = apiCurrentCollectDate
@@ -1066,7 +1053,7 @@ class Collector:
         ## collect for all days from last anchor date to ~3 months out, inclusive
         for cdate in tqdmLoopHandleWrapper([minDate + timedelta(days=d) for d in range((endDate - minDate).days + 1)], verbose=verbose, desc='Collecting data'):
             for api in collectionConfig.keys():
-                if api == EarningsCollectionAPI.MARKETWATCH and cdate.weekday() != 0: continue ## MarketWatch returns all days until end of week
+                if api == Api.MARKETWATCH and cdate.weekday() != 0: continue ## MarketWatch returns all days until end of week
                 if collectionConfig[api][currentCollectDateKey] > cdate: continue ## skip re-collection of data
                 rawdata = collectionConfig[api][collectorHandleKey].getEarningsDates(cdate, week=True)
                 collectionConfig[api][rawDataKey][cdate] = rawdata
@@ -1080,9 +1067,9 @@ class Collector:
             for d in data:
                 datapointKWArgs = {
                     'inputDate': self.currentDate,
-                    'earningsDate': cdate if api == EarningsCollectionAPI.NASDAQ else d['date']
+                    'earningsDate': cdate if api == Api.NASDAQ else d['date']
                 }
-                if api != EarningsCollectionAPI.NASDAQ:
+                if api != Api.NASDAQ:
                     datapointKWArgs['exchange'] = getYahooExchangeForSymbol(shortcdict(d, 'ticker', shortcdict(d, 'symbol')), shortcdict(d, 'companyshortname', shortcdict(d, 'name')))
 
                 for k,v in d.items():
@@ -1128,7 +1115,7 @@ class Collector:
                                 val = v
                     elif k == 'fiscal quarter':
                         val = datetime.strptime(v, '%m/%d/%Y').date()
-                    elif k == 'surprise_percentage' and v != 'N/A' and api == EarningsCollectionAPI.MARKETWATCH:
+                    elif k == 'surprise_percentage' and v != 'N/A' and api == Api.MARKETWATCH:
                         val = float(v.split('(')[1].split('%')[0].replace(',',''))
 
                     ## no need to have multiple types of empty/blank/N/A values, use null instead 
@@ -1138,7 +1125,7 @@ class Collector:
                     datapointKWArgs[key] = val
                 
                 ## market watch surprise sign can be incorrect if forecasted eps is negative (e.g. forecast: -0.49, actual: -0.53, surprise: +8.7%)
-                if api == EarningsCollectionAPI.MARKETWATCH and type(datapointKWArgs['eps']) not in [str, NoneType] and type(datapointKWArgs['epsForecast']) not in [str, NoneType] and type(datapointKWArgs['surprisePercentage']) not in [str, NoneType]:
+                if api == Api.MARKETWATCH and type(datapointKWArgs['eps']) not in [str, NoneType] and type(datapointKWArgs['epsForecast']) not in [str, NoneType] and type(datapointKWArgs['surprisePercentage']) not in [str, NoneType]:
                     if (datapointKWArgs['eps'] < datapointKWArgs['epsForecast'] and datapointKWArgs['surprisePercentage'] > 0) or (datapointKWArgs['eps'] > datapointKWArgs['epsForecast'] and datapointKWArgs['surprisePercentage'] < 0):
                         datapointKWArgs['surprisePercentage'] *= -1
 
@@ -1173,7 +1160,7 @@ class Collector:
     ## collect google interests and insert to DB
     ## measures up-to-date-ness by comparing latest GI and stock data dates, if not then it will collect data up til maxdate rather than til the latest stock data date
     def startGoogleInterestCollection(self, interestType:InterestType=InterestType.DAILY, direction:Direction=Direction.ASCENDING, collectStatsOnly=False, dryrun=False, **kwargs):
-        gapi = Google()
+        gapi = self.apiManager.get(Api.GOOGLE)
 
         maxdate = copy.deepcopy(self.currentDate)
         ## up-to-date GI data is only available after 3 days
@@ -1447,7 +1434,7 @@ if __name__ == '__main__':
     c = Collector(currentDate)
 
     if opts.api:
-        if opts.api == 'vix':
+        if opts.api == Api.VIX:
             c.collectVIX()
         elif opts.type == 'splits':
             c.startSplitsCollection(opts.api, **kwargs)

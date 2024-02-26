@@ -12,15 +12,13 @@ from requests.models import Response
 
 from constants.exceptions import APIError, APITimeout
 from constants.enums import FinancialReportType, MarketType, OperatorDict, TimespanType
-from utils.support import asISOFormat, recdotdict, shortcdict
+from structures.api.apiBase import APIBase
+from utils.support import Singleton, asISOFormat, recdotdict, shortcdict
 
 # import codecs
 # w=codecs.getwriter("utf-8")(sys.stdout.buffer)
 
-class Polygon:
-    def __init__(self, url, key, **kwargs):
-        self.url = url
-        self.apiKey = key
+class Polygon(APIBase, Singleton):
 
     def getNextURL(self, url):
         '''get next page of results from an API call'''

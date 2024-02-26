@@ -1037,15 +1037,6 @@ class StockDataDailyAlphavantageDRow():
         self.close = closeValue
         self.volume = volumeValue
 
-## TABLE: queue_stock_data_daily_d ######################################
-queueStockDataDailyDSnakeCaseTableColumns = ['exchange', 'symbol', 'api']
-queueStockDataDailyDCamelCaseTableColumns = ['exchange', 'symbol', 'api']
-class QueueStockDataDailyDRow():
-    def __init__(self, exchangeValue, symbolValue, apiValue):
-        self.exchange = exchangeValue
-        self.symbol = symbolValue
-        self.api = apiValue
-
 ## TABLE: google_topic_ids_d ######################################
 googleTopicIdsDSnakeCaseTableColumns = ['exchange', 'symbol', 'topic_id', 'input_date', 'last_checked_date']
 googleTopicIdsDCamelCaseTableColumns = ['exchange', 'symbol', 'topicId', 'inputDate', 'lastCheckedDate']
@@ -1056,4 +1047,13 @@ class GoogleTopicIdsDRow():
         self.topic_id = topic_idValue
         self.input_date = input_dateValue
         self.last_checked_date = last_checked_dateValue
+
+## TABLE: queue_stock_data_daily_d ######################################
+queueStockDataDailyDSnakeCaseTableColumns = ['exchange', 'symbol', 'source']
+queueStockDataDailyDCamelCaseTableColumns = ['exchange', 'symbol', 'source']
+class QueueStockDataDailyDRow():
+    def __init__(self, exchangeValue, symbolValue, sourceValue):
+        self.exchange = exchangeValue
+        self.symbol = symbolValue
+        self.source = sourceValue
 

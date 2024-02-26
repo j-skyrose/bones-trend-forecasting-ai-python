@@ -10,15 +10,17 @@ sys.path.append(path)
 import difflib, sqlite3
 from typing import Tuple, Union
 
+from constants.enums import Api
 from constants.values import usExchanges, multiExchangeSymbols
+from managers.apiManager import APIManager
 from managers.databaseManager import DatabaseManager
 from managers._generatedDatabaseExtras.databaseRowObjects import symbolInfoYahooDCamelCaseTableColumns
-from structures.api.yahoo import Yahoo
 from utils.dbSupport import generateCommaSeparatedQuestionMarkString
 from utils.support import getItem, shortcdict, tqdmLoopHandleWrapper
 
 dbm: DatabaseManager = DatabaseManager()
-yapi = Yahoo()
+
+yapi = APIManager().get(Api.YAHOO)
 exchaliasdict = dbm.getAliasesDictionary()
 
 ## error accumulation

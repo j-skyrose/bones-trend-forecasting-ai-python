@@ -15,6 +15,8 @@ from typing import Dict, List, Union
 
 from constants.exceptions import APIError, APITimeout
 from constants.values import minGoogleDate
+from structures.api.apiBase import APIBase
+from utils.support import Singleton
 
 DEBUG = False
 
@@ -36,8 +38,7 @@ def buildQueryString(params):
     ps.append('tz=' + str(params['tz']))
     return q + '&'.join(ps)
 
-class Google(Singleton):
-    url = 'https://trends.google.com/trends/api'
+class Google(APIBase, Singleton):
     cookieVal = None
     hl = 'en-GB'
     ## utc offset in minutes

@@ -11,12 +11,12 @@ import time, requests
 from bs4 import BeautifulSoup
 from datetime import date, datetime, timedelta
 
-from utils.support import asDate, recdotdict, recdotobj, shortc, toUSAFormat
+from structures.api.apiBase import APIBase
+from utils.support import Singleton, asDate, recdotdict, recdotobj, shortc, toUSAFormat
 
 DEBUG = False
 
-class MarketWatch:
-    url = 'https://www.marketwatch.com/tools'
+class MarketWatch(APIBase, Singleton):
     userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
     ## utc offset in minutes
     timezone = int(time.timezone/60 - (60 * time.localtime().tm_isdst))

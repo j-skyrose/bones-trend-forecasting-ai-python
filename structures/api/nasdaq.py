@@ -12,15 +12,14 @@ from datetime import date
 from requests.models import Response
 
 from constants.exceptions import APIError
-from utils.support import asDate, shortc
+from structures.api.apiBase import APIBase
+from utils.support import Singleton, asDate, shortc
 
-class Nasdaq:
-    def __init__(self, ):
-        self.url = 'https://api.nasdaq.com/api'
-        ## at least 'earnings' call will not work without a user-agent header
-        self.headers = {
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36'
-        }
+class Nasdaq(APIBase, Singleton):
+    ## at least 'earnings' call will not work without a user-agent header
+    headers = {
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36'
+    }
 
     def __responseHandler(self, resp: Response):
         print('made request', resp.url)

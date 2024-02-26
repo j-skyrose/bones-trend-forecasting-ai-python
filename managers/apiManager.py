@@ -11,15 +11,21 @@ import atexit, time
 from datetime import date
 
 from constants.exceptions import APILimitReached, APITimeout, NotSupportedYet
-from constants.enums import FinancialStatementType, LimitType, MarketType, TimespanType
+from constants.enums import Api, FinancialStatementType, LimitType, TimespanType
 from managers.configManager import StaticConfigManager, SavedStateManager
 from structures.api.alphavantage import Alphavantage
+from structures.api.finra import FINRA
+from structures.api.google import Google
+from structures.api.nasdaq import Nasdaq
 from structures.api.polygon import Polygon
 from structures.api.fmp import FMP
 from structures.api.neo import NEO
+from structures.api.yahoo import Yahoo
+from structures.scraper.marketWatch import MarketWatch
 from utils.support import Singleton, asDate, recdotdict, recdotobj, shortc
 
 class APIManager(Singleton):
+    '''manages APIs, file requests, and web scrapers that are wrapped to function like APIs'''
 
     def __init__(self, currentDate=date.today()):
         atexit.register(self.saveConfig)
@@ -29,28 +35,38 @@ class APIManager(Singleton):
         self.savedState = SavedStateManager()
 
         self.apis = {}
-        self._initializeAPI('alphavantage', Alphavantage)
-        self._initializeAPI('polygon', Polygon)
-        self._initializeAPI('fmp', FMP)
-        self._initializeAPI('neo', NEO, requiresAPIKey=False)
+        self._initializeAPI(Api.ALPHAVANTAGE, Alphavantage)
+        self._initializeAPI(Api.FMP, FMP)
+        self._initializeAPI(Api.GOOGLE, Google, requiresAPIKey=False)
+        self._initializeAPI(Api.MARKETWATCH, MarketWatch, requiresAPIKey=False)
+        self._initializeAPI(Api.NASDAQ, Nasdaq, requiresAPIKey=False)
+        self._initializeAPI(Api.NEO, NEO, requiresAPIKey=False)
+        self._initializeAPI(Api.POLYGON, Polygon)
+        self._initializeAPI(Api.YAHOO, Yahoo, requiresAPIKey=False)
 
         ## update 'remaining' counts
         for a in self.apis.keys():
             self._checkLimits(self.apis[a], updateOnly=True)
 
+    @staticmethod
+    def getEarningsCollectionAPIs():
+        return [Api.MARKETWATCH, Api.NASDAQ, Api.YAHOO]
+
     def saveConfig(self):
         for api in self.apis.keys():
-            self.savedState.set(api, 'remaining', self.apis[api].remaining)
-            self.savedState.set(api, 'updated', self.apis[api].updatedOn)
+            apiName = api.name.lower()
+            self.savedState.set(apiName, 'remaining', self.apis[api].remaining)
+            self.savedState.set(apiName, 'updated', self.apis[api].updatedOn)
         self.savedState.save()
         self.config.save()
         print('saved config and state')
 
-    def _initializeAPI(self, apiName, apiClass, requiresAPIKey=True):
+    def _initializeAPI(self, api:Api, apiClass, requiresAPIKey=True):
+        apiName = api.name.lower()
         url = self.config.get(apiName, 'url', required=True)
         apiKey = self.config.get(apiName, 'apikey', required=requiresAPIKey)
 
-        self.apis[apiName] = recdotdict({
+        self.apis[api] = recdotdict({
             'api': apiClass(url, key=apiKey),
             'limit': self.config.get(apiName, 'limit'),
             'limitType': self.config.get(apiName, 'limittype'),
@@ -59,33 +75,36 @@ class APIManager(Singleton):
             'updatedOn': date.fromisoformat(self.savedState.get(apiName, 'updated'))
         })
 
+    def get(self, api:Api, handle=False):
+        r = self.apis[api]
+        return r if handle else r.api
 
     def getAPIList(self, sort=False):
         if sort:
             return sorted(self.apis.keys(), key=lambda a: self.apis[a]['priority'], reverse=True)
         return self.apis.keys()
 
-    def _checkLimits(self, a, seriesType=None, qdate=None, updateOnly=False):
+    def _checkLimits(self, apih, seriesType=None, qdate=None, updateOnly=False):
         sameDate = False
-        if a.limitType == LimitType.NONE:
-            if qdate: a.updatedOn = date.fromisoformat(qdate)
+        if apih.limitType == LimitType.NONE:
+            if qdate: apih.updatedOn = date.fromisoformat(qdate)
             return 999
-        elif a.limitType == LimitType.DAILY:
-            sameDate = self.currentDate == a.updatedOn
-        elif a.limitType == LimitType.WEEKLY:
+        elif apih.limitType == LimitType.DAILY:
+            sameDate = self.currentDate == apih.updatedOn
+        elif apih.limitType == LimitType.WEEKLY:
             ## todo, if API found for this type
             pass
-        elif a.limitType == LimitType.MONTHLY:
-            sameDate = self.currentDate.month() == a.updatedOn.month()
+        elif apih.limitType == LimitType.MONTHLY:
+            sameDate = self.currentDate.month() == apih.updatedOn.month()
 
         if sameDate:
-            if a.remaining <= 0:
+            if apih.remaining <= 0:
                 if not updateOnly: raise APILimitReached
         else:
-            if not updateOnly: a.updatedOn = self.currentDate
-            a.remaining = a.limit
+            if not updateOnly: apih.updatedOn = self.currentDate
+            apih.remaining = apih.limit
 
-        return a.remaining
+        return apih.remaining
 
     def __executeAPIRequest(self, apih, func, verbose=0):
         ret = None
@@ -105,13 +124,13 @@ class APIManager(Singleton):
 
         return ret
 
-    def _executeRequestWrapper(self, api, requestFunc, seriesType=None, queryDate=None, verbose=0):
-        apiHandle = self.apis[api]
+    def _executeRequestWrapper(self, api:Api, requestFunc, seriesType=None, queryDate=None, verbose=0):
+        apiHandle = self.get(api, handle=True)
         self._checkLimits(apiHandle, seriesType, queryDate)
 
         return recdotobj(self.__executeAPIRequest(apiHandle, lambda: requestFunc(apiHandle), verbose))
 
-    def query(self, api, symbol=None, seriesType=None, qdate=None, exchange=None, fromDate=None, toDate=None, avCompact=False, verbose=0):
+    def query(self, api:Api, symbol=None, seriesType=None, qdate=None, exchange=None, fromDate=None, toDate=None, avCompact=False, verbose=0):
         if qdate:
             ## polygon
             if symbol: queryArgs = (symbol, qdate, verbose)
@@ -136,25 +155,24 @@ class APIManager(Singleton):
             verbose=verbose
         )
     
-    def getSimpleQuote(self, symbol=None, api='fmp', verbose=0, mock=False):
-        if api != 'fmp': raise NotSupportedYet
+    def getSimpleQuote(self, symbol=None, api:Api=Api.FMP, verbose=0, mock=False):
+        if api != Api.FMP: raise NotSupportedYet
         return self._executeRequestWrapper(
             api,
             (lambda apih: apih.api.getSimpleQuote(symbol)) if not mock else (lambda apih: {'test': 'test'}),
             verbose=verbose
         )
 
-    def getAggregates(self, api='polygon', symbol=None, multipler=None, timespan=None, fromDate=None, toDate=None, limit=50000, verbose=0):
+    def getAggregates(self, api:Api=Api.POLYGON, symbol=None, multipler=None, timespan=None, fromDate=None, toDate=None, limit=50000, verbose=0):
         return self._executeRequestWrapper(
             api,
-            lambda apih: apih.api.getAggregates(symbol, shortc(multipler, 1), shortc(timespan, TimespanType.MINUTE), fromDate, toDate, limit, verbose),
+            lambda apih: apih[api].getAggregates(symbol, shortc(multipler, 1), shortc(timespan, TimespanType.MINUTE), fromDate, toDate, limit, verbose),
             verbose=verbose
         )
 
-    ## polygon
-    def getFinanicals(self, api, symbol, ftype, stype):
+    def getFinanicals(self, api:Api, symbol, ftype, stype):
         lmb = lambda apih: apih.api.getFinancials(symbol, ftype)
-        if api == 'fmp' or api == 'alphavantage':
+        if api in [Api.FMP, Api.ALPHAVANTAGE]:
             if stype == FinancialStatementType.INCOME:
                 lmb = lambda apih: apih.api.getFinancials_income(symbol, ftype)
             elif stype == FinancialStatementType.BALANCE_SHEET:
@@ -165,7 +183,8 @@ class APIManager(Singleton):
         return self._executeRequestWrapper(api, lmb)
 
     ## polygon only
-    def getStockSplits(self, api, **kwargs):
+    def getStockSplits(self, api:Api=Api.POLYGON, **kwargs):
+        if api != Api.POLYGON: raise NotSupportedYet
         return self._executeRequestWrapper(
             api,
             lambda apih: apih.api.getStockSplits(**kwargs)
@@ -212,12 +231,12 @@ class APIManager(Singleton):
 
     #     return recdotobj(ret) ## if type(ret) is not list else ret
 
-    def getTickers(self, api,  
+    def getTickers(self, api:Api,  
                    onlyPage=None, limit=None, ## debugging/throttling
                    verbose=0, **kwargs):
         '''Query all ticker symbols which are supported by the given API'''
 
-        if api not in ['polygon', 'alphavantage']: raise NotSupportedYet()
+        if api not in [Api.POLYGON, Api.ALPHAVANTAGE, Api.YAHOO]: raise NotSupportedYet()
 
         apiHandle = self.apis[api]
 
@@ -225,9 +244,9 @@ class APIManager(Singleton):
         tickers = []
         resp = self.__executeAPIRequest(apiHandle, lambda: apiHandle.api.getTickers(verbose=verbose, **kwargs), verbose=verbose)
 
-        if api == 'alphavantage':
+        if api == Api.ALPHAVANTAGE:
             return resp
-        elif api == 'polygon':
+        elif api == Api.POLYGON:
             while True:
                 data = resp['results']
 
@@ -248,7 +267,7 @@ class APIManager(Singleton):
             
             return tickers
 
-    def getTickerDetails(self, api, ticker, verbose=0, **kwargs):
+    def getTickerDetails(self, api:Api, ticker, verbose=0, **kwargs):
         '''additional kwargs: exchange, asOfDate'''
         return self._executeRequestWrapper(
             api,
@@ -260,7 +279,7 @@ def getPolygonSymbols():
     from utils import convertListToCSV
 
     apim = APIManager()
-    tickers = apim.getTickers('polygon')
+    tickers = apim.getTickers(Api.POLYGON)
     with open(os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'raw/symbol_dumps/polygon/reference_tickers.csv'), 'w', encoding='utf-8') as f:
         f.write(convertListToCSV(tickers, excludeColumns=['codes']))
     print('done with some data massaging requried (commas in company names, tickers with spaces, etc.)')

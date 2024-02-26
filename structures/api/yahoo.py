@@ -10,12 +10,10 @@ sys.path.append(path)
 import time, requests
 from datetime import date, timedelta
 
-from utils.support import asDate
+from structures.api.apiBase import APIBase
+from utils.support import Singleton, asDate
 
-DEBUG = False
-
-class Yahoo:
-    url = 'https://query1.finance.yahoo.com'
+class Yahoo(APIBase, Singleton):
     crumb = '.q4CENIZwE0'
     cookieVal = 'tbla_id=dc872ff0-fa13-4bfa-ad64-58cdde23074d-tuct46e322a; gam_id=y-4JzSOCFE2uL7mC5RBvYGpMj7wFuX9yQ4~A; B=acmlpj5bp8geh&b=3&s=i3; A1=d=AQABBEelL14CEDgSd0gnSdFw7CcuPjJjlGUFEgEBCAF-f2SyZCUHb2UB_eMBAAcI0UGUV5m5WqY&S=AQAAAgjoVDd4LgrNte4LrI8-eac; A3=d=AQABBEelL14CEDgSd0gnSdFw7CcuPjJjlGUFEgEBCAF-f2SyZCUHb2UB_eMBAAcI0UGUV5m5WqY&S=AQAAAgjoVDd4LgrNte4LrI8-eac; GUC=AQEBCAFkf35kskIi-wTr; A1S=d=AQABBEelL14CEDgSd0gnSdFw7CcuPjJjlGUFEgEBCAF-f2SyZCUHb2UB_eMBAAcI0UGUV5m5WqY&S=AQAAAgjoVDd4LgrNte4LrI8-eac&j=WORLD; PRF=t%3DMODD%252BHYREQ%252BFLES%252BCUK%252BCCL%252BAUMBF%252BMSTR%252BSAIC%252BBBLG%252BGME%252BSPY%252BCHACU%26newChartbetateaser%3D1; cmp=t=1688440827&j=0&u=1---'
     pageSize = 100
@@ -33,11 +31,11 @@ class Yahoo:
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36'
         }
 
-    def _request(self, reqLambda):
+    def _request(self, reqLambda, verbose=0):
         for retryloop in range(3):
             resp = reqLambda()
             if resp.status_code == 404 or resp.status_code == 503: ## both seem to be a back-off response
-                print('sleeping', retryloop)
+                if verbose: print('sleeping', retryloop)
                 time.sleep(60*(retryloop+1))
             else: break
         return resp

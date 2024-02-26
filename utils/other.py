@@ -15,7 +15,7 @@ from datetime import date
 
 from globalConfig import config as gconfig
 from constants.values import canadaExchanges, usExchanges
-from constants.enums import AccuracyType, ChangeType, InterestType, MarketRegion, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType, SetClassificationType
+from constants.enums import AccuracyType, Api, ChangeType, InterestType, MarketRegion, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType, SetClassificationType
 from utils.support import asList, shortc, shortcdict
 
 
@@ -187,6 +187,8 @@ def parseCommandLineOptions():
             v = SeriesType[v.upper()]
         elif k.lower() == 'interesttype':
             v = InterestType[v.upper()]
+        elif k.lower() == 'api':
+            v = Api[v.upper()]
         elif re.match(r'^[0-9]{2,4}-[0-9]{1,2}-[0-9]{1,2}$', v):
             year, month, day = v.split('-')
             if len(year) == 2: v = '20' + v

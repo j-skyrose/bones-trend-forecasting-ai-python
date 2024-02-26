@@ -7,18 +7,16 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import requests, json, csv
+import requests, csv
 from datetime import date
 from requests.models import Response
 
 from constants.enums import FinancialReportType, FinancialStatementType
 from constants.exceptions import APIError, APITimeout
-from utils.support import asISOFormat, recdotobj, shortc
+from structures.api.apiBase import APIBase
+from utils.support import Singleton, asISOFormat, recdotobj, shortc
 
-class Alphavantage:
-    def __init__(self, url, key, **kwargs):
-        self.url = url
-        self.apiKey = key
+class Alphavantage(APIBase, Singleton):
 
     def __buildExchangeSnippet(self, exchange):
         if not exchange or exchange in ['NYSE', 'NYSE ARCA', 'NASDAQ', 'NYSE MKT', 'BATS']:

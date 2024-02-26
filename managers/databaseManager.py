@@ -17,18 +17,18 @@ from decimal import Decimal
 from enum import Enum
 
 from globalConfig import config as gconfig
-from constants.enums import APIState, AccuracyAnalysisTypes, AdvancedOrdering, ChangeType, CorrBool, EarningsCollectionAPI, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, NormalizationMethod, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, SetType, Direction, StockDataSource
+from constants.enums import APIState, AccuracyAnalysisTypes, AdvancedOrdering, Api, ChangeType, CorrBool, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, NormalizationMethod, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, SetType, Direction, StockDataSource
 from constants.exceptions import NotSupportedYet
 from constants.values import unusableSymbols, apiList, standardExchanges
+from managers.apiManager import APIManager
 from managers.configManager import StaticConfigManager
 from managers.dbCacheManager import DBCacheManager
 from managers.marketDayManager import MarketDayManager
-from structures.api.yahoo import Yahoo
 from structures.normalizationColumnObj import NormalizationColumnObj
 from structures.normalizationDataHandler import NormalizationDataHandler
 from structures.sql.sqlArgumentObj import SQLArgumentObj
 from structures.sql.sqlOrderObj import SQLOrderObj
-from utils.dbSupport import convertToSnakeCase, generateAllSQLConditionSnippets, generateCommaSeparatedQuestionMarkString, generateExcludeTickersSnippet, generateExcludeUnusableTickersSnippet, generateSQLConditionSnippet, generateSQLSuffixStatementAndArguments, getDBAliasForTable, getTableColumns, getTableString, processDBQuartersToDicts, _dbGetter, generateDatabaseAnnotationObjectsFile, generateCompleteDBConnectionAndCursor, getDBConnectionAndCursor
+from utils.dbSupport import convertToCamelCase, convertToSnakeCase, generateAllSQLConditionSnippets, generateCommaSeparatedQuestionMarkString, generateExcludeTickersSnippet, generateExcludeUnusableTickersSnippet, generateSQLConditionSnippet, generateSQLSuffixStatementAndArguments, getDBAliasForTable, getTableColumns, getTableString, processDBQuartersToDicts, _dbGetter, generateDatabaseAnnotationObjectsFile, generateCompleteDBConnectionAndCursor, getDBConnectionAndCursor
 from utils.other import buildCommaSeparatedTickerPairString, parseCommandLineOptions
 from utils.support import asDate, asISOFormat, asList, flatten, keySortedValues, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotobj, shortc, shortcdict, sortedKeys, tqdmLoopHandleWrapper, unixToDatetime
 
@@ -36,7 +36,7 @@ configManager: StaticConfigManager = StaticConfigManager()
 
 ## generate before import to ensure things are up-to-date for the current execution
 if current_process().name == 'MainProcess': generateDatabaseAnnotationObjectsFile()
-from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, CboeVolatilityIndexRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, StockDataDailyCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, QueueStockDataDailyDRow, GoogleTopicIdsDRow
+from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, CboeVolatilityIndexRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, StockDataDailyCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, GoogleTopicIdsDRow, QueueStockDataDailyDRow
 from managers._generatedDatabaseExtras.databaseRowObjects import symbolsSnakeCaseTableColumns, stockDataDailyCCamelCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns, symbolInfoAlphavantageDSnakeCaseTableColumns, symbolInfoPolygonDSnakeCaseTableColumns, symbolInfoYahooDSnakeCaseTableColumns
 
 class DatabaseManager(Singleton):
@@ -402,16 +402,16 @@ class DatabaseManager(Singleton):
             groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[StockDataDailyAlphavantageDRow]:
         return _dbGetter("stock_data_daily_alphavantage_d", **locals())
 
-    def getDumpQueueStockDataDaily_basic(self,
-            exchange=None, symbol=None, api=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[QueueStockDataDailyDRow]:
-        return _dbGetter("queue_stock_data_daily_d", **locals())
-
     def getDumpGoogleTopicIds_basic(self,
             exchange=None, symbol=None, topicId=None,
             inputDate=None, lastCheckedDate=None,
             groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[GoogleTopicIdsDRow]:
         return _dbGetter("google_topic_ids_d", **locals())
+
+    def getDumpQueueStockDataDaily_basic(self,
+            exchange=None, symbol=None, source=None,
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[QueueStockDataDailyDRow]:
+        return _dbGetter("queue_stock_data_daily_d", **locals())
 
     #endregion basic generic gets - AUTO-GENERATED SECTION
     ####################################################################################################################################################################
@@ -433,12 +433,12 @@ class DatabaseManager(Singleton):
         qrts = self.dbc.execute(f'SELECT period FROM {self.getTableString("financial_stmts_loaded_periods_d")} WHERE type=\'quarter\'').fetchall()
         return [q.period for q in qrts]
 
-    def getAliasesDictionary(self, api=None):
+    def getAliasesDictionary(self, api:Api=None):
         if self.exchangeAliases and self.exchangeAliasesAPI == api and self.exchangeAliasRowCount == self.getRowCount(getTableString('exchange_aliases')):
             return self.exchangeAliases
         
         ret = {}
-        for r in self.dbc.execute(f'SELECT exchange, alias FROM exchange_aliases {"WHERE api=?" if api else ""}', (api,) if api else []).fetchall():
+        for r in self.getExchangeAliases_basic(api=api):
             ret[r['alias']] = r['exchange']
             ret[r['exchange']] = r['exchange']
         ret = recdotdict(ret)
@@ -453,7 +453,7 @@ class DatabaseManager(Singleton):
     def getSymbols(self,
                    ## symbol_info tables
                 #    TODO: name=None, assetType=None, sector=None, industry=None, founded=None,
-                   exchange=None, symbol=None, active=True, topicId=None, api=None,
+                   exchange=None, symbol=None, active=True, topicId=None, api:Api=None,
                    ## historical data table
                    periodDate=None, preMarket=None, open=None, high=None, low=None, close=None, afterHours=None, volume=None, transactions=None, artificial=None,
                    ## reductions
@@ -473,34 +473,34 @@ class DatabaseManager(Singleton):
 
         symbolInfoDumpStmts = []
         symbolInfoDumpArgs = []
-        for a in ['alphavantage', 'polygon', 'yahoo']:
+        for a in [Api.ALPHAVANTAGE, Api.POLYGON, Api.YAHOO]:
             if api is not None and a != api: continue
             
             lkwargs = {}
             for k,v in symbolInfoKWArgs.items():
                 k = convertToSnakeCase(k)
-                if k in globals()[f'symbolInfo{a.capitalize()}DSnakeCaseTableColumns'] and v is not None:
+                if k in globals()[f'symbolInfo{a.name.capitalize()}DSnakeCaseTableColumns'] and v is not None:
                     lkwargs[k] = v
-            if a == 'alphavantage':
+            if a == Api.ALPHAVANTAGE:
                 specificKWArgs = {
                     'exchange': exchange,
                     'symbol': symbol,
                     'status': 'Active' if active else 'Delisted'
                 }
-            elif a == 'polygon':
+            elif a == Api.POLYGON:
                 specificKWArgs = {
                     'exchangeAlias': exchange,
                     'ticker': symbol,
                     'active': active,
                     'sqlColumns': 'exchange_alias AS exchange, ticker AS symbol, *'
                 }
-            elif a == 'yahoo':
+            elif a == Api.YAHOO:
                 specificKWArgs = {
                     'exchange': exchange,
                     'symbol': symbol,
                     'sqlColumns': '*, long_name AS name'
                 }
-            stmt, args = getattr(self, f'getDumpSymbolInfo{a.capitalize()}_basic')(**specificKWArgs, **lkwargs, rawStatement=True)
+            stmt, args = getattr(self, f'getDumpSymbolInfo{a.name.capitalize()}_basic')(**specificKWArgs, **lkwargs, rawStatement=True)
             symbolInfoDumpStmts.append(stmt)
             symbolInfoDumpArgs.append(args)
 
@@ -893,37 +893,28 @@ class DatabaseManager(Singleton):
         if date: date = asISOFormat(date)
         return _dbGetter('vector_similarities_c', **locals())
 
-    def getDumpEarningsDates(self, api: EarningsCollectionAPI, exchange=None, symbol=None, **kwargs):
-        if api == EarningsCollectionAPI.NASDAQ:
-            table = 'earnings_dates_nasdaq_d'
-        elif api == EarningsCollectionAPI.MARKETWATCH:
-            table = 'earnings_dates_marketwatch_d'
-        elif api == EarningsCollectionAPI.YAHOO:
-            table = 'earnings_dates_yahoo_d'
+    @staticmethod
+    def getEarningsDatesDumpTable(api:Api):
+        if api == Api.NASDAQ:
+            return 'earnings_dates_nasdaq_d'
+        elif api == Api.MARKETWATCH:
+            return 'earnings_dates_marketwatch_d'
+        elif api == Api.YAHOO:
+            return 'earnings_dates_yahoo_d'
         else:
             raise ValueError(f'Unrecognized API {api}')
 
+    def getDumpEarningsDates(self, api:Api, exchange=None, symbol=None, **kwargs):
+        table = self.getEarningsDatesDumpTable(api)
         return _dbGetter(**locals(), **kwargs, excludeKeys=['api'])
 
-    def getUniqueEarningsCollectionDates(self, api: EarningsCollectionAPI):
-        if api == EarningsCollectionAPI.NASDAQ:
-            table = 'earnings_dates_nasdaq_d'
-        elif api == EarningsCollectionAPI.MARKETWATCH:
-            table = 'earnings_dates_marketwatch_d'
-        elif api == EarningsCollectionAPI.YAHOO:
-            table = 'earnings_dates_yahoo_d'
-
+    def getUniqueEarningsCollectionDates(self, api:Api):
+        table = self.getEarningsDatesDumpTable(api)
         return _dbGetter(**locals(), sqlColumns='DISTINCT input_date', orderBy='input_date', onlyColumn_asList='input_date', excludeKeys=['api'])
 
-    def getLatestEarningsCollectionDate(self, api: EarningsCollectionAPI):
+    def getLatestEarningsCollectionDate(self, api:Api):
         ''' returns latest anchor date, i.e. date on which collection was done but the (most recent market) day's data was not updated yet '''
-        if api == EarningsCollectionAPI.NASDAQ:
-            table = 'earnings_dates_nasdaq_d'
-        elif api == EarningsCollectionAPI.MARKETWATCH:
-            table = 'earnings_dates_marketwatch_d'
-        elif api == EarningsCollectionAPI.YAHOO:
-            table = 'earnings_dates_yahoo_d'
-
+        table = self.getEarningsDatesDumpTable(api)
         return _dbGetter(**locals(), surprise_percentage=SQLHelpers.NOTNULL, sqlColumns='MAX(input_date)', onlyColumn_asList='MAX(input_date)', excludeKeys=['api'])[0]
 
     def getEarningsDate(self, exchange=None, symbol=None, inputDate=None, earningsDate=None):
@@ -1002,19 +993,19 @@ class DatabaseManager(Singleton):
         self.dbc.executemany(stmt, [keySortedValues(v) + [exchange, symbol, k] for k,v in data.items()])
         self.queueStockDataDailyTickersForUpdate(StockDataSource.ALPHAVANTAGE, exchange=exchange, symbol=symbol)
 
-    def queueStockDataDailyTickersForUpdate(self, api, exchange=None, symbol=None, data=None):
+    def queueStockDataDailyTickersForUpdate(self, source, exchange=None, symbol=None, data=None):
         '''adds ticker to queue for data consolidation'''
         stmt = f"INSERT OR IGNORE INTO {getTableString('queue_stock_data_daily_d')} VALUES (?,?,?)"
         if data:
             self.dbc.executemany(stmt, [(
-                d.exchange if api != StockDataSource.POLYGON else 'UNKNOWN', 
-                d.symbol if api != StockDataSource.POLYGON else d.ticker,
-                api.name
+                d.exchange if source != StockDataSource.POLYGON else 'UNKNOWN', 
+                d.symbol if source != StockDataSource.POLYGON else d.ticker,
+                source.name
             ) for d in data])
         else:
             if symbol is None: raise ValueError
             exchange = shortc(exchange, 'UNKNOWN')
-            self.dbc.execute(stmt, (exchange, symbol, api.name))
+            self.dbc.execute(stmt, (exchange, symbol, source.name))
 
     def insertStockData(self, exchange=None, symbol=None,
                         period_date=None, pre_market=None, open=None, high=None, low=None, close=None, after_hours=None, volume=None, transactions=None, artificial=None,
@@ -1478,16 +1469,9 @@ class DatabaseManager(Singleton):
             stmt = f'UPDATE {self.getTableString("google_interests_c")} SET relative_interest=? WHERE exchange=? AND symbol=? AND date=?'
             self.dbc.execute(stmt, tuple([val] + args))
 
-    def insertEarningsDateDump(self, api: EarningsCollectionAPI, **kwargs):
-        if api == EarningsCollectionAPI.NASDAQ:
-            table = 'earnings_dates_nasdaq_d'
-            cccols = earningsDatesNasdaqDCamelCaseTableColumns
-        elif api == EarningsCollectionAPI.MARKETWATCH:
-            table = 'earnings_dates_marketwatch_d'
-            cccols = earningsDatesMarketwatchDCamelCaseTableColumns
-        elif api == EarningsCollectionAPI.YAHOO:
-            table = 'earnings_dates_yahoo_d'
-            cccols = earningsDatesYahooDCamelCaseTableColumns
+    def insertEarningsDateDump(self, api:Api, **kwargs):
+        table = self.getEarningsDatesDumpTable(api)
+        cccols = globals()[f'{convertToCamelCase(table)}CamelCaseTableColumns']
 
         proccessedkwargs = {}
         for k,v in kwargs.items():
@@ -1637,10 +1621,10 @@ class DatabaseManager(Singleton):
         stmt = f'DELETE FROM {self.getTableString("symbol_info_alphavantage_d")}'
         return self.dbc.execute(stmt + additionalStmt, arguments).fetchall()
 
-    def dequeueStockDataDailyTickerFromUpdate(self, symbol, api: StockDataSource, exchange='UNKNOWN'):
+    def dequeueStockDataDailyTickerFromUpdate(self, symbol, source: StockDataSource, exchange='UNKNOWN'):
         '''removes ticker from queue after data has been consolidated'''
-        stmt = f"DELETE FROM {getTableString('queue_stock_data_daily_d')} WHERE exchange=? AND symbol=? AND api=?"
-        self.dbc.execute(stmt, (exchange, symbol, api.name))
+        stmt = f"DELETE FROM {getTableString('queue_stock_data_daily_d')} WHERE exchange=? AND symbol=? AND source=?"
+        self.dbc.execute(stmt, (exchange, symbol, source.name))
 
     #endregion
     ####################################################################################################################################################################

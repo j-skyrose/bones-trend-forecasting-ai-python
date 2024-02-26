@@ -7,16 +7,15 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import requests, json
+import requests
 from requests.models import Response
-from datetime import date, datetime
+from datetime import datetime
 
 from constants.exceptions import APIError, APITimeout
-from utils.support import recdotobj, shortcdict
+from structures.api.apiBase import APIBase
+from utils.support import Singleton, recdotobj, shortcdict
 
-class NEO:
-    def __init__(self, url, **kwargs):
-        self.url = url
+class NEO(APIBase, Singleton):
 
     def __responseHandler(self, resp: Response, verbose=0):
         try:

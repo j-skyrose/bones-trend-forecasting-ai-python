@@ -14,9 +14,10 @@ from numpy.core import _exceptions as numpy_exceptions
 from typing import Dict, List
 
 from globalConfig import config as gconfig
-from constants.enums import ChangeType, Direction, EarningsCollectionAPI, FeatureExtraType, IndicatorType, NormalizationMethod, OutputClass, SQLInsertHelpers, SeriesType, StockDataSource
+from constants.enums import Api, ChangeType, Direction, FeatureExtraType, IndicatorType, NormalizationMethod, OutputClass, SQLInsertHelpers, SeriesType, StockDataSource
 from constants.exceptions import InsufficientDataAvailable, NotSupportedYet
 from constants.values import indicatorsKey, unusableSymbols
+from managers.apiManager import APIManager
 from managers.databaseManager import DatabaseManager
 from managers.dataManager import DataManager
 from managers.inputVectorFactory import InputVectorFactory
@@ -678,7 +679,7 @@ def earningsDateCalculationAndInsertion(simple=True, verbose=1):
     totalRowsInserted = 0
     for symbol in tqdmLoopHandleWrapper(ntickers, verbose=verbose):
         if verbose > 1: print(f'Starting {symbol}')
-        dbdata = [recdotdict({"api": eapi, "earnings_date": r.earnings_date, "input_date": r.input_date, **r}) for eapi in EarningsCollectionAPI for r in dbm.getDumpEarningsDates(eapi, exchange=exchange, symbol=symbol)]
+        dbdata = [recdotdict({"api": eapi, "earnings_date": r.earnings_date, "input_date": r.input_date, **r}) for eapi in APIManager.getEarningsCollectionAPIs() for r in dbm.getDumpEarningsDates(eapi, exchange=exchange, symbol=symbol)]
         if verbose > 1: 
             print(f'{len(dbdata)} rows queried from database')
             snapshotDBCount = len(dbdata)
@@ -703,7 +704,7 @@ def earningsDateCalculationAndInsertion(simple=True, verbose=1):
                 if all(r.earnings_date == fqeBucket[0].earnings_date for r in fqeBucket):
                     fqeBucket[:] = [fqeBucket[0]]
                     continue
-            nasdaqRows, nonNasdaqRows = partition(fqeBucket, lambda r: r.api == EarningsCollectionAPI.NASDAQ)
+            nasdaqRows, nonNasdaqRows = partition(fqeBucket, lambda r: r.api == Api.NASDAQ)
             if len(nasdaqRows) == 0:
                 raise ValueError()
             elif len(nasdaqRows) == 1:
@@ -818,7 +819,7 @@ def earningsDateCalculationAndInsertion(simple=True, verbose=1):
             for nasdaqOnly in [True, False]:
                 for yrBucket in yearBuckets.values():
                     if len(yrBucket) > 4: continue
-                    yrNasdaqRows, yrOtherRows = partition(yrBucket, lambda r: r.api == EarningsCollectionAPI.NASDAQ)
+                    yrNasdaqRows, yrOtherRows = partition(yrBucket, lambda r: r.api == Api.NASDAQ)
                     for r in yrNasdaqRows if nasdaqOnly else yrOtherRows:
                         inserted = False
                         for qindx in range(len(typicalQrDateBuckets)):
@@ -958,12 +959,12 @@ def earningsDateCalculationAndInsertion(simple=True, verbose=1):
         
         if len(interimData) > 0: 
             interimData.sort(key=lambda x: x.earnings_date)
-            if verbose > 1: print(f'prepared to insert {len(interimData)} for {"NASDAQ" if interimData[0].api == EarningsCollectionAPI.NASDAQ else interimData[0].exchange}:{symbol}')
+            if verbose > 1: print(f'prepared to insert {len(interimData)} for {"NASDAQ" if interimData[0].api == Api.NASDAQ else interimData[0].exchange}:{symbol}')
             countSnapshot = int(totalRowsInserted)
             for r in interimData:
                 try: 
                     dbm.insertEarningsDate(
-                        'NASDAQ' if r.api == EarningsCollectionAPI.NASDAQ else r.exchange, 
+                        'NASDAQ' if r.api == Api.NASDAQ else r.exchange, 
                         r.symbol, r.input_date, r.earnings_date
                     )
                     totalRowsInserted += 1
@@ -983,25 +984,25 @@ def consolidateDailyStockData(limit=None, fillGaps=True, verbose=1, **kwargs):
     limitTickers = []
     tickersUpdated = set()
     
-    for api in StockDataSource.getInPriorityOrder():
-        getFunction = getattr(dbm, f'getDumpStockDataDaily{api.name.capitalize()}_basic') if api != StockDataSource.HISTORIC else dbm.getHistoricalData_basic
+    for source in StockDataSource.getInPriorityOrder():
+        getFunction = getattr(dbm, f'getDumpStockDataDaily{source.name.capitalize()}_basic') if source != StockDataSource.HISTORIC else dbm.getHistoricalData_basic
         def kwargsBuilder(exchange, symbol):
             ret = {}
-            if api == StockDataSource.POLYGON:
+            if source == StockDataSource.POLYGON:
                 ret['ticker'] = symbol
             else:
-                if api == StockDataSource.HISTORIC:
+                if source == StockDataSource.HISTORIC:
                     ret['artificial'] = False
                 ret['exchange'] = exchange
                 ret['symbol'] = symbol
             return ret
-        insertStrategy = SQLInsertHelpers.REPLACE if api == StockDataSource.ALPHAVANTAGE else SQLInsertHelpers.IGNORE
+        insertStrategy = SQLInsertHelpers.REPLACE if source == StockDataSource.ALPHAVANTAGE else SQLInsertHelpers.IGNORE
         
         ## check which tickers have new data and require consolidation
-        queuedTickers = dbm.getDumpQueueStockDataDaily_basic(api=api.name)
-        for exchange,symbol,_ in tqdmLoopHandleWrapper([qt.values() for qt in queuedTickers], verbose=verbose, desc=f'Transfering {api.name} ticker data'):
+        queuedTickers = dbm.getDumpQueueStockDataDaily_basic(source=source.name)
+        for exchange,symbol,_ in tqdmLoopHandleWrapper([qt.values() for qt in queuedTickers], verbose=verbose, desc=f'Transfering {source.name} ticker data'):
             exchangeWasUnknown = False
-            if api == StockDataSource.POLYGON and exchange == 'UNKNOWN':
+            if source == StockDataSource.POLYGON and exchange == 'UNKNOWN':
                 ## attempt to match ticker to an exchange
                 res = dbm.getDumpSymbolInfoPolygon_basic(ticker=symbol, orderBy=[SQLOrderObj('active', Direction.DESCENDING), SQLOrderObj('delisted_utc', Direction.DESCENDING)], onlyColumn_asList='primary_exchange')
                 try:
@@ -1014,7 +1015,7 @@ def consolidateDailyStockData(limit=None, fillGaps=True, verbose=1, **kwargs):
                 exchange = exchangeAliasDict[exchange]
                 exchangeWasUnknown = True
 
-            ## do not proceed if limit is in force and ticker was not updated with a previous API
+            ## do not proceed if limit is in force and ticker was not updated with a previous source this run
             if limit and len(limitTickers) == limit and (exchange, symbol) not in limitTickers: continue
 
             data = getFunction(**kwargsBuilder(exchange, symbol))
@@ -1022,7 +1023,7 @@ def consolidateDailyStockData(limit=None, fillGaps=True, verbose=1, **kwargs):
 
             ## insert data to DB
             dbm.insertStockData(exchange, symbol, data=data, insertStrategy=insertStrategy)
-            dbm.dequeueStockDataDailyTickerFromUpdate(exchange='UNKNOWN' if exchangeWasUnknown else exchange, symbol=symbol, api=api)
+            dbm.dequeueStockDataDailyTickerFromUpdate(exchange='UNKNOWN' if exchangeWasUnknown else exchange, symbol=symbol, source=source)
             tickersUpdated.add((exchange, symbol))
             dbm.commit()
 

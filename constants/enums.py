@@ -13,6 +13,19 @@ from enum import Enum
 from constants.values import indicatorsKey
 from utils.support import parseCSVFloatsIntoTuple, shortc
 
+class Api(Enum):
+    '''APIs, file dumps, or web scrapers that can function like APIs with a wrapper'''
+    ALPHAVANTAGE = 'ALPHAVANTAGE'   # api
+    FINRA = 'FINRA'                 # api
+    FMP = 'FMP'                     # api
+    GOOGLE = 'GOOGLE'               # api
+    MARKETWATCH = 'MARKETWATCH'     # scraper
+    NASDAQ = 'NASDAQ'               # api
+    NEO = 'NEO'                     # api
+    POLYGON = 'POLYGON'             # api
+    VIX = 'VIX'                     # file
+    YAHOO = 'YAHOO'                 # api
+
 class SeriesType(Enum):
     def __init__(self, a, b):
         self.function = a
