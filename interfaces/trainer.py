@@ -224,7 +224,7 @@ if __name__ == '__main__':
         precrange = 60
         folrange = 10
         changeValue = 0.05
-        changeType = ChangeType.PERCENTAGE
+        changeType = ChangeType.ENDING_PERCENTAGE
 
         setSplitTuple = (0.80,0.20)
         explicitValidationSymbolList = []

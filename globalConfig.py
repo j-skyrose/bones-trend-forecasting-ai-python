@@ -53,7 +53,7 @@ if TESTING and SEED_RANDOM:
 ## default
 trainingConfig = {
     'seriesType': SeriesType.DAILY,
-    'changeType': ChangeType.PERCENTAGE,
+    'changeType': ChangeType.ENDING_PERCENTAGE,
     'accuracyType': AccuracyType.NEGATIVE,
     'setSplitTuple': (1/3,1/3)
 }

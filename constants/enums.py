@@ -328,13 +328,30 @@ class NormalizationMethod(Enum):
     REAL_MAX = 'REAL_MAX'
 
 class ChangeType(Enum):
-    PERCENTAGE = 'PERCENTAGE'
-    ABSOLUTE = 'ABSOLUTE'
+    ENDING_PERCENTAGE = 'ENDING_PERCENTAGE'
+    ENDING_ABSOLUTE = 'ENDING_ABSOLUTE'
+    ANY_DAY_PERCENTAGE = 'ANY_DAY_PERCENTAGE'
+    ANY_DAY_ABSOLUTE = 'ANY_DAY_ABSOLUTE'
 
-class EarningsCollectionAPI(Enum):
-    NASDAQ = 'NASDAQ'
-    MARKETWATCH = 'MARKETWATCH'
-    YAHOO = 'YAHOO'
+    @classmethod
+    def _missing_(cls, name):
+        return cls[f'ENDING_{name}']
+
+    @classmethod
+    def endingEnums(cls):
+        return [c for c in cls if 'ENDING_' in c.name]
+
+    @classmethod
+    def anyDayEnums(cls):
+        return [c for c in cls if 'ANY_DAY_' in c.name]
+    
+    @classmethod
+    def percentageEnums(cls):
+        return [c for c in cls if '_PERCENTAGE' in c.name]
+    
+    @classmethod
+    def absoluteEnums(cls):
+        return [c for c in cls if '_ABSOLUTE' in c.name]    
 
 class StockDataSource(Enum):
     '''API/table holding raw stock data. Assists with collection and consolidation'''

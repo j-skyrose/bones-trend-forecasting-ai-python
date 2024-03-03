@@ -67,10 +67,14 @@ class NetworkStats:
         elif name == 'accuracyType':
             enumType = AccuracyType
         elif name == 'changeType':
-            enumType = ChangeType     
+            enumType = ChangeType
 
-        if enumType:
-            value = enumType[value.upper()] if type(value) is str else value
+        if enumType and type(value) is str:
+            try:
+                value = enumType[value.upper()]
+            except KeyError:
+                ## for missing keys, backward compatibility
+                value = enumType(value.upper())
 
         super(NetworkStats, self).__setattr__(name, value)
 

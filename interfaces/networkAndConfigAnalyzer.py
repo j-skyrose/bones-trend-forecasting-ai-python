@@ -165,7 +165,7 @@ if __name__ == '__main__':
     # gconfig.training.changeValue = 0.05
     # gconfig.training.changeType = ChangeType.PERCENTAGE
     gconfig.training.changeValue = 5
-    gconfig.training.changeType = ChangeType.ABSOLUTE
+    gconfig.training.changeType = ChangeType.ENDING_ABSOLUTE
 
     gconfig.training.setSplitTuple = (0.80,0.20)
     explicitValidationSymbolList = []
@@ -337,7 +337,7 @@ if __name__ == '__main__':
         newcf = copy.deepcopy(gconfig)
         newcf.training.followingRange = int(5 * (st+1))
         newcf.training.changeValue = int(2 * (st+1))
-        newcf.training.changeType = ChangeType.ABSOLUTE
+        newcf.training.changeType = ChangeType.ENDING_ABSOLUTE
         configs.append(newcf)
         cflabels.append(f'{newcf.training.followingRange} day ${newcf.training.changeValue}')
 
@@ -346,7 +346,7 @@ if __name__ == '__main__':
         newcf = copy.deepcopy(gconfig)
         newcf.training.followingRange = int(5 * (st+1))
         newcf.training.changeValue = 0.05 * (st+1)
-        newcf.training.changeType = ChangeType.PERCENTAGE
+        newcf.training.changeType = ChangeType.ENDING_PERCENTAGE
         configs.append(newcf)
         cflabels.append(f'{newcf.training.followingRange} day {newcf.training.changeValue*100:.2f}%')
 

@@ -21,10 +21,10 @@ class NeuralNetworkManager(Singleton):
     savePath = os.path.join(path, 'data/network_saves')
 
     def __init__(self):
-        self.networks = {
-            str(x.id): NeuralNetworkInstance.fromSave(x.factory, dill.loads(x.config), os.path.join(self.savePath, str(x.id)), x)
-                for x in dbm.getNetworks()
-        }
+        self.networks = {}
+        for x in dbm.getNetworks():
+            factoryConfig = dill.loads(x.config)
+            self.networks[str(x.id)] = NeuralNetworkInstance.fromSave(x.factory, factoryConfig, os.path.join(self.savePath, str(x.id)), x)
 
     def createNetworkInstance(self, *args, **kwargs):
         print('Creating NN', args, kwargs)

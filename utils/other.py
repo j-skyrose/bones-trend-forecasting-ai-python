@@ -93,18 +93,23 @@ def getInstancesByClass(instances, classification: SetClassificationType=None) -
     return list(classBuckets.values()) if len(classes) > 1 else classBuckets[classes[0]]
 
 def getOutputClass(data, index, followingRange, changeType, changeValue, normalizationMax=None, normalizationOffset=None):
-    try:
-        previousDayHigh = data[index - 1].high
-        finalDayLow = data[index + followingRange].low
-        if changeType == ChangeType.PERCENTAGE:
-            change = (finalDayLow / previousDayHigh) - 1
-        else:
-            change = finalDayLow - previousDayHigh
-    except ZeroDivisionError:
-        change = 0
-    if normalizationMax:
-        change = denormalizeValue(change, normalizationMax, normalizationOffset)
-    return OutputClass.POSITIVE if change >= changeValue else OutputClass.NEGATIVE
+    previousDayHigh = data[index - 1].high
+    oupclass = OutputClass.NEGATIVE
+    for di in [followingRange] if changeType in ChangeType.endingEnums() else range(1, followingRange):
+        try:
+            dayLow = data[index + di].low
+            if changeType in ChangeType.percentageEnums():
+                change = (dayLow / previousDayHigh) - 1
+            else:
+                change = dayLow - previousDayHigh
+        except ZeroDivisionError:
+            change = 0
+        if normalizationMax:
+            change = denormalizeValue(change, normalizationMax, normalizationOffset)
+        if change >= changeValue:
+            oupclass = OutputClass.POSITIVE
+            break
+    return oupclass
 
 def determinePrecedingRangeType(data):
     open = data[0].open

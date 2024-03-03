@@ -71,7 +71,7 @@ def similarityCalculationAndInsertion(exchange=None, **kwargs):
     props = {
         'precedingRange': 60,
         'followingRange': 10,
-        'changeType': ChangeType.ABSOLUTE,
+        'changeType': ChangeType.ENDING_ABSOLUTE,
         'changeValue': 2
     }
 
