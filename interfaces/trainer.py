@@ -27,7 +27,7 @@ from structures.neuralNetworkInstance import NeuralNetworkInstance
 from constants.enums import AccuracyType, ChangeType, SetClassificationType, LossAccuracy, OperatorDict, SeriesType
 from constants.exceptions import SufficientlyUpdatedDataNotAvailable
 from utils.other import getCustomAccuracy
-from utils.support import containsAllKeys, shortc, shortcdict
+from utils.support import repackKWArgs, shortcdict, xorGeneralized
 from constants.values import tseNoCommissionSymbols
 
 nnm: NeuralNetworkManager = NeuralNetworkManager()
@@ -103,16 +103,22 @@ class Trainer:
             'validationNSet': vc2
         }
 
-    def train(self, **kwargs):
-        verbose = shortcdict(kwargs, 'verbose', 1)
+    def train(self, patience=None, initialPatience=None, finalPatience=None, epochs=None, trainingPatience=None, iterationPatience=None, verbose=1, **kwargs):
+        kwargs = repackKWArgs(locals())
         if not self.useAllSets:
-            if not any(x in kwargs.keys() for x in ['epochs', 'patience']):
+            if epochs is None and patience is None:
                 raise ArgumentError(None, 'Missing epochs, network will not train at all')
             self.instance.train(**kwargs)
         else:
+            if patience is not None and (trainingPatience is not None or iterationPatience is not None):
+                raise ValueError('Unsure which patience to use')
+            if xorGeneralized(trainingPatience, iterationPatience):
+                raise ValueError('Missing some patience argument')
+            if xorGeneralized(initialPatience, finalPatience):
+                raise ValueError('Missing some patience gradience arguments')
+            usePatienceGradient = initialPatience is not None and finalPatience is not None
             explicitValidation = self.dm.explicitValidationSet
             self.instance.network.useAllSets = True
-            usePatienceGradient = containsAllKeys(kwargs, 'initialPatience', 'finalPatience', throwSomeError=ValueError('Missing some patience gradience arguments'))
 
             ## display runtime stats and estimated completion time (similar to TQDM)
             iterationTimes = []
@@ -133,6 +139,11 @@ class Trainer:
                     ))
                 else: print()
 
+            noProgressStreak = 0
+            if trainingPatience:
+                kwargs['patience'] = trainingPatience
+            elif patience:
+                iterationPatience = patience
             print('Iterating through set slices')
             for s in range(maxIterations):
                 startt = time.time()
@@ -144,7 +155,7 @@ class Trainer:
 
                 ## pre-training setup
                 if usePatienceGradient:
-                    kwargs['patience'] = kwargs['initialPatience'] + int(s * (kwargs['finalPatience'] - kwargs['initialPatience']) / (maxIterations-1))
+                    kwargs['patience'] = initialPatience + int(s * (finalPatience - initialPatience) / (maxIterations-1))
                     print('Patience:', kwargs['patience'])
                 self.instance.updateSets(**self._getSetKWParams(slice=s))
 
@@ -154,7 +165,7 @@ class Trainer:
 
                 ## train and evaluate
                 if verbose >= 1: print('Training...')
-                postEvaluateResults = self.instance.train(updateAccuracyStats=False, verbose=verbose-1, **kwargs)
+                postEvaluateResults = self.instance.train(updateAccuracyStats=False, **{**kwargs, 'verbose': verbose-1})
                 futureAccuracyStats_postEvaluate = self.instance.network.updateAccuracyStats(postEvaluateResults, dryRun=True)
 
                 ## compare accuracy stats before and after training
@@ -176,10 +187,15 @@ class Trainer:
 
                 ## if network was in a better state accuracy-wise before the training, then restore it to that original
                 if futureCustomAccuracy_prevaluate > futureCustomAccuracy_postEvaluate:
+                    noProgressStreak += 1
                     print('Future state is worse, restoring weights...')
                     self.instance.network.model.set_weights(currentWeights)
                     self.instance.network.updateAccuracyStats(prevaluateResults)
+                    if iterationPatience and noProgressStreak > iterationPatience:
+                        print(f'No progress made in past {iterationPatience} slices, stopping training')
+                        break
                 else:
+                    noProgressStreak = 0
                     self.instance.network.updateAccuracyStats(postEvaluateResults)
 
                 print()

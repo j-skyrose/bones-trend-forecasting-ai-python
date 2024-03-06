@@ -326,7 +326,11 @@ def containsAllKeys(dict, *args, throwSomeError=None, throwAllError=None):
 
     return True
 
-
+def xorGeneralized(*args):
+    '''returns FALSE if at least one truthy arg does not match the others'''
+    if not all(a is None for a in args): 
+        return any(a is None for a in args)
+    return False
 
 ## search/find/get/lambda-based method of generic retrieval from list of objects
 class ReturnType(Enum):
@@ -406,6 +410,18 @@ def urlSafeHash(string):
 ## compresses an object to bytes
 def compressObj(obj):
     return zlib.compress((obj if type(obj) == str else json.dumps(obj)).encode())
+
+def repackKWArgs(kwargs, removeSelf=True, remove=None):
+    '''Creates a new dictionary containing all keys from the 'kwargs' parameter who's values are not None, and who's keys do not include 'self' or any passed in 'remove' arg.\nFirst arg should be a dictionary, typically "locals()".'''
+    
+    removeKeys = asList(remove)
+    if removeSelf: removeKeys.append('self')
+    if 'kwargs' in kwargs:
+        kwargs = {**kwargs, **kwargs['kwargs']}
+        removeKeys.append('kwargs')
+
+    ret = { k:v for k,v in kwargs.items() if k not in removeKeys and v is not None }
+    return ret
 
 if __name__ == '__main__':
     # print(processRawValueToInsertValue(44))

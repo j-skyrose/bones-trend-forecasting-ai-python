@@ -30,7 +30,7 @@ from structures.sql.sqlArgumentObj import SQLArgumentObj
 from structures.sql.sqlOrderObj import SQLOrderObj
 from utils.dbSupport import convertToCamelCase, convertToSnakeCase, generateAllSQLConditionSnippets, generateCommaSeparatedQuestionMarkString, generateExcludeTickersSnippet, generateExcludeUnusableTickersSnippet, generateSQLConditionSnippet, generateSQLSuffixStatementAndArguments, getDBAliasForTable, getTableColumns, getTableString, processDBQuartersToDicts, _dbGetter, generateDatabaseAnnotationObjectsFile, generateCompleteDBConnectionAndCursor, getDBConnectionAndCursor
 from utils.other import buildCommaSeparatedTickerPairString, parseCommandLineOptions
-from utils.support import asDate, asISOFormat, asList, flatten, keySortedValues, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotobj, shortc, shortcdict, sortedKeys, tqdmLoopHandleWrapper, unixToDatetime
+from utils.support import asDate, asISOFormat, asList, flatten, keySortedValues, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotobj, repackKWArgs, shortc, shortcdict, sortedKeys, tqdmLoopHandleWrapper, unixToDatetime
 
 configManager: StaticConfigManager = StaticConfigManager()
 
@@ -692,12 +692,11 @@ class DatabaseManager(Singleton):
             minDate=None
     ) -> List[StockDataDailyCRow]:
         '''returns all daily stock data, always in ASCENDING order unless using LIMIT'''
-        kwargs = {**locals()}
-        del kwargs['self']
-        del kwargs['minDate']
+        kwargs = repackKWArgs(locals(), remove='minDate')
 
         if minDate:
-            kwargs['period_date'] = SQLArgumentObj(asISOFormat(minDate), OperatorDict.GREATERTHAN)
+            if 'periodDate' in kwargs.keys(): raise ValueError('Received too many args for \'periodDate\'')
+            kwargs['periodDate'] = SQLArgumentObj(asISOFormat(minDate), OperatorDict.GREATERTHAN)
 
         hasPeriodDateArg = False
         for ob in asList(shortc(orderBy, [])):
