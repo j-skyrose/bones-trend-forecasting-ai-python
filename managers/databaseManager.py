@@ -17,7 +17,7 @@ from decimal import Decimal
 from enum import Enum
 
 from globalConfig import config as gconfig
-from constants.enums import APIState, AccuracyAnalysisTypes, AdvancedOrdering, Api, ChangeType, CorrBool, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, NormalizationMethod, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, SetType, Direction, StockDataSource
+from constants.enums import APIState, AccuracyAnalysisTypes, AdvancedOrdering, Api, ChangeType, CorrBool, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, NormalizationMethod, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, SetType, Direction, StockDataSource, TimeToLiveType
 from constants.exceptions import NotSupportedYet
 from constants.values import unusableSymbols, apiList, standardExchanges
 from managers.apiManager import APIManager
@@ -28,15 +28,15 @@ from structures.normalizationColumnObj import NormalizationColumnObj
 from structures.normalizationDataHandler import NormalizationDataHandler
 from structures.sql.sqlArgumentObj import SQLArgumentObj
 from structures.sql.sqlOrderObj import SQLOrderObj
-from utils.dbSupport import convertToCamelCase, convertToSnakeCase, generateAllSQLConditionSnippets, generateCommaSeparatedQuestionMarkString, generateExcludeTickersSnippet, generateExcludeUnusableTickersSnippet, generateSQLConditionSnippet, generateSQLSuffixStatementAndArguments, getDBAliasForTable, getTableColumns, getTableString, processDBQuartersToDicts, _dbGetter, generateDatabaseAnnotationObjectsFile, generateCompleteDBConnectionAndCursor, getDBConnectionAndCursor
+from utils.dbSupport import convertToCamelCase, convertToSnakeCase, expandSQLStatementArguments, generateAllSQLConditionSnippets, generateCommaSeparatedQuestionMarkString, generateExcludeTickersSnippet, generateExcludeUnusableTickersSnippet, generateSQLConditionSnippet, generateSQLSuffixStatementAndArguments, getDBAliasForTable, getTableColumns, getTableFunctionName, getTableString, onlyColumnListProcessing, processDBQuartersToDicts, _dbGetter, generateDatabaseAnnotationObjectsFile, generateCompleteDBConnectionAndCursor, getDBConnectionAndCursor, purgeUnusableTickers, validateQueryCacheRow
 from utils.other import buildCommaSeparatedTickerPairString, parseCommandLineOptions
-from utils.support import asDate, asISOFormat, asList, flatten, keySortedValues, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotobj, repackKWArgs, shortc, shortcdict, sortedKeys, tqdmLoopHandleWrapper, unixToDatetime
+from utils.support import asDate, asISOFormat, asList, condenseWhitespace, flatten, keySortedValues, processRawValueToInsertValue, recdotdict, Singleton, extractDateFromDesc, recdotobj, repackKWArgs, shortc, shortcdict, sortedKeys, tqdmLoopHandleWrapper, unixToDatetime
 
 configManager: StaticConfigManager = StaticConfigManager()
 
 ## generate before import to ensure things are up-to-date for the current execution
 if current_process().name == 'MainProcess': generateDatabaseAnnotationObjectsFile()
-from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, CboeVolatilityIndexRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, StockDataDailyCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, GoogleTopicIdsDRow, QueueStockDataDailyDRow
+from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, CboeVolatilityIndexRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, StockDataDailyCRow, QueryCachesCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, GoogleTopicIdsDRow, QueueStockDataDailyDRow
 from managers._generatedDatabaseExtras.databaseRowObjects import symbolsSnakeCaseTableColumns, stockDataDailyCCamelCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns, symbolInfoAlphavantageDSnakeCaseTableColumns, symbolInfoPolygonDSnakeCaseTableColumns, symbolInfoYahooDSnakeCaseTableColumns
 
 class DatabaseManager(Singleton):
@@ -106,10 +106,6 @@ class DatabaseManager(Singleton):
             data[i] = data[i] if data[i] != 'n/a' else 0
         data.append(False) ## artificial
         return data
-
-    def __purgeUnusableTickers(self, data, raw=False, **kwargs):
-        if raw: return data
-        return [d for d in data if (d.exchange, d.symbol) not in unusableSymbols]
     
     def _addColumn(self, table, columnName, columnType='TEXT', notnull=None, default=None):
         stmt = f'ALTER TABLE {self.getTableString(table)} ADD COLUMN `{columnName}`'
@@ -277,6 +273,12 @@ class DatabaseManager(Singleton):
             preMarket=None, open=None, high=None, low=None, close=None, afterHours=None, volume=None, transactions=None, artificial=None,
             groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[StockDataDailyCRow]:
         return _dbGetter("stock_data_daily_c", **locals())
+
+    def getQueryCaches_basic(self,
+            queryString=None,
+            tableName=None, columnName=None, functionType=None, exchange=None, symbol=None, comment=None, inputDate=None, rowCountStamp=None, timeToLive=None, timeToLiveType=None, pickledOrNotValue=None,
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[QueryCachesCRow]:
+        return _dbGetter("query_caches_c", **locals())
 
     def getSqliteStat1_basic(self,
             tbl=None, idx=None, stat=None,
@@ -471,10 +473,13 @@ class DatabaseManager(Singleton):
         selectColumns = ['exchange', 'symbol', 'name']
         groupByColumns = ['exchange', 'symbol']
 
+        rowCountStamp = 0 ## for cache checking
+
         symbolInfoDumpStmts = []
         symbolInfoDumpArgs = []
         for a in [Api.ALPHAVANTAGE, Api.POLYGON, Api.YAHOO]:
             if api is not None and a != api: continue
+            rowCountStamp += self.getMaxRowID(f'symbol_info_{a.name.lower()}_d')
             
             lkwargs = {}
             for k,v in symbolInfoKWArgs.items():
@@ -511,6 +516,7 @@ class DatabaseManager(Singleton):
 
         ## incorporate google topic ID info
         if topicId:
+            rowCountStamp += self.getMaxRowID('google_topic_ids_d')
             if topicId == SQLHelpers.NULL:
                 whereConditions.append(f'{siAlias}.exchange||{siAlias}.symbol NOT IN (SELECT DISTINCT exchange||symbol FROM {getTableString("google_topic_ids_d")})')
             else:
@@ -529,21 +535,22 @@ class DatabaseManager(Singleton):
                     args.append(nc.value)
 
         if requireEarningsDates:
+            rowCountStamp += self.getMaxRowID('earnings_dates_c')
             whereConditions.append(f'{siAlias}.exchange||{siAlias}.symbol IN (SELECT DISTINCT exchange||symbol FROM {getTableString("earnings_dates_c")})')
-
-        if tickerExclusionList:
-            whereConditions.append(generateExcludeTickersSnippet(tickerExclusionList, alias=siAlias))
 
         if advancedOrdering:
             if advancedOrdering in AdvancedOrdering.getVolumeEnums():
+                rowCountStamp += self.getMaxRowID(self.stockDataDailyTableString)
                 # column='volume'
                 column='SUM(volume)'
                 table = self.stockDataDailyTableString
             elif advancedOrdering in AdvancedOrdering.getGoogleInterestEnums():
+                rowCountStamp += self.getMaxRowID('google_interests_c')
                 # column='relative_interest'
                 column='SUM(relative_interest)'
                 table = getTableString('google_interests_c')
             else: ## 50/50 GI/Volume
+                rowCountStamp += self.getMaxRowID('google_interests_c') + self.getMaxRowID(self.stockDataDailyTableString)
                 ## TODO: pre-process into a DB table, use that in a JOIN here instead; takes way too long
                 column='adjusted_sum'
                 table=f'(SELECT hd.exchange,hd.symbol,hd.period_date,volume+relative_interest AS {column} FROM {self.stockDataDailyTableString} hd JOIN {getTableString("google_interests_c")} gi ON hd.exchange=gi.exchange AND hd.symbol=gi.symbol)'
@@ -554,6 +561,7 @@ class DatabaseManager(Singleton):
         ## check if any arguments are for the daily data table
         onlyStockDailyDataCamelCaseTableColumns = list(set(stockDataDailyCCamelCaseTableColumns) - set(['exchange', 'symbol']))
         if any(c in onlyStockDailyDataCamelCaseTableColumns and localsref[c] is not None for c in localsref) or (normalizationData and len(normalizationData.get(NormalizationGroupings.HISTORICAL, orNone=True)) > 0):
+            rowCountStamp += self.getMaxRowID(self.stockDataDailyTableString)
             referenceDailyData = True
             stmt += f" JOIN {self.stockDataDailyTableString} {ddAlias} ON {siAlias}.exchange=d.exchange AND {siAlias}.symbol={ddAlias}.symbol "
 
@@ -562,26 +570,61 @@ class DatabaseManager(Singleton):
             whereConditions.extend(snippets)
             args.extend(snpargs)
 
+        queryString = stmt
+        queryStringWhereConditions = whereConditions[:] ## copy so some long conditions can be shortened for the query cache table column
+        if tickerExclusionList:
+            whereConditions.append(generateExcludeTickersSnippet(tickerExclusionList, alias=siAlias))
+
+            if tickerExclusionList == unusableSymbols:
+                queryStringExclusionList = [('unusable', 'symbols')]
+            elif len(tickerExclusionList) > 10:
+                queryStringExclusionList = [('tickerlist', f'length{len(tickerExclusionList)}')]
+            else:
+                queryStringExclusionList = tickerExclusionList
+            ## aim to reduce length by condensing or using a substitute identifier
+            queryStringWhereConditions.append(generateExcludeTickersSnippet(queryStringExclusionList, alias=siAlias))
+
         ## construct WHERE portion
         if whereConditions:
-            stmt += ' WHERE ' + ' AND '.join(whereConditions)
+            generateWhereString = lambda whrConds: ' WHERE ' + ' AND '.join(whrConds)
+            stmt += generateWhereString(whereConditions)
+            queryString += generateWhereString(queryStringWhereConditions)
 
         # if referenceDailyData:
-        stmt += f' GROUP BY {",".join([f"{siAlias}.{c}" for c in groupByColumns])} '
+        ## TODO: may result in loss of rows during consolidation, need to create a computed symbol info table
+        groupByStmt = f' GROUP BY {",".join([f"{siAlias}.{c}" for c in groupByColumns])} '
+        stmt += groupByStmt
+        queryString += groupByStmt
 
         ## so query can be inserted into other queries before execution
         if rawStatement:
             return stmt, args
 
+        for a in args:
+            queryString = queryString.replace('?', str(a), 1)
+
         startt = time.time()
-        ret = self.dbc.execute(stmt, args).fetchall()
+        generateValueFunction = lambda: self.dbc.execute(stmt, args).fetchall()
+        if len(asList(exchange)) == 1 and len(asList(symbol)) == 1:
+            ## do not cache for individual tickers as performance gain may be negligible
+            tickers = generateValueFunction()
+        else:
+            tickers = self.getQueryCache(
+                tableName='symbol_info_union_c',
+                rowCountStamp=rowCountStamp,
+                queryString=condenseWhitespace(queryString),
+                insertConfig={
+                    'timeToLiveType': TimeToLiveType.ROW_CHANGE
+                },
+                generateValueFunction=generateValueFunction
+            )
         timeTaken = time.time() - startt
         if verbose > 1: print(f'getTickers took {timeTaken} seconds')
 
         if gconfig.testing.REDUCED_SYMBOL_SCOPE and (symbol is None or len(asList(symbol)) > gconfig.testing.REDUCED_SYMBOL_SCOPE):
-            ret[:] = random.sample(ret, gconfig.testing.REDUCED_SYMBOL_SCOPE)
+            tickers[:] = random.sample(tickers, gconfig.testing.REDUCED_SYMBOL_SCOPE)
         
-        return ret
+        return tickers
 
     ## assumes you are looking for rows that have details missing
     def getSymbolsTempInfo(self, api):
@@ -619,12 +662,12 @@ class DatabaseManager(Singleton):
             WHERE s.api_{api} = 1
             GROUP BY s.exchange, s.symbol
         '''.format(api=api)
-        return self.__purgeUnusableTickers(self.dbc.execute(stmt).fetchall())
+        return purgeUnusableTickers(self.dbc.execute(stmt).fetchall())
 
     ## get raw data from last_updates
     def getLastUpdatedInfo(self, seriesType, dt=None, dateModifier=OperatorDict.EQUAL, **kwargs):
         if seriesType != SeriesType.DAILY: raise NotSupportedYet
-        symbolsStmt, symbolsArgs = self.getSymbols(rawStmt=True, **kwargs)
+        symbolsStmt, symbolsArgs = self.getSymbols(rawStatement=True, **kwargs)
         stmt = f'SELECT * FROM last_updates lu JOIN ({symbolsStmt}) sl on lu.exchange=sl.exchange and lu.symbol=sl.symbol WHERE lu.type=? AND lu.api IS NOT NULL'
         args = symbolsArgs + [seriesType.function.replace('TIME_SERIES_','')]
         if dt:
@@ -643,7 +686,9 @@ class DatabaseManager(Singleton):
             stmt += ' LIMIT ' + str(gconfig.testing.predictorStockQueryLimit)
             # print(stmt)
             # print(args)
-        return self.__purgeUnusableTickers(self.dbc.execute(stmt, tuple(args)).fetchall(), **kwargs)
+        return purgeUnusableTickers(self.dbc.execute(stmt, tuple(args)).fetchall()
+                                    # ,**kwargs
+                                    )
 
     ## used by collector to determine which stocks are more in need of new/updated data
     def getLastUpdatedCollectorInfo(self, exchange=None, symbol=None, seriesType=None, api=None, googleTopicID:Union[SQLHelpers,Direction]=None, apiSortDirection:Direction=Direction.DESCENDING, apiFilter:Union[APIState, List[APIState]]=APIState.WORKING):
@@ -687,12 +732,12 @@ class DatabaseManager(Singleton):
             ## from getStockDataDaily_basic
             exchange=None, symbol=None, periodDate=None,
             preMarket=None, open=None, high=None, low=None, close=None, afterHours=None, volume=None, transactions=None, artificial=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*',
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False,
             ## additional config parameters
-            minDate=None
+            minDate=None, tickerExclusionList=None
     ) -> List[StockDataDailyCRow]:
         '''returns all daily stock data, always in ASCENDING order unless using LIMIT'''
-        kwargs = repackKWArgs(locals(), remove='minDate')
+        kwargs = repackKWArgs(locals(), remove=['rawStatement', 'minDate', 'tickerExclusionList'])
 
         if minDate:
             if 'periodDate' in kwargs.keys(): raise ValueError('Received too many args for \'periodDate\'')
@@ -710,36 +755,141 @@ class DatabaseManager(Singleton):
             periodDateOrdering = ['period_date' if not limit else SQLOrderObj('period_date', Direction.DESCENDING)]
             kwargs['orderBy'] = periodDateOrdering + asList(shortc(orderBy, []))
 
-        return self.getStockDataDaily_basic(**kwargs)
+        stmt, args = self.getStockDataDaily_basic(**kwargs, rawStatement=True)
+        if tickerExclusionList:
+            stmt += ' AND ' + generateExcludeTickersSnippet(tickerExclusionList)
+        
+        if rawStatement:
+            return stmt, args
+        else:
+            rows = self.dbc.execute(stmt, args).fetchall()
+            return onlyColumnListProcessing(rows, onlyColumn_asList)
 
     ## get all neural networks including factories and training config
     def getNetworks(self):
         stmt = 'SELECT n.*, ntc.*, ivf.factory, ivf.config FROM networks n JOIN input_vector_factories ivf ON n.factory_id = ivf.id JOIN network_training_config ntc ON n.id = ntc.id'
         return self.dbc.execute(stmt).fetchall()
 
+    def getQueryCache(self,
+                        ## select columns
+                        tableName, columnName=None, functionType=None, rowCountStamp=None, exchange=None, symbol=None, queryString=None,
+                        ## config
+                        insertConfig=None, generateValueFunction=None, verbose=1
+                        ):
+        '''returns value or list of values from query caches table if it exists; otherwise runs query, inserts result(s) into table, then returns them\n'''
+
+        kwargs = repackKWArgs(locals(), remove=['rowCountStamp', 'insertConfig', 'generateValueFunction', 'verbose'])
+        requiresRefresh = False
+        res = self.getQueryCaches_basic(**kwargs)
+        if len(res) > 1:
+            raise ValueError('Too many cache results')
+        elif len(res) == 1:
+            ## has cache, need to verify it's not expired
+            if not validateQueryCacheRow(res[0], rowCountStamp):
+                requiresRefresh = True
+            else:
+                value = res[0].pickled_or_not_value
+
+        if requiresRefresh or len(res) == 0:
+            ## no existing cache, need to create
+            if verbose: print(f"{'Re-g' if requiresRefresh else 'G'}enerating cache for {queryString}")
+            inputDate = date.today().isoformat()
+            value = generateValueFunction()
+            self.insertQueryCache(**kwargs, **insertConfig, rowCountStamp=rowCountStamp, inputDate=inputDate, pickledOrNotValue=value,
+                                  insertStrategy=SQLInsertHelpers.REPLACE)
+
+        return value
+
+    def getDistinct(self, tableName=None, columnNames=['exchange', 'symbol'], purgeUnusables=False, **queryKWArgs) -> List[Tuple[str, str]]:
+        '''Returns all distinct (..., ...) from given table, can purge unusable tickers by default.\n\nNOTE: care should be taken as MAX rowid is used for stamping, if data can be regularly removed from table cache refreshes may trigger more or less frequently then required'''
+
+        columnNames = asList(columnNames)
+        onlyColumn_asList = [c.lower().split(' as ')[1] if ' as ' in c.lower() else c for c in columnNames]
+        tableName = shortc(tableName, self.stockDataDailyTable)
+        columnNameString = ','.join(columnNames)
+        functionType = 'DISTINCT'
+
+        queryString = f'SELECT {functionType} {columnNameString} FROM {tableName}'
+        snippet, args = generateSQLSuffixStatementAndArguments(**queryKWArgs)
+        queryString += expandSQLStatementArguments(snippet, args)
+        queryString = condenseWhitespace(queryString)
+
+        tickers = self.getQueryCache(
+            tableName=tableName,
+            columnName=columnNameString,
+            functionType=functionType,
+            rowCountStamp=self.getMaxRowID(tableName),
+            queryString=queryString,
+            insertConfig={
+                'timeToLiveType': TimeToLiveType.ROW_CHANGE
+            },
+            generateValueFunction=lambda: getattr(self, getTableFunctionName(tableName, basic=True))(sqlColumns=f'{functionType} {columnNameString}', onlyColumn_asList=onlyColumn_asList, **queryKWArgs)
+        )
+        if purgeUnusables and 'exchange' in onlyColumn_asList and 'symbol' in onlyColumn_asList:
+            return purgeUnusableTickers(tickers)
+        else: return tickers
+
     ## setup helper for iterating through historical data in chronological order, stock by stock
     def getStockDataDailyStartEndDates(self, exchange=None, symbol=None):
         return self.getStockDataDaily_basic(exchange=exchange, symbol=symbol, sqlColumns='MIN(period_date) AS start, MAX(period_date) AS finish, exchange, symbol', groupBy=['exchange', 'symbol'])
 
-    def getNormalizationValue(self, tableName, columnName, normalizationMethod: NormalizationMethod=NormalizationMethod.STANDARD_DEVIATION):
+    def getNormalizationValue(self, tableName, columnName, normalizationMethod: NormalizationMethod=NormalizationMethod.STANDARD_DEVIATION, verbose=0.5):
         '''returns average/max value from given column of given table, grouped by tickers'''
 
-        stmt = f"""
-            SELECT
-            {'exchange, symbol,' if normalizationMethod == NormalizationMethod.STANDARD_DEVIATION else ''}
-            {'AVG' if normalizationMethod == NormalizationMethod.STANDARD_DEVIATION else 'MAX'}
-            ({columnName}) AS val FROM {tableName}
-            WHERE 
-            {generateExcludeUnusableTickersSnippet()}
-            {'GROUP BY exchange, symbol' if normalizationMethod == NormalizationMethod.STANDARD_DEVIATION else ''}
-            {f'LIMIT {gconfig.testing.REDUCED_SYMBOL_SCOPE}' if gconfig.testing.REDUCED_SYMBOL_SCOPE else ''}
-        """.replace('\n','')
+        kwargs = {
+            'tableName': self.stockDataDailyTable,
+            'columnName': columnName,
+            'rowCountStamp': self.getMaxRowID(self.stockDataDailyTable),
+            'insertConfig': {
+                'timeToLive': 30,
+                'timeToLiveType': TimeToLiveType.AGE
+            },
+        }
 
-        return self._queryOrGetCache(stmt, [], self._getStockDataDailyCount(), 'getnormval')
+        if normalizationMethod == NormalizationMethod.STANDARD_DEVIATION:
+            kwargs['functionType'] = 'AVG'
+            ret = []
+            tickers = self.getDistinct(purgeUnusables=True)
+            
+            for exchange, symbol in tqdmLoopHandleWrapper(tickers[:gconfig.testing.REDUCED_SYMBOL_SCOPE], verbose=verbose, desc='Getting AVG caches'):
+                val = self.getQueryCache(
+                    **kwargs,
+                    exchange=exchange,
+                    symbol=symbol,
+                    queryString=f"SELECT {kwargs['functionType']}({kwargs['columnName']}) FROM {self.stockDataDailyTable} WHERE exchange={exchange} AND symbol={symbol}",
+                    generateValueFunction=lambda: self.getStockDataDaily_basic(sqlColumns=f"{kwargs['functionType']}({kwargs['columnName']}) AS val", exchange=exchange, symbol=symbol, onlyColumn_asList='val')[0]
+                )
+                ret.append(val)
+        else:
+            kwargs['functionType'] = 'MAX'
+
+            ret = self.getQueryCache(
+                **kwargs,
+                queryString=f"SELECT {kwargs['functionType']}({kwargs['columnName']}) FROM {self.stockDataDailyTable} WHERE exchange||symbol NOT IN (unusableTickers)",
+                generateValueFunction=lambda: self.getStockDataDaily(sqlColumns=f"{kwargs['functionType']}({kwargs['columnName']}) AS val", tickerExclusionList=unusableSymbols, onlyColumn_asList='val')[0]
+            )
+
+        return ret
 
     def getNormalizationData(self, config, seriesType: SeriesType=None, normalizationGrouping: Union[NormalizationGroupings, List[NormalizationGroupings]]=None, **kwargs) -> NormalizationDataHandler:
         '''performs imperfect calculation of maxes, using column averages grouped by ticker rather than the raw values across all tickers (allows filtering out of unusable tickers while possibly saving memory/cpu time)'''
         if seriesType != SeriesType.DAILY: raise NotSupportedYet
+        def _calculateValue(c, normalizationMethod: NormalizationMethod, methodAmount):
+            if c.normalizationGrouping == NormalizationGroupings.HISTORICAL:
+                vals = self.getNormalizationValue(c.normalizationGrouping.tableName, c.columnName, normalizationMethod)
+            # elif c.normalizationGrouping == NormalizationGroupings.STOCK:
+            #     pass ## nothing to do
+            # elif c.normalizationGrouping == NormalizationGroupings.FINANCIAL:
+            #     pass ## TODO
+
+            ## determine upperlimit for this column
+            if normalizationMethod == NormalizationMethod.STANDARD_DEVIATION:
+                ## extract row values
+                std = numpy.std(vals)
+                avg = numpy.mean(vals)
+                lowerlimit = max(0, avg - std * methodAmount)
+                upperlimit = avg + std * methodAmount
+                return upperlimit
 
         ## determine which data will be collected
         normalizationGrouping = asList(normalizationGrouping)
@@ -761,24 +911,23 @@ class DatabaseManager(Singleton):
                 normalizationMethod = config.data.normalizationMethod.default.type
                 methodAmount = config.data.normalizationMethod.default.value
 
-            if c.normalizationGrouping == NormalizationGroupings.HISTORICAL:
-                data = self.getNormalizationValue(c.normalizationGrouping.tableName, c.columnName, normalizationMethod)
-            # elif c.normalizationGrouping == NormalizationGroupings.STOCK:
-            #     pass ## nothing to do
-            # elif c.normalizationGrouping == NormalizationGroupings.FINANCIAL:
-            #     pass ## TODO
-
-            ## determine upperlimit for this column
-            if normalizationMethod == NormalizationMethod.STANDARD_DEVIATION:
-                ## extract row values
-                vals = [r['val'] for r in data]
-                std = numpy.std(vals)
-                avg = numpy.mean(vals)
-                lowerlimit = max(0, avg - std * methodAmount)
-                upperlimit = avg + std * methodAmount
-                c.value = upperlimit
+            if c.normalizationGrouping == NormalizationGroupings.HISTORICAL and normalizationMethod != NormalizationMethod.STANDARD_DEVIATION:
+                c.value = self.getNormalizationValue(c.normalizationGrouping.tableName, c.columnName, normalizationMethod)
             else:
-                c.value = data[0]['val']
+                columnName = 'exchange,symbol'
+                functionType = 'CUSTOM_STDD_UPPERLIMIT' if normalizationMethod == NormalizationMethod.STANDARD_DEVIATION else 'TBD'
+                c.value = self.getQueryCache(
+                    tableName=c.normalizationGrouping.tableName,
+                    columnName=c.columnName,
+                    functionType=functionType,
+                    rowCountStamp=self.getMaxRowID(self.stockDataDailyTable),
+                    queryString=f'SELECT {functionType}({c.columnName}) FROM {self.stockDataDailyTable}',
+                    insertConfig={
+                        'timeToLive': 30,
+                        'timeToLiveType': TimeToLiveType.AGE,
+                    },
+                    generateValueFunction=lambda: _calculateValue(c, normalizationMethod, methodAmount)
+                )
 
         return normalizationData
 
@@ -1011,7 +1160,7 @@ class DatabaseManager(Singleton):
                         data=None,
                         insertStrategy: SQLInsertHelpers=SQLInsertHelpers.NONE):
         '''inserts data into stock_data_daily_c, typically consolidated daily stock data from across all dump tables'''
-        ## TODO: baseline this and auto-generate similar to _dbGetter
+        ## TODO: baseline this and auto-generate similar to _dbGetter; see also insertQueryCache
 
         self._resetCachedStockDataDailyCount()
 
@@ -1542,6 +1691,23 @@ class DatabaseManager(Singleton):
         stmt = f"UPDATE {getTableString('google_topic_ids_d')} SET {','.join([c + '=?' for c in keys])} WHERE exchange=? AND symbol=? and topic_id=?"
         self.dbc.execute(stmt, values + [exchange, symbol, topicID])
 
+    def insertQueryCache(self, 
+                         queryString, 
+                         tableName=None, columnName=None, functionType=None, exchange=None, symbol=None, comment=None, inputDate=date.today(), rowCountStamp=None, timeToLive=0, timeToLiveType:TimeToLiveType=TimeToLiveType.AGE, pickledOrNotValue=None,
+                         insertStrategy:SQLInsertHelpers=SQLInsertHelpers.NONE
+                         ):
+        ## TODO: baseline this and auto-generate similar to _dbGetter, see also insertStockData
+
+        inputDate = asISOFormat(inputDate)
+        timeToLiveType = timeToLiveType.name
+        if type(pickledOrNotValue) is list:
+            pickledOrNotValue = pickle.dumps(pickledOrNotValue)
+        kwargs = repackKWArgs(locals(), remove='insertStrategy')
+        keySet = sortedKeys(kwargs)
+
+        stmt = f"INSERT {insertStrategy.value} INTO {getTableString('query_caches_c')}({','.join(convertToSnakeCase(keySet))}) VALUES ({generateCommaSeparatedQuestionMarkString(keySet)})"
+        self.dbc.execute(stmt, keySortedValues(kwargs))
+
     #endregion
     ####################################################################################################################################################################
     #region deletes removals
@@ -1957,9 +2123,9 @@ class DatabaseManager(Singleton):
         matchcountE = 0
         matchcountS = 0
         matchSpread = {x: 0 for x in range(101)}
-        tickers = self.getStockDataDaily_basic(sqlColumns='DISTINCT exchange,symbol')
-        for t in tqdm(tickers):
-            data = self.getStockDataDaily_basic(t.exchange, t.symbol)
+        tickers = self.getDistinct()
+        for exchange, symbol in tqdm(tickers):
+            data = self.getStockDataDaily_basic(exchange, symbol)
             if len(data) < precedingRange + followingRange + 1:
                 continue
             data = data[precedingRange-1:]

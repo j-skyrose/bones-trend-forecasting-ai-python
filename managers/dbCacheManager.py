@@ -12,7 +12,7 @@ from typing import Dict
 
 from managers.base.cacheManagerBase import CacheManagerBase
 from structures.dbCacheInstance import DBCacheInstance
-from utils.dbSupport import combineSQLStatementAndArguments
+from utils.dbSupport import expandSQLStatementArguments
 
 class DBCacheManager(CacheManagerBase):
     def __init__(self, folder='db', **kwargs):
@@ -31,7 +31,7 @@ class DBCacheManager(CacheManagerBase):
                 return object
         '''
 
-        ci = DBCacheInstance(fileTag, combineSQLStatementAndArguments(queryStatement, queryArgs), cacheStamp, value)
+        ci = DBCacheInstance(fileTag, expandSQLStatementArguments(queryStatement, queryArgs), cacheStamp, value)
         fdestpath = os.path.join(self.cachePath, ci.filetag + '=' + ci.getUniqueHash() + '.pkl')
         self._add(fdestpath, ci)
         with open(fdestpath, 'wb') as f:
@@ -39,7 +39,7 @@ class DBCacheManager(CacheManagerBase):
 
     def get(self, queryStatement, stamp, queryArgs=[]):
         for c in self.caches.values():
-            if c.test(combineSQLStatementAndArguments(queryStatement, queryArgs), stamp):
+            if c.test(expandSQLStatementArguments(queryStatement, queryArgs), stamp):
                 return c.value
         return None
 

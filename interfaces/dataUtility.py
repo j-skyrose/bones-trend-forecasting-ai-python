@@ -252,16 +252,17 @@ def _verifyTechnicalIndicatorDataIntegrity(stockdata, indicator: IndicatorType, 
 
 def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cacheIndicators, indicatorConfig):
     localdbm = DatabaseManager(commitAtExit=False)
+    exchange, symbol = ticker
     latestIndicators = localdbm.dbc.execute(f'''
         SELECT MAX(date) AS date, COUNT(*) AS count, exchange, symbol, indicator, period, value FROM {localdbm.getTableString("technical_indicator_data_c")} WHERE date_type=? AND exchange=? AND symbol=? group by exchange, symbol, indicator, period
-    ''', (seriesType.name, ticker.exchange, ticker.symbol)).fetchall()
+    ''', (seriesType.name, exchange, symbol)).fetchall()
     def getLatestIndicator(i: IndicatorType, period):
         for li in latestIndicators:
             if li.indicator == i.key and li.period == period:
                 return li
 
     ## data should already be in ascending (date) order
-    stkdata = localdbm.getStockDataDaily(ticker.exchange, ticker.symbol)
+    stkdata = localdbm.getStockDataDaily(exchange, symbol)
 
     ## skip if everything is already updated
     missingIndicators = []
@@ -374,7 +375,7 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
                 else:
                     val = ','.join([str(v) for v in val])
 
-            tpls.append((ticker.exchange, ticker.symbol, seriesType.name, stkdata[-(indx+1)].period_date, i.key, iperiod, val))
+            tpls.append((exchange, symbol, seriesType.name, stkdata[-(indx+1)].period_date, i.key, iperiod, val))
 
         tpls.reverse()
         returntpls.extend(tpls)
@@ -387,7 +388,7 @@ def technicalIndicatorDataCalculationAndInsertion(exchange=None, symbol=None, se
     
     if exchange is None:
         ## iterate by exchange to save on RAM
-        exchanges = dbm.getStockDataDaily_basic(sqlColumns='DISTINCT exchange', onlyColumn_asList='exchange')
+        exchanges = dbm.getDistinct(columnNames='exchange')
     else:
         exchanges = asList(exchange)
 
@@ -397,14 +398,8 @@ def technicalIndicatorDataCalculationAndInsertion(exchange=None, symbol=None, se
     tickersupdated = 0
     rowsadded = 0
     for exch in tqdmLoopHandleWrapper(exchanges, verbose=1, desc='Exchanges'):
-        tickers = dbm.getStockDataDaily_basic(exchange=exch, symbol=symbol, sqlColumns='DISTINCT exchange,symbol')
+        tickers = dbm.getDistinct(exchange=exch, symbol=symbol, purgeUnusables=True)
         print('Got {} tickers'.format(len(tickers)))
-
-        purgedCount = len(tickers)
-        ## purge invalid/inappropriate tickers
-        tickers[:] = [t for t in tickers if (t.exchange, t.symbol) not in unusableSymbols]
-        purgedCount -= len(tickers)
-        print('Purged {} tickers'.format(purgedCount))
 
         inserttpls = []
         for tpls in tqdmProcessMapHandlerWrapper(partial(_multicore_updateTechnicalIndicatorData, seriesType=seriesType, cacheIndicators=cacheIndicators, indicatorConfig=indicatorConfig), tickers, verbose=1, sequentialOverride=sequential, desc='Calculating techInd data for tickers'):
@@ -434,23 +429,24 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, tickers=[], autoUpdateDa
     if (exchange or symbol) and tickers: raise ValueError
     if (exchange or symbol) and not tickers: tickers = [(exchange, symbol)]
 
-    alltickers = dbm.getStockDataDaily_basic(sqlColumns='DISTINCT exchange,symbol')
-    loopTickers = [r for r in alltickers if (r.exchange, r.symbol) in tickers] if tickers else alltickers
+    allTickers = dbm.getDistinct(purgeUnusables=True)
+    loopTickers = [r for r in allTickers if r in tickers] if tickers else allTickers
 
     dateGapsInit = lambda: ({} if len(tickers) > 1 else [])
     dateGaps = dateGapsInit()
     currentDamagedTickers = set()
     lastDamagedTickers = set()
     for rerun in range(2):
-        for r in tqdmLoopHandleWrapper(loopTickers, verbose, desc='Determining DAILY historical gaps'):
-            if (r.exchange, r.symbol) in unusableSymbols or (r.exchange, r.symbol) in lastDamagedTickers: continue
+        for ticker in tqdmLoopHandleWrapper(loopTickers, verbose, desc='Determining DAILY historical gaps'):
+            if ticker in lastDamagedTickers: continue
+            exchange, symbol = ticker
 
-            data = dbm.getStockDataDaily(r.exchange, r.symbol)
+            data = dbm.getStockDataDaily(exchange=exchange, symbol=symbol)
             startDate = date.fromisoformat(data[0].period_date)
             endDate = date.fromisoformat(data[-1].period_date)
             if verbose>=2: 
                 print('###############################################')
-                print(r.exchange, r.symbol)
+                print(ticker)
                 print(startDate, ' -> ', endDate)
 
             dindex = 0
@@ -466,7 +462,7 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, tickers=[], autoUpdateDa
 
                 ## holiday checker
                 if cyear != cdate.year:
-                    holidays = MarketDayManager.getMarketHolidays(cdate.year, r.exchange)
+                    holidays = MarketDayManager.getMarketHolidays(cdate.year, exchange)
                     cyear = cdate.year
                     if verbose>=2: print('holidays for', cyear, holidays)
                 if cdate in holidays:
@@ -480,15 +476,15 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, tickers=[], autoUpdateDa
                         print('is gap')
                     if len(tickers) > 1:
                         try:
-                            dateGaps[cdate].append((r.exchange, r.symbol))
+                            dateGaps[cdate].append(ticker)
                         except KeyError:
-                            dateGaps[cdate] = [(r.exchange, r.symbol)]
+                            dateGaps[cdate] = [ticker]
                     else:
                         dateGaps.append(cdate)
                     consecgaps += 1
 
                     if consecgaps > 40: 
-                        currentDamagedTickers.add((r.exchange, r.symbol))
+                        currentDamagedTickers.add(ticker)
                 else:
                     dindex += 1
                     consecgaps = 0
@@ -514,11 +510,7 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, tickers=[], autoUpdateDa
                             tickers = line.split(')')[:-1] ## drop empty
                             for tindx in range(len(tickers)):
                                 tickers[tindx] = (*tickers[tindx].replace('\'','').split(','),)
-                            newDamagedTickers = set()
-                            for t in tickers:
-                                newDamagedTickers.add(t)
-                            for t in currentDamagedTickers:
-                                newDamagedTickers.add(t)
+                            newDamagedTickers = set(tickers + currentDamagedTickers)
 
                             line = buildCommaSeparatedTickerPairString(newDamagedTickers) + '\n'
                             autoWrittenLineIsNext = False
@@ -646,10 +638,11 @@ def earningsDateCalculationAndInsertion(simple=True, verbose=1):
 
     # exchange='NASDAQ'
     exchange=None
-    nasdaqSymbols = [x.symbol for x in dbm.dbc.execute(f'select distinct symbol from {dbm.getTableString("earnings_dates_nasdaq_d")}').fetchall() if x.symbol not in excludeTickers]
-    marketwatchSymbols = [x.symbol for x in dbm.dbc.execute(f'select distinct symbol from {dbm.getTableString("earnings_dates_marketwatch_d")}').fetchall() if x.symbol not in excludeTickers]
-    yahooSymbols = [x.symbol for x in dbm.dbc.execute(f'select distinct symbol from {dbm.getTableString("earnings_dates_yahoo_d")}').fetchall() if x.symbol not in excludeTickers]
-    ntickers = set(nasdaqSymbols + marketwatchSymbols + yahooSymbols)
+    symbolTables = ['earnings_dates_nasdaq_d', 'earnings_dates_marketwatch_d', 'earnings_dates_yahoo_d']
+    allSymbolList = []
+    for st in symbolTables:
+        allSymbolList += dbm.getDistinct(st, columnNames='symbol')
+    ntickers = set([s for s in allSymbolList if s not in excludeTickers])
     # ntickers = ['OILSF']
     # ntickers = ['WBD'] ## 2008 - 5, 2009 - 6, 2010 - 7
     # ntickers = ['VRME'] ## 2021 - 5; 2 removed

@@ -22,7 +22,7 @@ useMainGPU = True
 try:    TESTING
 except: TESTING = False
 try:    REDUCED_SYMBOL_SCOPE
-except: REDUCED_SYMBOL_SCOPE = 0
+except: REDUCED_SYMBOL_SCOPE = None
 try:    TESTING_PREDICTOR
 except: TESTING_PREDICTOR = False
 try:    SEED_RANDOM

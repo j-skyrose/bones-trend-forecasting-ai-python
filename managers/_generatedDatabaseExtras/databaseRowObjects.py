@@ -326,6 +326,24 @@ class StockDataDailyCRow():
         self.transactions = transactionsValue
         self.artificial = artificialValue
 
+## TABLE: query_caches_c ######################################
+queryCachesCSnakeCaseTableColumns = ['table_name', 'column_name', 'function_type', 'exchange', 'symbol', 'comment', 'input_date', 'row_count_stamp', 'time_to_live', 'time_to_live_type', 'pickled_or_not_value', 'query_string']
+queryCachesCCamelCaseTableColumns = ['tableName', 'columnName', 'functionType', 'exchange', 'symbol', 'comment', 'inputDate', 'rowCountStamp', 'timeToLive', 'timeToLiveType', 'pickledOrNotValue', 'queryString']
+class QueryCachesCRow():
+    def __init__(self, table_nameValue: str, column_nameValue: str, function_typeValue: str, exchangeValue: str, symbolValue: str, commentValue: str, input_dateValue: str, row_count_stampValue: int, time_to_liveValue: int, time_to_live_typeValue: str, pickled_or_not_valueValue, query_stringValue: str):
+        self.table_name = table_nameValue
+        self.column_name = column_nameValue
+        self.function_type = function_typeValue
+        self.exchange = exchangeValue
+        self.symbol = symbolValue
+        self.comment = commentValue
+        self.input_date = input_dateValue
+        self.row_count_stamp = row_count_stampValue
+        self.time_to_live = time_to_liveValue
+        self.time_to_live_type = time_to_live_typeValue
+        self.pickled_or_not_value = pickled_or_not_valueValue
+        self.query_string = query_stringValue
+
 ## TABLE: sqlite_stat1 ######################################
 sqliteStat1SnakeCaseTableColumns = ['tbl', 'idx', 'stat']
 sqliteStat1CamelCaseTableColumns = ['tbl', 'idx', 'stat']

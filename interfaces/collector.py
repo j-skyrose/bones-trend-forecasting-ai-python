@@ -26,7 +26,7 @@ from constants.exceptions import APILimitReached, APIError, APITimeout, NotSuppo
 from utils.collectorSupport import getYahooExchangeForSymbol
 from utils.dbSupport import convertToSnakeCase, getTableString
 from utils.other import parseCommandLineOptions
-from utils.support import asDate, asDatetime, asISOFormat, asList, getIndex, getItem, recdotdict, shortcdict, tqdmLoopHandleWrapper
+from utils.support import asDate, asDatetime, asISOFormat, asList, getIndex, recdotdict, shortcdict, tqdmLoopHandleWrapper
 from constants.enums import APIState, Api, FinancialReportType, FinancialStatementType, InterestType, MarketType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
 from constants.values import tseNoCommissionSymbols, minGoogleDate
 
@@ -257,20 +257,15 @@ class Collector:
     def _loopCollectBySymbol_new(self, api:Api=Api.ALPHAVANTAGE, symbol=None, seriesType: SeriesType=SeriesType.DAILY, active=True, limit=None, dryrun=False, verbose=1):
         if api not in [Api.ALPHAVANTAGE]: raise NotSupportedYet
 
-        getStockDataFunction = getattr(dbm, f'getDumpStockDataDaily{api.name.capitalize()}_basic')
-        getTickerInfoFunction = getattr(dbm, f'getDumpSymbolInfo{api.name.capitalize()}_basic')
+        symbolInfoTableName = f'symbol_info_{api.name.lower()}_d'
         insertFunction = getattr(dbm, f'insertStockDataDump_{api.name.lower()}')
 
         ## determine symbols to collect for
         symbol = asList(symbol)
         if not symbol:
-            hasData = getStockDataFunction(sqlColumns='DISTINCT exchange,symbol')
-            allTickers = getTickerInfoFunction(status='Active' if active else ('Delisted' if active == False else None), sqlColumns='DISTINCT exchange,symbol')
-            noDataSymbols = []
-            for t in allTickers:
-                if not getItem(hasData, lambda x: (x.exchange, x.symbol) == (t.exchange, t.symbol)):
-                    noDataSymbols.append((t.exchange, t.symbol))
-            symbol = noDataSymbols
+            distinctDataTickers = dbm.getDistinct(tableName=f'stock_data_daily_{api.name.lower()}_d')
+            allTickers = dbm.getDistinct(tableName=symbolInfoTableName, status='Active' if active else ('Delisted' if active == False else None))
+            symbol = [t for t in allTickers if t not in distinctDataTickers] ## i.e. all tickers with no data
         if limit: symbol = symbol[:limit]
 
         exchangeErrors = []
@@ -288,7 +283,7 @@ class Collector:
             else:
                 ## determine correct exchange for the symbol
                 symbl = s
-                tickerInfo = getTickerInfoFunction(symbol=symbl, sqlColumns='DISTINCT exchange', onlyColumn_asList='exchange')
+                tickerInfo = dbm.getDistinct(tableName=symbolInfoTableName, columnNames='exchange', symbol=symbl)
                 if len(tickerInfo) != 1:
                     exchangeErrors.append(symbl)
                     if verbose:
@@ -333,7 +328,7 @@ class Collector:
             if exchangeErrors: print(f'{len(exchangeErrors)} symbols had exchange errors: {exchangeErrors}')
             if apiErrors: print(f'{len(apiErrors)} symbols had API errors: {apiErrors}')
             if noDataErrors: print(f'{len(noDataErrors)} symbols had no data returned: {noDataErrors}')
-            print(f"{'Would insert' if dryrun else 'Inserted'} {insertCount if not dryrun else '?'} rows for {successCount - len(exchangeErrors) - len(apiErrors) - len(noDataErrors)}/{len(symbol)} symbols")
+            print(f"{'Would insert' if dryrun else 'Inserted'} {insertCount if not dryrun else '?'} rows for {successCount}/{len(symbol)} symbols")
 
     def collectDailyStockData(self, api:Api=Api.POLYGON, seriesType: SeriesType=SeriesType.DAILY, direction: Direction=Direction.ASCENDING, startDate=None, symbol=None, active=True, limit=None, dryrun=False, verbose=1):
         if api not in [Api.POLYGON, Api.ALPHAVANTAGE]: raise NotSupportedYet
@@ -773,24 +768,20 @@ class Collector:
         gapi = self.apiManager.get(Api.GOOGLE)
 
         if not tickers:
-            tickerSet = set()
+            allTickersList = []
             for api in [Api.ALPHAVANTAGE, Api.POLYGON, Api.YAHOO]:
-                getFunction = getattr(dbm, f'getDumpSymbolInfo{api.name.capitalize()}_basic')
                 if api == Api.POLYGON:
                     getkwargs = {
-                        'sqlColumns': 'DISTINCT exchange_alias as exchange,ticker as symbol',
+                        'columnNames': ['exchange_alias as exchange', 'ticker as symbol'],
                         'exchangeAlias': SQLHelpers.NOTNULL
                     }
                 else:
                     getkwargs = {
-                        'sqlColumns': 'DISTINCT exchange,symbol',
                         'exchange': SQLHelpers.NOTNULL
                     }
-
-                res = getFunction(**getkwargs)
-                for r in res:
-                    tickerSet.add((r.exchange, r.symbol))
-            tickers = list(tickerSet)
+                res = dbm.getDistinct(tableName=f'symbol_info_{api.name.lower()}_d', **getkwargs)
+                allTickersList += res
+            tickers = list(set(allTickersList)) ## remove duplicates
         
         topicsNew = []
         topicsExisting = []

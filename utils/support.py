@@ -413,7 +413,7 @@ def compressObj(obj):
 
 def repackKWArgs(kwargs, removeSelf=True, remove=None):
     '''Creates a new dictionary containing all keys from the 'kwargs' parameter who's values are not None, and who's keys do not include 'self' or any passed in 'remove' arg.\nFirst arg should be a dictionary, typically "locals()".'''
-    
+
     removeKeys = asList(remove)
     if removeSelf: removeKeys.append('self')
     if 'kwargs' in kwargs:
@@ -422,6 +422,10 @@ def repackKWArgs(kwargs, removeSelf=True, remove=None):
 
     ret = { k:v for k,v in kwargs.items() if k not in removeKeys and v is not None }
     return ret
+
+def condenseWhitespace(string):
+    '''condenses all whitespace into single spaces'''
+    return re.sub('\s{2,}', ' ', string)
 
 if __name__ == '__main__':
     # print(processRawValueToInsertValue(44))

@@ -316,6 +316,10 @@ class ReductionMethod(Enum):
     RANDOM = 'RANDOM'
     ALL = 'ALL'
 
+class TimeToLiveType(Enum):
+    ROW_CHANGE = 'ROW_CHANGE'
+    AGE = 'DAY_CHANGE'
+
 class NormalizationGroupings(Enum):
     def __init__(self, a):
         self.tableName = a

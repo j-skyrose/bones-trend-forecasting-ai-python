@@ -10,16 +10,16 @@ sys.path.append(path)
 
 import pickle, re, sqlite3
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Tuple
 
-from constants.enums import NormalizationGroupings, SQLHelpers
+from constants.enums import NormalizationGroupings, SQLHelpers, TimeToLiveType
 from constants.values import normalizationColumnPrefix, unusableSymbols, tab
 from managers.configManager import StaticConfigManager
 from structures.sql.sqlArgumentObj import SQLArgumentObj
 from structures.sql.sqlOrderObj import SQLOrderObj
 from utils.other import parseCommandLineOptions
-from utils.support import asList, recdotdict, recdotlist, shortc, shortcdict
+from utils.support import asISOFormat, asList, recdotdict, recdotlist, shortc, shortcdict
 
 mainDBAlias = 'main'
 computedDBAlias = 'computeddbalias'
@@ -32,7 +32,10 @@ def recdotdict_factory(cursor, row):
         if col[0] == 'timestamp' and re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}', shortc(row[idx], '')):
             retdict[col[0]] = datetime.strptime(row[idx], '%Y-%m-%d %X')
         elif col[0].startswith('pickled'):
-            retdict[col[0]] = pickle.loads(row[idx])
+            try:
+                retdict[col[0]] = pickle.loads(row[idx])
+            except (pickle.UnpicklingError, TypeError):
+              retdict[col[0]] = row[idx]  
         else: retdict[col[0]] = row[idx]
     return recdotdict(retdict)
 
@@ -105,7 +108,7 @@ def generateCommaSeparatedQuestionMarkString(val):
     if type(val) != int: raise ValueError('Must be an integer')
     return ','.join(('?',) * val)
 
-def combineSQLStatementAndArguments(stmt, args=[]):
+def expandSQLStatementArguments(stmt, args=[]):
     '''replaces '?'s with the actual argument values'''
 
     if args:
@@ -124,6 +127,17 @@ def parseNormalizationColumn(c) -> Tuple[NormalizationGroupings, str]:
 
     return normalizationGrouping, columnName
 
+def validateQueryCacheRow(row, rowCountStamp):
+    if row.time_to_live_type == TimeToLiveType.ROW_CHANGE.name:
+        return rowCountStamp == row.row_count_stamp
+    elif row.time_to_live_type == TimeToLiveType.AGE.name:
+        return (date.today() - date.fromisoformat(row.input_date)).days <= row.time_to_live or rowCountStamp == row.row_count_stamp
+
+def purgeUnusableTickers(data, raw=False):
+    if raw or len(data) == 0: return data
+    massageFunction = (lambda x: x) if type(data[0]) is tuple else (lambda x: (x.exchange, x.symbol))
+    return [d for d in data if massageFunction(d) not in unusableSymbols]
+
 def generateExcludeTickersSnippet(tickerList, alias=None):
     '''returns "exchange||symbol NOT IN (...)" snippet for SQL WHERE clause'''
     aliasString = f'{alias}.' if alias else ''
@@ -135,6 +149,7 @@ def generateExcludeUnusableTickersSnippet(alias=None):
 
 def generateSQLConditionSnippet(key, value, tableAlias=None):
     if value is None: return '', []
+    key = convertToSnakeCase(key)
 
     tableAlias = f'{tableAlias}.' if tableAlias else ''
     if type(value) == SQLHelpers:
@@ -143,7 +158,10 @@ def generateSQLConditionSnippet(key, value, tableAlias=None):
         value: SQLArgumentObj
         return f' ? {value.modifier.sqlsymbol} {tableAlias}{key} ', [value.value]
     else:
-        if issubclass(value.__class__, Enum): value = value.name
+        if issubclass(value.__class__, Enum):
+            value = value.name
+        elif type(value) in [datetime, date]:
+            value = asISOFormat(value)
         vlist = asList(value)
         return f' {tableAlias}{key} in ({",".join(["?" for x in range(len(vlist))])}) ', vlist
 
@@ -165,6 +183,8 @@ def generateSQLSuffixStatementAndArguments(excludeKeys=[], tableAlias=None, **kw
     excludeKeys = ['self', 'kwargs'] + asList(excludeKeys)
     for exk in excludeKeys:
         if exk in kwargs.keys(): del kwargs[exk]
+
+    if len(kwargs) == 0: return '', []
 
     ## extract and generate order by statement
     orderByStmt = ''
@@ -220,6 +240,18 @@ def generateSQLSuffixStatementAndArguments(excludeKeys=[], tableAlias=None, **kw
 
     return stmt, rtargs
 
+def convertToOnlyColumnList(rows, onlyColumn_asList):
+    if type(onlyColumn_asList) is list:
+        return [tuple([r[col] for col in onlyColumn_asList]) for r in rows]
+    else:
+        return [r[onlyColumn_asList] for r in rows]
+
+def onlyColumnListProcessing(rows, onlyColumn_asList):
+    if onlyColumn_asList and len(rows) > 0:
+        return convertToOnlyColumnList(rows, onlyColumn_asList)
+    else:
+        return rows
+
 def _dbGetter(table, sqlColumns='*', onlyColumn_asList=None, rawStatement=False, **kwargs):
     '''generalized SELECT statement builder and executor'''
     dbm = kwargs['self']
@@ -229,10 +261,7 @@ def _dbGetter(table, sqlColumns='*', onlyColumn_asList=None, rawStatement=False,
         return stmt, arguments
     else:
         rows = dbm.dbc.execute(stmt, arguments).fetchall()
-        if onlyColumn_asList and len(rows) > 0:
-            return [r[onlyColumn_asList] for r in rows]
-        else:
-            return rows
+        return onlyColumnListProcessing(rows, onlyColumn_asList)
 
 def getDBAliases():
     '''return list containing all DB aliases'''
@@ -265,6 +294,18 @@ def generateCompleteDBConnectionAndCursor(propertiesDatabasePath=None, computedD
     attachDB(dbc, shortc(computedDatabasePath, configManager.get('computeddatabase', required=True)), computedDBAlias)
     attachDB(dbc, shortc(dumpDatabasePath, configManager.get('dumpdatabase', required=True)), dumpDBAlias)
     return connect, dbc
+
+def getTableFunctionName(tableName, basic=False):
+    '''converts table name to get{table name in Pascal case}, appropriately for computed/dump tables'''
+    ret = ''
+    if tableName.endswith('_c'):
+        ret = f'get{convertToPascalCase(tableName[:-2])}'
+    elif tableName.endswith('_d'):
+        ret = f'getDump{convertToPascalCase(tableName[:-2])}'
+    else:
+        ret = f'get{convertToPascalCase(tableName)}'
+    if basic: ret += '_basic'
+    return ret
 
 def getTableString(tableName) -> str:
     '''returns full table name with DB alias if it is not 'main': dbalias.tableName'''
