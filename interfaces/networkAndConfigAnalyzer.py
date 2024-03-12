@@ -78,7 +78,7 @@ class NetworkAndConfigAnalyzer:
         if len(self.__network) == 1 and len(self.__config) == 1:
             self._initializeTrainer(0, 0)
 
-    def _initializeTrainer(self, networkIndx=None, configIndx=None, page=1):
+    def _initializeTrainer(self, networkIndx=None, configIndx=None, page=0):
         '''initialize/update dataManager and create new trainer for the current network/config'''
 
         ## check if already initialized
@@ -125,12 +125,12 @@ class NetworkAndConfigAnalyzer:
         configStats = [[] for i in range(len(self.__config))]
 
         if iterations == max:
-            self._initializeTrainer(configIndx=0, page=1)
+            self._initializeTrainer(configIndx=0, page=0)
             iterations = self.dataManager.getSymbolListPageCount()
         for i in range(iterations):
             for cfindx in range(len(self.__config)):
                 try:
-                    self._initializeTrainer(configIndx=cfindx, page=(i+1))
+                    self._initializeTrainer(configIndx=cfindx, page=i)
                     self.currentTrainer.train(**kwargs)
                     configStats[cfindx].append(self.currentTrainer.network.getAccuracyStats())
                 except InsufficientInstances:

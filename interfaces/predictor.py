@@ -155,7 +155,7 @@ class Predictor(Singleton):
         ## build input vectors for all tickers; iterating through pages of symbol list
         loopingTickers = True
         maxPage = cls.dm.getSymbolListPageCount() if cls.dm.usePaging else None
-        pageLoopHandle = range(1, maxPage+1) if cls.dm.usePaging else [0]
+        pageLoopHandle = range(maxPage) if cls.dm.usePaging else [0]
         for page in pageLoopHandle:
             loopList = tickers
             if cls.dm.usePaging:

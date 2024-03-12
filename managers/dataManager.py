@@ -167,7 +167,7 @@ class DataManager():
         self.symbolList = symbolList
         self.usePaging = maxPageSize > 0
         self.pageSize = maxPageSize
-        self.currentPage = 1
+        self.currentPage = 0
         ##
 
         ## for page/window-based initialization of keras sets, for training
@@ -216,9 +216,9 @@ class DataManager():
             if not skipAllDataInitialization:
                 initSymbolList = symbolList
                 if self.usePaging:
-                    initSymbolList = self.getSymbolListPage(1)
+                    initSymbolList = self.getSymbolListPage()
                 
-                self._initializeAllData(initSymbolList, self.currentPage if self.usePaging else None, skips=skips)
+                self._initializeAllData(initSymbolList, refresh=self.usePaging, skips=skips)
 
         self.vixDataHandler = VIXManager(self.shouldNormalize).data
 
@@ -226,6 +226,7 @@ class DataManager():
 
     def initializeAllDataForPage(self, page, verbose=None):
         if not self.usePaging: raise ArgumentError('Manager not setup with paging')
+        self.currentPage = page
         self._initializeAllData(self.getSymbolListPage(page), refresh=True, verbose=verbose)
         gc.collect() ## help clean up old/cleared data
 
@@ -359,24 +360,33 @@ class DataManager():
 
         self = cls.forAnalysis(
             initializeStockDataHandlersOnly=True,
+            maxPageSize=100,
             **kwargs
         )
 
         ## catalog output classes for all instances for all handlers
-        outputClassCountsDict = {}
-        for k,v in tqdm.tqdm(self.stockDataHandlers.items(), desc='Collecting output class counts'):
-            outputClassCountsDict[k] = self.initializeStockDataInstances([v], collectOutputClassesOnly=True, verbose=0)
-        noposCount = 0
-        for k,v in outputClassCountsDict.items():
-            if v[OutputClass.POSITIVE] > 0:
-                print(k.getTuple(), v)
-            else: noposCount += 1
-        print(f'Remaining {noposCount}/{len(outputClassCountsDict)} have no positive instances')
+        outputClassCountsByTicker = {}
+        for i in range(self.getSymbolListPageCount()):
+            _localOutputClassCountsByTicker = {}
+            if i != 0: self.initializeAllDataForPage(i)
+            for k,v in tqdm.tqdm(self.stockDataHandlers.items(), desc='Collecting output class counts'):
+                if not v.selections: continue ## no instances
+                _localOutputClassCountsByTicker[k] = self.initializeStockDataInstances([v], collectOutputClassesOnly=True, verbose=0)
+            hasPositivesCount = 0
+            for k,v in _localOutputClassCountsByTicker.items():
+                if v[OutputClass.POSITIVE] > 0:
+                    print(k.getTuple(), v)
+                    hasPositivesCount += 1
+            print(f'Initialized page {i+1}/{self.getSymbolListPageCount()+1}. Tickers with positives count: {hasPositivesCount}/{len(_localOutputClassCountsByTicker)}')
+            outputClassCountsByTicker = {**outputClassCountsByTicker, **_localOutputClassCountsByTicker}
 
         instanceCount = 0
-        for v in outputClassCountsDict.values():
+        positiveInstanceCount = 0
+        for v in outputClassCountsByTicker.values():
+            positiveInstanceCount += v[OutputClass.POSITIVE]
             for o in OutputClass:
                 instanceCount += v[o]
+        print(f'Overall positive instance counts: {positiveInstanceCount}/{instanceCount}')
 
         windowPercentage = getAdjustedSlidingWindowPercentage(instanceCount, setCount)
         windowSize = int(instanceCount*windowPercentage)
@@ -388,7 +398,7 @@ class DataManager():
         ## catalog tickers into optimal-level buckets
         optimals = [[] for i in range(3)]
         nonOptimals = []
-        for k,v in outputClassCountsDict.items():
+        for k,v in outputClassCountsByTicker.items():
             splt = v[OutputClass.POSITIVE] / (v[OutputClass.POSITIVE] + v[OutputClass.NEGATIVE])
             for i in range(len(optimals)):
                 lowerBound = splitRatio - 0.02*(i+1)
@@ -428,9 +438,9 @@ class DataManager():
                         for opindex in range(len(tickers)):
                             if opindex in skipIndexes: continue
 
-                            if getWindowCountTotal(windows[windex]) + outputClassCountsDict[tickers[opindex]][OutputClass.POSITIVE] + outputClassCountsDict[tickers[opindex]][OutputClass.NEGATIVE] < windowSize * additionalToleranceFactor:
+                            if getWindowCountTotal(windows[windex]) + outputClassCountsByTicker[tickers[opindex]][OutputClass.POSITIVE] + outputClassCountsByTicker[tickers[opindex]][OutputClass.NEGATIVE] < windowSize * additionalToleranceFactor:
                                 ## ticker can fit in window
-                                windows[windex].append(outputClassCountsDict[tickers[opindex]])
+                                windows[windex].append(outputClassCountsByTicker[tickers[opindex]])
                                 tickerWindows[windex].append(tickers[opindex].getDict()) ## must go in as dict so unpickling and sql factory can work
                                 skipIndexes.append(opindex)
 
@@ -468,7 +478,7 @@ class DataManager():
         if len(nonOptimals) > 0:
             print('Remaining non-optimals')
             for o in nonOptimals:
-                print(o, outputClassCountsDict[o])
+                print(o, outputClassCountsByTicker[o])
 
         return tickerWindows
     
@@ -476,7 +486,7 @@ class DataManager():
         return getMaxIndicatorPeriod(self.config.feature[indicatorsKey].keys(), self.indicatorConfig)
 
     ## preserves much of the initialized data while mainly allowing new input vectors to be created with a different configuration
-    def setNewConfig(self, config, indicatorConfig=None, page=1,
+    def setNewConfig(self, config, indicatorConfig=None, page=0,
                      verbose=None):
         verbose = shortc(verbose, self.verbose)
 
@@ -1116,15 +1126,18 @@ class DataManager():
         if self.useAllSets and self.useOptimizedSplitMethodForAllSets:
             return len(self.windows)
         return math.ceil(1 / self.setsSlidingWindowPercentage)
-    
-    ## returns the slice of symbol list that corresponds to the given page (1 -> ~len(symbolList)/pageSize)
-    def getSymbolListPage(self, page):
+
+    def getSymbolListPage(self, indx=0):
+        '''returns the slice of symbol list that corresponds to the given page (0 -> [~len(symbolList)/pageSize]-1)'''
         if not self.usePaging: raise NotImplementedError()
-        if page < 1 or (page-1)*self.pageSize > len(self.symbolList): raise ArgumentError(None, 'Invalid page number argument')
-        return self.symbolList[math.floor((page-1)*self.pageSize):math.floor(page*self.pageSize)]
-    
-    ## returns how many pages the initial symbol list is divided into
+        pageCount = self.getSymbolListPageCount()
+        if indx >= pageCount or indx < (pageCount*-1): raise IndexError('Page index out of range')
+
+        pageIndx = indx if indx >= 0 else pageCount + indx
+        return self.symbolList[math.floor(pageIndx*self.pageSize):math.floor((pageIndx+1)*self.pageSize)]
+
     def getSymbolListPageCount(self):
+        '''returns how many pages the initial symbol list is divided into'''
         if not self.usePaging: raise NotImplementedError()
         return math.ceil(len(self.symbolList)/self.pageSize)
 

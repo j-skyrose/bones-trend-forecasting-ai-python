@@ -963,7 +963,7 @@ class DatabaseManager(Singleton):
             return correct/total
 
     def getTickerSplit(self, networkId, setCount):
-        res = self.getTickerSplits_basic(**locals())
+        res = self.getTickerSplits_basic(networkId=networkId, setCount=setCount)
         if len(res) > 1:
             raise ValueError('Too many returned rows')
         return recdotobj(res[0]['pickled_split'])
