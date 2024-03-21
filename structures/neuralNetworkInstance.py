@@ -249,16 +249,18 @@ class NeuralNetworkInstance:
             self.model.save(self.filepath)
 
     def load(self):
-        K.clear_session()
-        gc.collect()
-        self.model = load_model(self.filepath)
+        if not self.model:
+            K.clear_session()
+            gc.collect()
+            self.model = load_model(self.filepath)
 
     def unload(self, save=False):
-        if save:
-            self.save()
-        self.model = None
-        K.clear_session()
-        gc.collect()
+        if self.model:
+            if save:
+                self.save()
+            self.model = None
+            K.clear_session()
+            gc.collect()
 
     def _initializeAccumulatorIfRequired(self):
         if not self.useAllSetsAccumulator:

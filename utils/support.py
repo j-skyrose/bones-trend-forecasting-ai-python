@@ -106,7 +106,7 @@ def keySortedValues(d):
     '''ensures consistent order of values according to order of keys'''
     return [d[k] for k in sortedKeys(d)]
 
-def shortc(val, e):
+def shortc(val, e=None):
     ## and (type(val) is not list or (type(val) is list and len(val) > 0))
     # try:
     listCond = len(val) > 0 if type(val) is list else True

@@ -27,6 +27,7 @@ from managers.databaseManager import DatabaseManager
 from managers.vixManager import VIXManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from managers.inputVectorFactory import InputVectorFactory
+from managers.marketDayManager import MarketDayManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.financialDataHandler import FinancialDataHandler
 from structures.stockDataHandler import StockDataHandler
@@ -330,9 +331,10 @@ class DataManager():
     '''  
     @classmethod
     def forPredictor(cls, nn: NeuralNetworkInstance, anchorDate, **kwargs):
+        nn = NeuralNetworkManager().get(nn)
         if nn.config.data.normalize:
             kwargs['normalizationData'] = nn.stats.normalizationData
-        symbolList = dbm.getLastUpdatedInfo(nn.stats.seriesType, anchorDate, OperatorDict.LESSTHANOREQUAL, **kwargs)
+        symbolList = dbm.getSymbols(periodDate=MarketDayManager.advance(anchorDate, -1), **kwargs)
 
         if shortcdict(kwargs, 'verbose', 1) >= 1: print('OG list length', len(symbolList))
 

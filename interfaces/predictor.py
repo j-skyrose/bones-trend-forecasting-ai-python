@@ -17,10 +17,10 @@ from typing import Tuple
 from utils.other import determinePrecedingRangeType
 from constants.values import standardExchanges
 from managers.databaseManager import DatabaseManager
-from managers.marketDayManager import MarketDayManager
-from managers.neuralNetworkManager import NeuralNetworkManager
 from managers.dataManager import DataManager
 from managers.inputVectorFactory import InputVectorFactory
+from managers.marketDayManager import MarketDayManager
+from managers.neuralNetworkManager import NeuralNetworkManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.stockDataHandler import StockDataHandler
 from constants.enums import AccuracyType, InputVectorDataType
@@ -39,38 +39,39 @@ def thresholdRound(val):
 
 class Predictor(Singleton):
     dm: DataManager = None
-    exchanges = []
-    symbols = []
+    exchange = []
+    symbol = []
 
     def __init__(self):
         self.resetTestTimes()
 
-    def _initialize(self, **kwargs
-    # exchange=[], symbols=[]
-    ) -> Tuple[NeuralNetworkInstance, list]:
-        exchanges = asList(shortcdict(kwargs, 'exchange', []))
-        symbols = asList(shortcdict(kwargs, 'symbol', []))
-
-        nn = nnm.get(kwargs['network'])
+    def _initialize(self, dataManager=None, exchange=None, symbol=None, network=None, **kwargs) -> NeuralNetworkInstance:
+        nn = nnm.get(network)
         nn.load()
 
-        needNewDataManager = False
-        if len(Predictor.symbols) == 0:
-            for e in exchanges:
-                if e not in Predictor.exchanges:
-                    needNewDataManager = True
-                    break
-        else:
-            for s in symbols:
-                if s not in Predictor.symbols:
-                    needNewDataManager = True
-                    break
-            
-        if needNewDataManager or not Predictor.dm:
-            Predictor.dm = DataManager.forPredictor(nn, **kwargs)
+        if not dataManager:
+            exchange = asList(exchange)
+            symbol = asList(symbol)
 
-        Predictor.exchanges = exchanges
-        Predictor.symbols = symbols
+            needNewDataManager = False
+            if len(Predictor.symbol) == 0:
+                for e in exchange:
+                    if e not in Predictor.exchange:
+                        needNewDataManager = True
+                        break
+            else:
+                for s in symbol:
+                    if s not in Predictor.symbol:
+                        needNewDataManager = True
+                        break
+                
+            if needNewDataManager or not Predictor.dm:
+                Predictor.dm = DataManager.forPredictor(nn,
+                                                        exchange=shortc(exchange), symbol=shortc(symbol), # remove if empty lists
+                                                        **kwargs)
+
+            Predictor.exchange = exchange
+            Predictor.symbol = symbol
 
         return nn
 
@@ -90,9 +91,10 @@ class Predictor(Singleton):
     def predict(cls, exchange, symbol, **kwargs):
         return cls.predictAll(exchange=asList(exchange), symbol=asList(symbol), **kwargs)
 
-    def __getHandlerAndIndex(self, exchange, symbol, anchorDate):
+    def __getHandlerAndIndex(self, exchange, symbol, anchorDate, dataManager:DataManager=None):
         '''returns stockDataHandler, index of anchorDate'''
-        sdh: StockDataHandler = Predictor.dm.stockDataHandlers[(exchange, symbol)]
+        dataManager = shortc(dataManager, Predictor.dm)
+        sdh: StockDataHandler = dataManager.stockDataHandlers[(exchange, symbol)]
         d = MarketDayManager.getPreviousMarketDay(asDate(anchorDate)).isoformat()
         index = getIndex(sdh.data, lambda x: x.period_date == d)
         if index is None:
@@ -101,9 +103,10 @@ class Predictor(Singleton):
             raise ValueError(f'{anchorDate} not a valid selection for {exchange}:{symbol} stock data')
         return sdh, index
 
-    def __buildPredictInputTuple(self, exchange, symbol, anchorDate=date.today().isoformat()):
+    def __buildPredictInputTuple(self, exchange, symbol, anchorDate=date.today().isoformat(), dataManager:DataManager=None):
+        dataManager = shortc(dataManager, Predictor.dm)
         if gconfig.testing.predictor: startt = time.time()
-        inputVector = Predictor.dm.buildInputVector(*self.__getHandlerAndIndex(exchange, symbol, anchorDate))
+        inputVector = dataManager.buildInputVector(*self.__getHandlerAndIndex(exchange, symbol, anchorDate, dataManager=dataManager))
         if gconfig.testing.predictor: self.testing_inputVectorBuildTime += time.time() - startt
         return inputVector
 
@@ -112,35 +115,46 @@ class Predictor(Singleton):
         anchorDate=None, #date.today().isoformat(),
         postPredictionWeighting=True,
         # exchange=None, excludeExchange=[], network=None,
+        exchange=None, symbol=None,
         numberofWeightingsLimit=0,
         notMeetingThresholdsPrintLimit=5,
+        dataManager:DataManager=None,
         verbose=1,
         **kwargs
     ):
-        if 'maxPageSize' not in kwargs:
-            kwargs['maxPageSize'] = 500
-
         self = cls()
-        singleSymbol = 'symbol' in kwargs and len(kwargs['symbol']) == 1
 
-        if anchorDate:
-            anchorDates = asList(anchorDate)
-        elif len(anchorDates) == 0:
-            anchorDates = [date.today()]
-        anchorDates = [asDate(dt) for dt in anchorDates]
+        kwargs['maxPageSize'] = shortcdict(kwargs, 'maxPageSize', 500)
+        exchange = asList(exchange)
+        symbol = asList(symbol)
+        singleSymbol = len(symbol) == 1
 
-        anchorDateArg = max(anchorDates)
-        nn = self._initialize(anchorDate=anchorDateArg, postPredictionWeighting=postPredictionWeighting, 
-                              skipAllDataInitialization='maxPageSize' in kwargs, verbose=verbose,
-                              **kwargs)
-        tickers = cls.dm.symbolList
+        anchorDate = asList(anchorDate)
+        if len(anchorDate) == 0:
+            anchorDate = [date.today()]
+        anchorDate = [asDate(dt) for dt in anchorDate]
+
+        anchorDateArg = max(anchorDate)
+        if dataManager:
+            usingPrebuiltDataManager = True
+            nn = self._initialize(dataManager=dataManager, verbose=verbose, **kwargs)
+            tickers = [k for k,v in dataManager.stockDataHandlers.items() if v.getDay(anchorDateArg)]
+        else:
+            usingPrebuiltDataManager = False
+            nn = self._initialize(anchorDate=anchorDateArg, exchange=exchange, symbol=symbol, 
+                                    postPredictionWeighting=postPredictionWeighting, 
+                                    skipAllDataInitialization='maxPageSize' in kwargs, verbose=verbose,
+                                    **kwargs
+                                )
+            dataManager = cls.dm
+            tickers = dataManager.symbolList
         if len(tickers) == 0:
             print('No tickers available for anchor date of', anchorDateArg)
             return
 
         if verbose == 1:
             if singleSymbol:
-                print('Starting prediction{} for'.format('' if len(anchorDates) < 2 else 's'), kwargs['exchange'][0], ':', kwargs['symbol'][0])
+                print('Starting prediction{} for'.format('' if len(anchorDate) < 2 else 's'), exchange[0], ':', symbol[0])
             else:
                 print('Starting predictions for', len(tickers), 'tickers') ## starting on', anchorDate)
 
@@ -153,29 +167,34 @@ class Predictor(Singleton):
             staticsize, semiseriessize, seriessize = nn.inputVectorFactory.getInputSize()
 
         ## build input vectors for all tickers; iterating through pages of symbol list
-        loopingTickers = True
-        maxPage = cls.dm.getSymbolListPageCount() if cls.dm.usePaging else None
-        pageLoopHandle = range(maxPage) if cls.dm.usePaging else [0]
+        loopingTickers = len(anchorDate) <= 1
+        baseLoopDescLambda = lambda x: f'Building{x}...'
+        if usingPrebuiltDataManager or not dataManager.usePaging:
+            pageLoopHandle = [0]
+            loopDescLambda = lambda p: baseLoopDescLambda('')
+        else:
+            maxPage = dataManager.getSymbolListPageCount()
+            pageLoopHandle = range(maxPage)
+            loopDescLambda = lambda p: baseLoopDescLambda(f' page {p}/{maxPage}')
         for page in pageLoopHandle:
             loopList = tickers
-            if cls.dm.usePaging:
-                cls.dm.initializeAllDataForPage(page)
-                loopList = cls.dm.getSymbolListPage(page)
-            if len(anchorDates) > 1:
-                loopingTickers = False
-                loopList = anchorDates
+            if not usingPrebuiltDataManager and dataManager.usePaging:
+                dataManager.initializeAllDataForPage(page)
+                loopList = dataManager.getSymbolListPage(page)
+            if len(anchorDate) > 1:
+                loopList = anchorDate
             
-            for tkrORdt in tqdmLoopHandleWrapper(loopList, verbose=verbose, desc='Building{}...'.format(' page {}/{}'.format(page, maxPage) if cls.dm.usePaging else '')):
+            for tkrORdt in tqdmLoopHandleWrapper(loopList, verbose=verbose, desc=loopDescLambda(page)):
                 if loopingTickers:
-                    dt = anchorDates[0]
+                    dt = anchorDate[0]
                     texchange = tkrORdt.exchange
                     tsymbol = tkrORdt.symbol
                 else:
                     dt = tkrORdt
-                    texchange = kwargs['exchange'][0]
-                    tsymbol = kwargs['symbol'][0]
+                    texchange = exchange[0]
+                    tsymbol = symbol[0]
                 try:
-                    inptpl = self.__buildPredictInputTuple(texchange, tsymbol, anchorDate=dt.isoformat())
+                    inptpl = self.__buildPredictInputTuple(texchange, tsymbol, anchorDate=dt.isoformat(), dataManager=dataManager)
                     if gconfig.network.recurrent:
                         predictionInputVectors[InputVectorDataType.STATIC].append(inptpl[0].reshape(-1, staticsize))
                         if gconfig.feature.financials.enabled:
@@ -220,18 +239,18 @@ class Predictor(Singleton):
             self.testing_predictTime += time.time() - startt
 
         ## (unpack and) massage prediction outputs
-        if singleSymbol and len(anchorDates) < 2:
+        if singleSymbol and len(anchorDate) < 2:
             p = predictResults[0][0]
             predictResults = thresholdRound(p) if gconfig.predictor.ifBinaryUseRaw else p
         else:
-            lstlength = len(predictionTickers) if len(anchorDates) < 2 else len(anchorDates)
+            lstlength = len(predictionTickers) if len(anchorDate) < 2 else len(anchorDate)
             loopHandle = tqdm.trange(lstlength, desc='Unpacking...') if verbose > 0 else range(lstlength)
             for ti in loopHandle:
                 p = predictResults[ti][0] #.numpy()
                 t = predictionTickers[ti]
                 val = thresholdRound(p) if gconfig.predictor.ifBinaryUseRaw else p
                 if singleSymbol:
-                    predictionList.append((anchorDates[ti], val))
+                    predictionList.append((anchorDate[ti], val))
                 # elif val == 1:
                 else:
                     predictionList.append((t.exchange, t.symbol, p))
@@ -243,7 +262,7 @@ class Predictor(Singleton):
             print('testing_inputVectorBuildTime', self.testing_inputVectorBuildTime, 'seconds')
             print('testing_predictTime', self.testing_predictTime, 'seconds')
 
-        if len(anchorDates) < 2:
+        if len(anchorDate) < 2:
             if singleSymbol:
                 if len(predictionExceptions) > 0:
                     print('There was an exception for this ticker')
@@ -275,14 +294,14 @@ class Predictor(Singleton):
                             ## determine weighting factors and assign ticker to appropriate set
                             tqdmhandle = tqdmLoopHandleWrapper(sortedPredictionList, verbose=verbose, desc=f'Weighting {phaseString}')
                             for s in tqdmhandle:
-                                exchange, symbol, prediction = s
+                                wexchange, wsymbol, prediction = s
                                 ## raw prediction values below appropriate threshold will not rise above it with additional weighting, so skip until next phase
                                 if phase == 0 and prediction <= POSITIVE_THRESHOLD: continue
                                 elif phase == 1 and prediction <= JUST_BELOW_POSITIVE_THRESHOLD: continue
 
                                 if gconfig.testing.predictor:
                                     startt = time.time()
-                                symbolInfo = dbm.getSymbols(exchange=exchange, symbol=symbol)[0]
+                                symbolInfo = dbm.getSymbols(exchange=wexchange, symbol=wsymbol)[0]
                                 if gconfig.testing.predictor:
                                     self.wt_testing_getSymbolsTime += time.time() - startt
 
@@ -298,7 +317,7 @@ class Predictor(Singleton):
 
                                 # val = (exchange, symbol, (prediction, networkFactor, sectorFactor, symbolFactor, precedingRangeFactor))
                                 # val = (exchange, symbol, (prediction, networkFactor, sectorFactor))
-                                val = (exchange, symbol, (prediction, networkFactor, sectorFactor))
+                                val = (wexchange, wsymbol, (prediction, networkFactor, sectorFactor))
                                 weightedAcc = weightedAccuracyLambda(val[2])
                                 if phase == 0 and weightedAcc > POSITIVE_THRESHOLD:
                                     tickersMeetingThreshold.append(val)
@@ -313,12 +332,12 @@ class Predictor(Singleton):
                                 if verbose >= 1:
                                     c = 0
                                     postfixstr = ''
-                                    for exchange, symbol, factorTuple in sorted(tickersMeetingThreshold + tickersJustBelowThreshold + tickersNotMeetingThreshold, key=lambda x: weightedAccuracyLambda(x[2]), reverse=True):
+                                    for pfexchange, pfsymbol, factorTuple in sorted(tickersMeetingThreshold + tickersJustBelowThreshold + tickersNotMeetingThreshold, key=lambda x: weightedAccuracyLambda(x[2]), reverse=True):
                                         if c > 2: break
                                         if c > 0:
                                             postfixstr += ' || '
                                         c += 1
-                                        postfixstr += f'{exchange}:{symbol}; {float(weightedAccuracyLambda(factorTuple))*100:.3f}%'
+                                        postfixstr += f'{pfexchange}:{pfsymbol}; {float(weightedAccuracyLambda(factorTuple))*100:.3f}%'
 
                                     tqdmhandle.set_postfix_str(postfixstr)
 
@@ -391,7 +410,8 @@ if __name__ == '__main__':
     Predictor.predictAll('2023-01-27', 
                             network='1696139601',
                         #  exchange=standardExchanges, 
-                        exchange=['BATS','NASDAQ','NYSE','NYSE ARCA','NYSE MKT'],
+                        # exchange=['BATS','NASDAQ','NYSE','NYSE ARCA','NYSE MKT'],
+                            exchange='NASDAQ',
                          postPredictionWeighting=False,
                         #  numberofWeightingsLimit=500, 
                         #  assetTypes=['CS', 'CLA', 'CLB', 'CLC'], 
