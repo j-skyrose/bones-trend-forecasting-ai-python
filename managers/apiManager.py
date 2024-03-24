@@ -71,8 +71,8 @@ class APIManager(Singleton):
             'limit': self.config.get(apiName, 'limit'),
             'limitType': self.config.get(apiName, 'limittype'),
             'priority': self.config.get(apiName, 'priority'),
-            'remaining': self.savedState.get(apiName, 'remaining'),
-            'updatedOn': date.fromisoformat(self.savedState.get(apiName, 'updated'))
+            'remaining': self.savedState.get(apiName, 'remaining', default=-1),
+            'updatedOn': date.fromisoformat(self.savedState.get(apiName, 'updated', default='1970-01-01'))
         })
 
     def get(self, api:Api, handle=False):

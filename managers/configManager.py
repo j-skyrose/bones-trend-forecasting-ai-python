@@ -32,9 +32,16 @@ class _ConfigManager():
         ## values can be cleared/overridden by validation
         self.config.initial_comment = initialComment
 
-    def get(self, arg1, arg2=None, required=False):
+    def get(self, arg1, arg2=None, required=False, default=None):
         section = arg1 if arg2 else defaultConfigFileSection
         key = arg2 if arg2 else arg1
+        try: 
+            self.config[section][key]
+        except KeyError as e:
+            if not required:
+                self.set(section, key, default)
+            else: raise e
+        
         retval = self.config[section][key]
 
         if required and type(retval) is str and len(retval) == 0:
@@ -45,8 +52,8 @@ class _ConfigManager():
 
     def set(self, arg1, arg2, arg3=None):
         if arg3 is not None:
-            if not self.config[arg1]:
-                self.config[arg1] = {}
+            try: self.config[arg1]
+            except KeyError: self.config[arg1] = {}
             self.config[arg1][arg2] = str(arg3)
         else:
             self.config[defaultConfigFileSection][arg1] = str(arg2)
