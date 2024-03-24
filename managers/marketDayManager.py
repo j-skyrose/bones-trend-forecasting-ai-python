@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from globalConfig import config as gconfig
 from constants.enums import MarketRegion
 from constants.exceptions import ArgumentError
-from utils.support import Singleton, asDatetime, getIndex
+from utils.support import Singleton, asDate, asDatetime, getIndex
 from utils.other import getMarketRegion
 
 # http://www.market-holidays.com/2022
@@ -42,6 +42,11 @@ class MarketDayManager(Singleton):
             return cls.marketHolidays[MarketRegion.CANADA_US_SHARED][yr] + cls.marketHolidays[region][yr]
 
         return cls.marketHolidays[region][yr]
+    
+    @classmethod
+    def isHoliday(cls, dt, **kwargs):
+        dt = asDate(dt)
+        return dt in cls.getMarketHolidays(dt.year, **kwargs)
 
     @classmethod
     def getMarketHalfdays(cls, yr):

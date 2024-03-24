@@ -15,7 +15,7 @@ from typing import Dict, List
 
 from globalConfig import config as gconfig
 from constants.enums import Api, ChangeType, Direction, FeatureExtraType, IndicatorType, NormalizationMethod, OutputClass, SQLInsertHelpers, SeriesType, StockDataSource
-from constants.exceptions import InsufficientDataAvailable, NotSupportedYet
+from constants.exceptions import DamageDetected, InsufficientDataAvailable, NotSupportedYet
 from constants.values import indicatorsKey, unusableSymbols
 from managers.apiManager import APIManager
 from managers.databaseManager import DatabaseManager
@@ -423,9 +423,55 @@ def technicalIndicatorDataCalculationAndInsertion(exchange=None, symbol=None, se
     print('Updated {} tickers'.format(tickersupdated))
     print('Added or replaced {} rows'.format(rowsadded))
 
+def _getHistoricalGaps(data, startDate, endDate, vix=False, verbose=0) -> List[date]:
+    '''helper for helper function _getDailyHistoricalGaps'''
+
+    exchange = data[0].exchange if not vix else 'NYSE'
+    startDate = asDate(startDate)
+    endDate = asDate(endDate)
+
+    if verbose>=2:
+        if not vix:
+            print('###############################################')
+            print((data[0].exchange, data[0].symbol))
+        print(startDate, ' -> ', endDate)
+
+    gaps = []
+    dindex = 0
+    gapStreak = 0
+    for d in range(int((endDate - startDate).total_seconds() / (60 * 60 * 24))):
+        cdate = startDate + timedelta(days=d)
+        if verbose>=2: print('Checking', cdate)
+        if cdate.weekday() > 4: # is Saturday (5) or Sunday (6)
+            if verbose>=2: print('is weekend')
+            continue
+
+        ## holiday checker
+        if vix:
+            ## vix will need to fill all (holi)dates, regardless of market
+            pass
+        elif MarketDayManager.isHoliday(cdate, exchange=exchange):
+            if verbose>=2: print('is holiday')
+            continue
+
+        ## actual gap checker
+        if cdate != date.fromisoformat(data[dindex].period_date):
+            if verbose>=2:
+                ddt = date.fromisoformat(data[dindex].period_date)
+                print('is gap')
+
+            gaps.append(cdate)
+            gapStreak += 1
+
+            if not vix and gapStreak > 40:
+                raise DamageDetected
+        else:
+            dindex += 1
+            gapStreak = 0
+    return gaps
 
 ## helper function to fillHistoricalGaps
-def _getDailyHistoricalGaps(exchange=None, symbol=None, tickers=[], autoUpdateDamagedSymbols=True, verbose=1):
+def _getAllDailyHistoricalGaps(exchange=None, symbol=None, tickers=[], autoUpdateDamagedSymbols=True, verbose=1):
     if (exchange or symbol) and tickers: raise ValueError
     if (exchange or symbol) and not tickers: tickers = [(exchange, symbol)]
 
@@ -440,54 +486,25 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, tickers=[], autoUpdateDa
         for ticker in tqdmLoopHandleWrapper(loopTickers, verbose, desc='Determining DAILY historical gaps'):
             if ticker in lastDamagedTickers: continue
             exchange, symbol = ticker
-
             data = dbm.getStockDataDaily(exchange=exchange, symbol=symbol)
-            startDate = date.fromisoformat(data[0].period_date)
-            endDate = date.fromisoformat(data[-1].period_date)
-            if verbose>=2: 
-                print('###############################################')
-                print(ticker)
-                print(startDate, ' -> ', endDate)
 
-            dindex = 0
-            cyear = 0
-            holidays = []
-            consecgaps = 0
-            for d in range(int((endDate - startDate).total_seconds() / (60 * 60 * 24))):
-                cdate = startDate + timedelta(days=d)
-                if verbose>=2: print('Checking', cdate)
-                if cdate.weekday() > 4: # is Saturday (5) or Sunday (6)
-                    if verbose>=2: print('is weekend')
-                    continue
-
-                ## holiday checker
-                if cyear != cdate.year:
-                    holidays = MarketDayManager.getMarketHolidays(cdate.year, exchange)
-                    cyear = cdate.year
-                    if verbose>=2: print('holidays for', cyear, holidays)
-                if cdate in holidays:
-                    if verbose>=2: print('is holiday')
-                    continue
-
-                ## actual gap checker
-                if cdate != date.fromisoformat(data[dindex].period_date):
-                    if verbose>=2: 
-                        ddt = date.fromisoformat(data[dindex].period_date)
-                        print('is gap')
-                    if len(tickers) > 1:
+            try:
+                gaps = _getHistoricalGaps(
+                    data,
+                    date.fromisoformat(data[0].period_date),
+                    date.fromisoformat(data[-1].period_date),
+                    verbose=verbose
+                )
+                if len(tickers) > 1:
+                    for cdt in gaps:
                         try:
-                            dateGaps[cdate].append(ticker)
+                            dateGaps[cdt].append(ticker)
                         except KeyError:
-                            dateGaps[cdate] = [ticker]
-                    else:
-                        dateGaps.append(cdate)
-                    consecgaps += 1
-
-                    if consecgaps > 40: 
-                        currentDamagedTickers.add(ticker)
+                            dateGaps[cdt] = [ticker]  
                 else:
-                    dindex += 1
-                    consecgaps = 0
+                    dateGaps.extend(gaps)
+            except DamageDetected:
+                currentDamagedTickers.add(ticker)
 
         if len(currentDamagedTickers) == 0:
             break
@@ -528,15 +545,43 @@ def _getDailyHistoricalGaps(exchange=None, symbol=None, tickers=[], autoUpdateDa
 
     return dateGaps
 
-## generally only used after large data acquisitions/dumps
-## fill any data gaps with artificial data using last real trading day
-def historicalGapCalculationAndInsertion(exchange=None, symbol=None, tickers=[], seriesType=SeriesType.DAILY, dryrun=False, autoUpdateDamagedSymbols=True, verbose=1):
+def vixTradingDayGapDeterminationAndInsertion(fillForNonUSMarkets=True, dryrun=False, verbose=1):
+    '''Fill any data gaps with artificial data using last real trading day.
+    artificial 0 = real data\n
+    artificial 1 = fake data\n
+    artificial 2 = fake data for US market holiday\n\nGenerally only used after VIX update dumps.'''
+    
+    data = dbm.getCboeVolatilityIndex_basic(orderBy='period_date')
+    gaps = _getHistoricalGaps(
+        data,
+        data[0].period_date,
+        data[-1].period_date,
+        vix=True, verbose=verbose
+    )
+
+    for gdt in gaps:
+        ## find closest date without going over
+        prevclose = None
+        for d in data:
+            if date.fromisoformat(d.period_date) > gdt: break
+            prevclose = d.close
+
+        artificial = 2 if fillForNonUSMarkets and MarketDayManager.isHoliday(gdt) else 1
+        if not dryrun:
+            dbm.insertVIX(gdt.isoformat(), prevclose, prevclose, prevclose, prevclose, artificial, SQLInsertHelpers.IGNORE)
+        else:
+            print(str(gdt), prevclose, artificial)
+
+    if verbose: print(f'{len(gaps)} gaps filled')
+
+def historicalTradingDayGapDeterminationAndInsertion(exchange=None, symbol=None, tickers=[], seriesType=SeriesType.DAILY, dryrun=False, autoUpdateDamagedSymbols=True, verbose=1):
+    '''Fill any data gaps with artificial data using last real trading day.\n\nGenerally only used after large data acquisitions/dumps.'''
     if seriesType != SeriesType.DAILY: raise NotSupportedYet
     if (exchange or symbol) and tickers: raise ValueError
     if (exchange or symbol) and not tickers: tickers = [(exchange, symbol)]
     ALL = not (exchange and symbol)
     insertData = []
-    gaps = _getDailyHistoricalGaps(tickers=tickers, autoUpdateDamagedSymbols=autoUpdateDamagedSymbols, verbose=verbose)
+    gaps = _getAllDailyHistoricalGaps(tickers=tickers, autoUpdateDamagedSymbols=autoUpdateDamagedSymbols, verbose=verbose)
 
     if len(gaps) == 0:
         if verbose>=1: print('No gaps found')
@@ -1022,7 +1067,7 @@ def consolidateDailyStockData(limit=None, fillGaps=True, verbose=1, **kwargs):
 
             if limit and len(limitTickers) < limit: limitTickers.append((exchange, symbol))
 
-    if fillGaps: historicalGapCalculationAndInsertion(tickers=tickersUpdated, verbose=verbose, **kwargs)
+    if fillGaps: historicalTradingDayGapDeterminationAndInsertion(tickers=tickersUpdated, verbose=verbose, **kwargs)
 
     if exceptionTickers: print('Exceptions:', len(exceptionTickers), exceptionTickers)
     print(f'{len(tickersUpdated)} tickers updated')

@@ -36,7 +36,7 @@ configManager: StaticConfigManager = StaticConfigManager()
 
 ## generate before import to ensure things are up-to-date for the current execution
 if current_process().name == 'MainProcess': generateDatabaseAnnotationObjectsFile()
-from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, CboeVolatilityIndexRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, StockDataDailyCRow, QueryCachesCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, GoogleTopicIdsDRow, QueueStockDataDailyDRow
+from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, CboeVolatilityIndexRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, StockDataDailyCRow, QueryCachesCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, GoogleTopicIdsDRow, QueueStockDataDailyDRow
 from managers._generatedDatabaseExtras.databaseRowObjects import symbolsSnakeCaseTableColumns, stockDataDailyCCamelCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns, symbolInfoAlphavantageDSnakeCaseTableColumns, symbolInfoPolygonDSnakeCaseTableColumns, symbolInfoYahooDSnakeCaseTableColumns
 
 class DatabaseManager(Singleton):
@@ -134,12 +134,6 @@ class DatabaseManager(Singleton):
             description=None,
             groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[AssetTypesRow]:
         return _dbGetter("asset_types", **locals())
-
-    def getCboeVolatilityIndex_basic(self,
-            date=None,
-            open=None, high=None, low=None, close=None, artificial=None,
-            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[CboeVolatilityIndexRow]:
-        return _dbGetter("cboe_volatility_index", **locals())
 
     def getSymbols_basic(self,
             exchange=None, symbol=None,
@@ -244,6 +238,12 @@ class DatabaseManager(Singleton):
             networkId=None, accuracyType=None, dataCount=None, minDate=None, lastExchange=None, lastSymbol=None,
             groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[AccuracyLastUpdatesRow]:
         return _dbGetter("accuracy_last_updates", **locals())
+
+    def getCboeVolatilityIndex_basic(self,
+            periodDate=None,
+            open=None, high=None, low=None, close=None, artificial=None,
+            groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[CboeVolatilityIndexRow]:
+        return _dbGetter("cboe_volatility_index", **locals())
 
     def getTechnicalIndicatorData_basic(self,
             exchange=None, symbol=None, dateType=None, date=None, indicator=None, period=None,
@@ -1277,6 +1277,10 @@ class DatabaseManager(Singleton):
         val = self._convertVIXDataPoint(row) if row else point
         self.dbc.execute(stmt, (*val,))
 
+    def insertVIX(self, period_date=None, open=None, high=None, low=None, close=None, artificial=0, insertStrategy=SQLInsertHelpers.NONE):
+        stmt = f'INSERT {insertStrategy.value} INTO cboe_volatility_index VALUES (?,?,?,?,?,?)'
+        self.dbc.execute(stmt, (str(period_date), open, high, low, close, artificial))
+
     def insertVectorSimilarity(self, exchange, symbol, seriesType: SeriesType, dt, vclass: OutputClass, precedingRange, followingRange, changeType: ChangeType, changeValue, val, upsert=True):
         stmt = f'INSERT {"OR IGNORE" if upsert else ""} INTO {self.getTableString("vector_similarities_c")} VALUES (?,?,?,?,?,?,?,?,?,?)'
         args = [exchange, symbol, seriesType.name, asISOFormat(dt), vclass.name, precedingRange, followingRange, changeType.name, changeValue]
@@ -1968,68 +1972,6 @@ class DatabaseManager(Singleton):
     #endregion
     ####################################################################################################################################################################
     #region limited use utility
-
-    ## generally only used after VIX update dumps
-    ## fill any data gaps with artificial data using last real trading day
-    ## artificial 0 = real data
-    ## artificial 1 = fake data
-    ## artificial 2 = fake data for US market holiday
-    def fillVIXHistoricalGaps(self, fillForNonUSMarkets=True, dryrun=False):
-        DEBUG = True
-        ## get date range
-        stmt = 'SELECT min(date) as start, max(date) as finish FROM cboe_volatility_index'
-        res = self.dbc.execute(stmt).fetchone()
-        startDate = date.fromisoformat(res.start)
-        endDate = date.fromisoformat(res.finish)
-        if DEBUG: print(startDate, ' -> ', endDate)
-
-        ## get vix data
-        stmt = 'SELECT date, close FROM cboe_volatility_index ORDER BY date'
-        data = self.dbc.execute(stmt).fetchall()
-
-        ## fill gaps
-        stmt = 'INSERT OR IGNORE INTO cboe_volatility_index VALUES (?,?,?,?,?,?)'
-        prevclose = 0
-        dindex = 0
-        cyear = 0
-        holidays = []
-        DEBUG = False
-        gapsFilled = 0
-        for d in range(int((endDate - startDate).total_seconds() / (60 * 60 * 24))):
-            cdate = startDate + timedelta(days=d)
-            if DEBUG: print('Checking', cdate)
-            if cdate.weekday() > 4: # is Saturday (5) or Sunday (6)
-                if DEBUG: print('is weekend')
-                continue
-
-            ## holiday checker
-            if cyear != cdate.year:
-                holidays = MarketDayManager.getMarketHolidays(cdate.year)
-                cyear = cdate.year
-                if DEBUG: print('holidays for', cyear, holidays)
-
-            ## actual gap checker
-            if cdate != date.fromisoformat(data[dindex].period_date):
-                artificial = 1
-                if cdate in holidays:
-                    if fillForNonUSMarkets:
-                        artificial = 2
-                    else:
-                        if DEBUG: print('is holiday')
-                        continue
-                
-                if not dryrun:
-                    self.dbc.execute(stmt, (str(cdate), prevclose, prevclose, prevclose, prevclose, artificial))
-                else: 
-                    print(str(cdate), prevclose, artificial)
-                gapsFilled += 1
-                # if debugcount > 20: break
-                pass
-            else:
-                prevclose = data[dindex].close
-                dindex += 1
-        
-        print(gapsFilled, 'gaps filled')
 
     ## detects order of magnitude jumps in stock price from one day to next, that may be representative of a stock split
     def detectStockSplits(self, exchange=None, symbol=None, seriesType:SeriesType=SeriesType.DAILY, verbose=0):

@@ -30,3 +30,6 @@ class NotSupportedYet(Exception):
 
 class InsufficientInstances(Exception):
     pass
+
+class DamageDetected(Exception):
+    pass

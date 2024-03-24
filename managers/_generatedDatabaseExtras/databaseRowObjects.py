@@ -27,18 +27,6 @@ class AssetTypesRow():
         self.type = typeValue
         self.description = descriptionValue
 
-## TABLE: cboe_volatility_index ######################################
-cboeVolatilityIndexSnakeCaseTableColumns = ['date', 'open', 'high', 'low', 'close', 'artificial']
-cboeVolatilityIndexCamelCaseTableColumns = ['date', 'open', 'high', 'low', 'close', 'artificial']
-class CboeVolatilityIndexRow():
-    def __init__(self, dateValue: str, openValue: float, highValue: float, lowValue: float, closeValue: float, artificialValue: bool):
-        self.date = dateValue
-        self.open = openValue
-        self.high = highValue
-        self.low = lowValue
-        self.close = closeValue
-        self.artificial = artificialValue
-
 ## TABLE: symbols ######################################
 symbolsSnakeCaseTableColumns = ['exchange', 'symbol', 'name', 'asset_type', 'api_alphavantage', 'api_polygon', 'google_topic_id', 'sector', 'industry', 'founded', 'api_fmp', 'api_neo']
 symbolsCamelCaseTableColumns = ['exchange', 'symbol', 'name', 'assetType', 'apiAlphavantage', 'apiPolygon', 'googleTopicId', 'sector', 'industry', 'founded', 'apiFmp', 'apiNeo']
@@ -258,6 +246,18 @@ class AccuracyLastUpdatesRow():
         self.min_date = min_dateValue
         self.last_exchange = last_exchangeValue
         self.last_symbol = last_symbolValue
+
+## TABLE: cboe_volatility_index ######################################
+cboeVolatilityIndexSnakeCaseTableColumns = ['period_date', 'open', 'high', 'low', 'close', 'artificial']
+cboeVolatilityIndexCamelCaseTableColumns = ['periodDate', 'open', 'high', 'low', 'close', 'artificial']
+class CboeVolatilityIndexRow():
+    def __init__(self, period_dateValue: str, openValue: float, highValue: float, lowValue: float, closeValue: float, artificialValue: bool):
+        self.period_date = period_dateValue
+        self.open = openValue
+        self.high = highValue
+        self.low = lowValue
+        self.close = closeValue
+        self.artificial = artificialValue
 
 ## TABLE: technical_indicator_data_c ######################################
 technicalIndicatorDataCSnakeCaseTableColumns = ['exchange', 'symbol', 'date_type', 'date', 'indicator', 'period', 'value']
