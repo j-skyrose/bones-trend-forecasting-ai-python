@@ -392,7 +392,7 @@ def generateDatabaseGeneralizedGettersForDBM():
                 astring = f'{convertToCamelCase(c.name)}=None'
                 if c['pk']: argumentPKStrings.append(astring)
                 else: argumentStrings.append(astring)
-            suffixArgumentStrings = ['groupBy=None', 'orderBy=None', 'limit=None', 'excludeKeys=None', 'onlyColumn_asList=None', 'sqlColumns=\'*\'', 'rawStatement=False']
+            suffixArgumentStrings = ['rowid=None', 'groupBy=None', 'orderBy=None', 'limit=None', 'excludeKeys=None', 'onlyColumn_asList=None', 'sqlColumns=\'*\'', 'rawStatement=False']
 
             argumentLineSeparator = f',\n{tab}{tab}{tab}'
             arglists = [['self']]
