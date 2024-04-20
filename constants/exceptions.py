@@ -33,3 +33,6 @@ class InsufficientInstances(Exception):
 
 class DamageDetected(Exception):
     pass
+
+class NotMarketDay(Exception):
+    pass

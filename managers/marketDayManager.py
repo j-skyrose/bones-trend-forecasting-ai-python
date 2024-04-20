@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta
 
 from globalConfig import config as gconfig
 from constants.enums import MarketRegion
-from constants.exceptions import ArgumentError
+from constants.exceptions import ArgumentError, NotMarketDay
 from utils.support import Singleton, asDate, asDatetime, getIndex
 from utils.other import getMarketRegion
 
@@ -108,7 +108,7 @@ class MarketDayManager(Singleton):
         cdate = startDate
         marketdays = cls.getMarketDays(year=cdate.year)
         ind = getIndex(marketdays, lambda d: d==cdate)
-        if ind is None: raise ValueError('Start date is not a market day')
+        if ind is None: raise NotMarketDay()
 
         for i in range(50):
             if ind + amount > len(marketdays) - 1:
