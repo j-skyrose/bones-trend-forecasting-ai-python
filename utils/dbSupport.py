@@ -241,6 +241,8 @@ def generateSQLSuffixStatementAndArguments(excludeKeys=[], tableAlias=None, **kw
     return stmt, rtargs
 
 def convertToOnlyColumnList(rows, onlyColumn_asList):
+    if type(onlyColumn_asList) is list and len(onlyColumn_asList) == 1:
+        onlyColumn_asList = onlyColumn_asList[0]
     if type(onlyColumn_asList) is list:
         return [tuple([r[col] for col in onlyColumn_asList]) for r in rows]
     else:
