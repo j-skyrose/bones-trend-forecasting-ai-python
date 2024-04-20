@@ -13,7 +13,7 @@ from enum import Enum
 from datetime import datetime, date
 from typing import List, Tuple
 
-from constants.enums import NormalizationGroupings, SQLHelpers, TimeToLiveType
+from constants.enums import NormalizationGroupings, OperatorDict, SQLHelpers, TimeToLiveType
 from constants.values import normalizationColumnPrefix, unusableSymbols, tab
 from managers.configManager import StaticConfigManager
 from structures.sql.sqlArgumentObj import SQLArgumentObj
@@ -156,7 +156,26 @@ def generateSQLConditionSnippet(key, value, tableAlias=None):
         return f' {tableAlias}{key} is {value.value} ', []
     elif type(value) == SQLArgumentObj:
         value: SQLArgumentObj
-        return f' ? {value.modifier.sqlsymbol} {tableAlias}{key} ', [value.value]
+        if value.modifier == OperatorDict.LIKE:
+            return f' {tableAlias}{key} LIKE ? ', [value.value]
+        elif value.modifier in [OperatorDict.WITHIN, OperatorDict.BETWEENEXCLUSIVE, OperatorDict.BETWEENINCLUSIVE]:
+            lowerOperator = '<='
+            upperOperator = '>='
+            if value.modifier == OperatorDict.WITHIN:
+                lowerValue = value.value - value.otherValue
+                upperValue = value.value + value.otherValue
+            else:
+                if value.modifier == OperatorDict.BETWEENEXCLUSIVE:
+                    lowerOperator = '<'
+                    upperOperator = '>'
+                lowerValue = value.value
+                upperValue = value.otherValue
+            if type(value.value) in [datetime, date]:
+                lowerValue = asISOFormat(lowerValue)
+                upperValue = asISOFormat(upperValue)
+            return f' ? {lowerOperator} {tableAlias}{key} AND ? {upperOperator} {tableAlias}{key} ', [lowerValue, upperValue]
+        else:
+            return f' ? {value.modifier.sqlsymbol} {tableAlias}{key} ', [value.value]
     else:
         if issubclass(value.__class__, Enum):
             value = value.name

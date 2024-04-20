@@ -10,6 +10,7 @@ sys.path.append(path)
 from constants.enums import OperatorDict
 
 class SQLArgumentObj:
-    def __init__(self, value, modifier: OperatorDict=OperatorDict.EQUAL):
+    def __init__(self, value, modifier: OperatorDict=OperatorDict.EQUAL, otherValue=None):
         self.value = value
+        self.otherValue = otherValue
         self.modifier = modifier

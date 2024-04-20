@@ -210,7 +210,7 @@ class AdvancedOrdering(Enum):
 
 
 class OperatorDict(Enum):
-    def __init__(self, a, b, c=None, d=None):
+    def __init__(self, a, b=None, c=None, d=None):
         self.function = a
         self.symbol = b
         self.sqlsymbol = shortc(c, b)
@@ -222,6 +222,10 @@ class OperatorDict(Enum):
     NOTEQUAL =          operator.ne, '!=', '<>'
     GREATERTHANOREQUAL= operator.ge, '<=', None, 'gte'
     GREATERTHAN =       operator.gt, '<', None, 'gt'
+    LIKE =              'LIKE'
+    BETWEENEXCLUSIVE =  'BETWEEN_EXCLUSIVE'
+    BETWEENINCLUSIVE =  'BETWEEN_INCLUSIVE'
+    WITHIN =            'WITHIN'
 
 class MarketRegion(Enum):
     CANADA = 'CANADA'
