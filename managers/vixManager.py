@@ -20,7 +20,7 @@ class VIXManager(Singleton):
         self.shouldNormalize = normalize
         dbm: DatabaseManager = DatabaseManager()
         
-        data = dbm.getCboeVolatilityIndex_basic(orderBy='date')
+        data = dbm.getCboeVolatilityIndex_basic(orderBy='period_date')
         self.max = dbm.getVIXMax()
         self.dataOffset = dataOffset
 
@@ -28,7 +28,7 @@ class VIXManager(Singleton):
             data = normalizeStockData(data, self.max, offset=self.dataOffset)
             self.normalized = True
 
-        self.data = {r.date: r for r in data}
+        self.data = {r.period_date: r for r in data}
 
     def getData(self) -> dict:
         return self.data
