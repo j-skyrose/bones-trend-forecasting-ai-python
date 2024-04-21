@@ -1425,7 +1425,7 @@ if __name__ == '__main__':
     c = Collector(currentDate)
 
     if opts.api:
-        if opts.api == Api.VIX:
+        if opts.api == 'vix':
             c.collectVIX()
         elif opts.type == 'splits':
             c.startSplitsCollection(opts.api, **kwargs)

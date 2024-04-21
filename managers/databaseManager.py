@@ -1273,7 +1273,7 @@ class DatabaseManager(Singleton):
         else: print('inserting network/training config\n', stmt, args)
 
     def insertVIXRow(self, row=None, point=None):
-        stmt = 'INSERT OR REPLACE INTO cboe_volatility_index(date, open, high, low, close, artificial) VALUES (?,?,?,?,?,?)'
+        stmt = 'INSERT OR REPLACE INTO cboe_volatility_index(period_date, open, high, low, close, artificial) VALUES (?,?,?,?,?,?)'
         val = self._convertVIXDataPoint(row) if row else point
         self.dbc.execute(stmt, (*val,))
 
