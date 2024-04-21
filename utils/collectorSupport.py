@@ -8,14 +8,15 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 import difflib, sqlite3
-from typing import Tuple, Union
+from enum import Enum
 
-from constants.enums import Api
+from constants.enums import Api, Direction
 from constants.values import usExchanges, multiExchangeSymbols
 from managers.apiManager import APIManager
 from managers.databaseManager import DatabaseManager
 from managers._generatedDatabaseExtras.databaseRowObjects import symbolInfoYahooDCamelCaseTableColumns
-from utils.dbSupport import generateCommaSeparatedQuestionMarkString
+from structures.sql.sqlOrderObj import SQLOrderObj
+from utils.dbSupport import generateCommaSeparatedQuestionMarkString, getTableFunctionName
 from utils.support import getItem, shortcdict, tqdmLoopHandleWrapper
 
 dbm: DatabaseManager = DatabaseManager()
@@ -30,204 +31,256 @@ e0nx = []
 e1n1 = []
 e1nx = []
 
-def getYahooExchangeForSymbol(symbol, companyName, verbose=1):
-    ret = getYahooExchangeForSymbolWithDetails(symbol, companyName, verbose)
-    return ret[0]
+def getExchange(symbol, source:Enum=None, companyName:str=None, fromOptions=False, verbose=0):
+    '''Determines the (standard name) exchange for a given symbol'''
+    exchange = None
 
-## attempts to determine the correct exchange given a symbol (from a datapoint in the Yahoo earnings date response)
-def getYahooExchangeForSymbolWithDetails(symbol, companyName, verbose=1) -> Tuple[Union[None, str], bool]:
-    ''' return tuple: <exchange>, <is unable to match symbol to any existing ticker> '''
-    acceptablewithoutotherconfirmation = ['PNK']
+    if source:
+        if source.name == Api.POLYGON.name:
+            kwargs = {
+                'sqlColumns': 'DISTINCT primary_exchange',
+                'ticker': symbol,
+                'onlyColumn_asList': 'primary_exchange',
+                'orderBy': [SQLOrderObj('active', Direction.DESCENDING), SQLOrderObj('delisted_utc', Direction.DESCENDING)]
+            }
+        else:
+            kwargs = {
+                'sqlColumns': 'DISTINCT exchange',
+                'symbol': symbol,
+                'onlyColumn_asList': 'exchange'
+            }
+        exchangePossibilities = getattr(dbm, getTableFunctionName(f'symbol_info_{source.name.lower()}_d', basic=True))(**kwargs)
 
-    ## manually determined matches
-    manualMatches = {
-        'XM': 'NASDAQ'
-    }
-    try: return manualMatches[symbol]
-    except: pass
-    try: return multiExchangeSymbols[symbol][0]
-    except: pass
-    
-    ## check if Yahoo symbol info API (or cache) has a record
-    yahooSymbol = dbm.getDumpSymbolInfoYahoo_basic(symbol=symbol)
-    if not yahooSymbol:
-        ## nothing cached (i.e. in DB), retrieve
-        yahooSymbol = yapi.getSymbol(symbol)
+        ## massage possibilities and check for a single match
+        exchanges = []
+        for ex in exchangePossibilities:
+            try: 
+                exchanges.append(exchaliasdict[ex])
+                break
+            except KeyError: pass
+        if len(exchanges) == 1: return exchanges[0]
 
-        ## if no still results, ensure at least a placeholder is cached to DB 
-        if not yahooSymbol: yahooSymbol = {'symbol': symbol, 'exchange': 'UNKNOWN'}
+    if companyName or not exchange:
+        ## primarily built for earning dates
+        acceptablewithoutotherconfirmation = ['PNK']
 
-        ## insert data
-        proccessedkwargs = {}
-        for k,v in yahooSymbol.items():
-            if v is not None:
-                if k not in symbolInfoYahooDCamelCaseTableColumns: 
-                    ## only appears for limited number of symbols (e.g. MYO), ignore unless real data is apparent
-                    ## ['underlyingExchangeSymbol', 'headSymbol', 'uuid', 'underlyingSymbol']
-                    if k not in ['uuid']:
-                        raise ValueError(f'"{k}" argument not in table columns')
-                proccessedkwargs[k] = v
-        args = [shortcdict(proccessedkwargs, argName) for argName in symbolInfoYahooDCamelCaseTableColumns]
-        dbm.dbc.execute(f'INSERT INTO {dbm.getTableString("symbol_info_yahoo_d")} VALUES ({generateCommaSeparatedQuestionMarkString(symbolInfoYahooDCamelCaseTableColumns)})', args)
+        ## manually determined matches
+        manualMatches = {
+            'XM': 'NASDAQ'
+        }
+        try: return manualMatches[symbol]
+        except: pass
+        try: return multiExchangeSymbols[symbol][0]
+        except: pass
+        
+        ## check if Yahoo symbol info API (or cache) has a record
+        yahooSymbol = dbm.getDumpSymbolInfoYahoo_basic(symbol=symbol)
+        if not yahooSymbol:
+            ## nothing cached (i.e. in DB), retrieve
+            yahooSymbol = yapi.getSymbol(symbol)
 
-    elif len(yahooSymbol) > 1:
-        raise ValueError(f'too many DB results for {symbol}')
-    elif len(yahooSymbol) == 1:
-        yahooSymbol = yahooSymbol[0]
+            ## if no still results, ensure at least a placeholder is cached to DB 
+            if not yahooSymbol: yahooSymbol = {'symbol': symbol, 'exchange': 'UNKNOWN'}
 
-    ## check if exchange or alias is known
-    try:
-        exchange = exchaliasdict[yahooSymbol['exchange']]
-    except KeyError as e:
+            ## insert data
+            proccessedkwargs = {}
+            for k,v in yahooSymbol.items():
+                if v is not None:
+                    if k not in symbolInfoYahooDCamelCaseTableColumns: 
+                        ## only appears for limited number of symbols (e.g. MYO), ignore unless real data is apparent
+                        ## ['underlyingExchangeSymbol', 'headSymbol', 'uuid', 'underlyingSymbol']
+                        if k not in ['uuid']:
+                            raise ValueError(f'"{k}" argument not in table columns')
+                    proccessedkwargs[k] = v
+            args = [shortcdict(proccessedkwargs, argName) for argName in symbolInfoYahooDCamelCaseTableColumns]
+            dbm.dbc.execute(f'INSERT INTO {dbm.getTableString("symbol_info_yahoo_d")} VALUES ({generateCommaSeparatedQuestionMarkString(symbolInfoYahooDCamelCaseTableColumns)})', args)
+
+        elif len(yahooSymbol) > 1:
+            raise ValueError(f'too many DB results for {symbol}')
+        elif len(yahooSymbol) == 1:
+            yahooSymbol = yahooSymbol[0]
+
+        ## check if exchange or alias is known
         try:
-            exchange = yahooSymbol['exchange']
-        except KeyError:
-            if list(yahooSymbol.keys()) != ['symbol', 'quoteType', 'messageBoardId', 'gmtOffSetMilliseconds', 'isEsgPopulated']:
-                pass ## for breakpoint debug inspecting
-            exchange = None
-    # except TypeError as e:
-    #     exchange = None
+            exchange = exchaliasdict[yahooSymbol['exchange']]
+        except KeyError as e:
+            try:
+                exchange = yahooSymbol['exchange']
+            except KeyError:
+                if list(yahooSymbol.keys()) != ['symbol', 'quoteType', 'messageBoardId', 'gmtOffSetMilliseconds', 'isEsgPopulated']:
+                    pass ## for breakpoint debug inspecting
+                exchange = None
+        # except TypeError as e:
+        #     exchange = None
 
-    ## now attempt to match the symbol to an existing ticker
-    tickers = dbm.getSymbols(symbol=symbol)
-    ## eliminate non-US exchanges
-    for t in tickers[:]:
-        if t.exchange not in usExchanges + ['OTCBB']:
-            tickers.remove(t)
+        ## now attempt to match the symbol to an existing ticker
+        tickers = dbm.getSymbols(symbol=symbol)
+        ## eliminate non-US exchanges
+        for t in tickers[:]:
+            if t.exchange not in usExchanges + ['OTCBB']:
+                tickers.remove(t)
 
-    if len(tickers) == 0:
-        return exchange, True
+        if len(tickers) == 0:
+            return exchange
 
-    elif len(tickers) > 0:
-        exchangeMatches = []
-        for t in tickers:
-            if t.exchange == exchange:# and exchange in usExchanges + ['OTCBB']: 
-                exchangeMatches.append(t)
+        elif len(tickers) > 0:
+            exchangeMatches = []
+            for t in tickers:
+                if t.exchange == exchange:# and exchange in usExchanges + ['OTCBB']: 
+                    exchangeMatches.append(t)
+            # if exchangeMatches and (
+            #     (exchange and all(t.exchange == exchange for t in exchangeMatches)) or
+            #     (not exchange and len(set([t.exchange for t in exchangeMatches])) == 1)
+            # ):
+            #     ## remove duplicates
+            #     exchangeMatches = [exchangeMatches[0]]
 
-        ## attempt to match company name to the company name of existing tickers
-        ######################################################################
-        ## method 1: old manual company name conversion and checks
-        ######################################################################
-        # namematches = []
-        # dnamelower = data[0].name.lower()
-        # dnamealphanum = re.sub(r'\W+', '', dnamelower)
-        # dnamereplaced1 = dnamealphanum.replace('international', 'intl')
-        # dnamereplaced2 = dnamereplaced1.replace('technologies', 'tech')
-        # dnamereplaced3 = dnamereplaced2.replace('inc', '')
-        # dnamereplaced4 = dnamereplaced3.replace('limited', '')
-        # dnamereplaced5 = dnamereplaced4.replace('group', 'gp')
-        ######################################################################
-        ## method 2: likeness comparison using difflib.get_close_matches
-        ######################################################################
-        nameMatches = []
-        if companyName:
-            cutoff = 0.999 ## default 0.6
-            dname = companyName
-            dnamelower = dname.lower()
-            tnamelist = [f"{t.name}{indx}".lower() for indx,t in enumerate(tickers)]
-            difflibnamematches = difflib.get_close_matches(dnamelower, tnamelist, cutoff=cutoff)
-            if verbose > 1: print(f'"{dname}"', 'vs', f'"{tnamelist}"')
-            if verbose > 1: print('matches:', difflibnamematches)
-            if len(difflibnamematches) == 0:
-                tnamelist2 = [(tn[:max(int(len(tn)/2), len(dnamelower))] + tn[-1]) for tn in tnamelist]
-                difflibnamematches = difflib.get_close_matches(dnamelower, tnamelist2, cutoff=cutoff)
-                if verbose > 1: print(f'"{dname}"', 'vs2', f'"{tnamelist2}"')
-                if verbose > 1: print('matches2:', difflibnamematches)
+            ## attempt to match company name to the company name of existing tickers
+            ######################################################################
+            ## method 1: old manual company name conversion and checks
+            ######################################################################
+            # namematches = []
+            # dnamelower = data[0].name.lower()
+            # dnamealphanum = re.sub(r'\W+', '', dnamelower)
+            # dnamereplaced1 = dnamealphanum.replace('international', 'intl')
+            # dnamereplaced2 = dnamereplaced1.replace('technologies', 'tech')
+            # dnamereplaced3 = dnamereplaced2.replace('inc', '')
+            # dnamereplaced4 = dnamereplaced3.replace('limited', '')
+            # dnamereplaced5 = dnamereplaced4.replace('group', 'gp')
+            ######################################################################
+            ## method 2: likeness comparison using difflib.get_close_matches
+            ######################################################################
+            nameMatches = []
+            if companyName:
+                cutoff = 0.999 ## default 0.6
+                dname = companyName
+                dnamelower = dname.lower()
+                tnamelist = [f"{t.name}{indx}".lower() for indx,t in enumerate(tickers)]
+                difflibnamematches = difflib.get_close_matches(dnamelower, tnamelist, cutoff=cutoff)
+                if verbose > 1: print(f'"{dname}"', 'vs', f'"{tnamelist}"')
+                if verbose > 1: print('matches:', difflibnamematches)
+                if len(difflibnamematches) == 0:
+                    tnamelist2 = [(tn[:max(int(len(tn)/2), len(dnamelower))] + tn[-1]) for tn in tnamelist]
+                    difflibnamematches = difflib.get_close_matches(dnamelower, tnamelist2, cutoff=cutoff)
+                    if verbose > 1: print(f'"{dname}"', 'vs2', f'"{tnamelist2}"')
+                    if verbose > 1: print('matches2:', difflibnamematches)
 
-            nameMatches = [tickers[int(nm[-1])] for nm in difflibnamematches]
-            pass
-            '''
-                "ABIVAX Société Anonyme" vs "['abivax s.a.\n0']"
-                matches: []
-                accepting {'symbol': 'AAVXF', 'quoteType': 'EQUITY', 'exchange': 'PNK',
+                nameMatches = [tickers[int(nm[-1])] for nm in difflibnamematches]
+                pass
+                '''
+                    "ABIVAX Société Anonyme" vs "['abivax s.a.\n0']"
+                    matches: []
+                    accepting {'symbol': 'AAVXF', 'quoteType': 'EQUITY', 'exchange': 'PNK',
 
-                "Atlas Air Worldwide Holdings, Inc." vs "['atlas air ww0']"
-                matches: []
-                no exchange matches
-            '''
-        ######################################################################
+                    "Atlas Air Worldwide Holdings, Inc." vs "['atlas air ww0']"
+                    matches: []
+                    no exchange matches
+                '''
+            ######################################################################
 
 
-        if verbose > 1: print(symbol, companyName, '\nexchmatches', exchangeMatches, '\nnamematches', nameMatches, '\ntickers', tickers)
+            if verbose > 1: print(symbol, companyName, '\nexchmatches', exchangeMatches, '\nnamematches', nameMatches, '\ntickers', tickers)
 
-        ## filter out name matches from non-US exchanges
-        if len(nameMatches) > 1: 
-                namematches2 = []
-                for t in tickers:
-                    if t.exchange in usExchanges:
-                        namematches2.append(t)
-                nameMatches = namematches2
+            ## filter out name matches from non-US exchanges
+            if len(nameMatches) > 1: 
+                    namematches2 = []
+                    for t in tickers:
+                        if t.exchange in usExchanges:
+                            namematches2.append(t)
+                    nameMatches = namematches2
+            # if nameMatches and (
+            #     (exchange and all(t.exchange == exchange for t in nameMatches)) or
+            #     (not exchange and len(set([t.exchange for t in nameMatches])) == 1)
+            # ):
+            #     ## remove duplicates
+            #     nameMatches = [nameMatches[0]]
 
-        if len(exchangeMatches) == 0:
-            if len(nameMatches) == 0:
-                if exchange in acceptablewithoutotherconfirmation:
-                    if verbose > 1: print('accepting', yahooSymbol)
-                    pass
-                else:
-                    # raise ValueError('no matches found')
-                    # print('no matches, new symbol', s)
-                    # notfound.append(s)
-                    ## unable to determine match
-                    return exchange, True
-            elif len(nameMatches) == 1:
-                if verbose > 1: print(f'{exchange} not found,' if exchange else '', 'using', nameMatches[0])
-                exchange = nameMatches[0].exchange
-            elif len(nameMatches) > 1:
-                e0nx.append(symbol)
-                if verbose > 1: print('e0nx too many name matches error')
-                raise ValueError('e0nx, too many matches found')
-        elif len(exchangeMatches) == 1:
-            if len(nameMatches) == 0:
-                if verbose > 1: print('no name matches for exch match, using', exchangeMatches[0], '\ntickers', tickers)
-                exchange = exchangeMatches[0].exchange
-            elif len(nameMatches) == 1:
-                if exchangeMatches[0].exchange == nameMatches[0].exchange:
-                    if verbose > 1: print('matched\n', exchangeMatches[0], '\n', nameMatches[0])
-                    exchange = exchangeMatches[0].exchange
-                else:
-                    e1n1.append(symbol)
-                    if verbose > 1: print('e1n1 mismatch error')
-                    raise ValueError('e1n1, exchange mismatch')
-            elif len(nameMatches) > 1:
-                matchesfound = []
-                for nm in nameMatches:
-                    if exchangeMatches[0].exchange == nm.exchange:
-                        matchesfound.append(nm)
-                if len(matchesfound) < 2:
-                    if verbose > 1: print('matched\n', exchangeMatches[0], '\n', shortcdict(matchesfound, 0))
-                    exchange = exchangeMatches[0].exchange
-                elif len(matchesfound) > 1:
-                    e1nx.append(symbol)
-                    if verbose > 1: print('e1nx too many name matches error')
-                    raise ValueError('e1nx, too many matches found')
-        elif len(exchangeMatches) > 1:
-            if len(nameMatches) == 0:
-                raise ValueError('too many matches found')
-            elif len(nameMatches) == 1:
-                matchesfound = []
-                for em in exchangeMatches:
-                    if nameMatches[0].exchange == em.exchange:
-                        matchesfound.append(em)
-                if len(matchesfound) < 2:
-                    if verbose > 1: print('matched\n', nameMatches[0], '\n', shortcdict(matchesfound, 0))
+            if len(exchangeMatches) == 0:
+                if len(nameMatches) == 0:
+                    if exchange in acceptablewithoutotherconfirmation:
+                        if verbose > 1: print('accepting', yahooSymbol)
+                        pass
+                    else:
+                        # raise ValueError('no matches found')
+                        # print('no matches, new symbol', s)
+                        # notfound.append(s)
+                        ## unable to determine match
+                        return exchange
+                elif len(nameMatches) == 1:
+                    if verbose > 1: print(f'{exchange} not found,' if exchange else '', 'using', nameMatches[0])
                     exchange = nameMatches[0].exchange
-                elif len(matchesfound) > 1:
-                    if verbose > 1: print('exn1 too many matches error')
-                    raise ValueError('too many matches found')
-            elif len(nameMatches) > 1:
-                if verbose > 1: print('exnx too many matches error')
-                raise ValueError('too many matches found')
-                ## todo, double loop?
-                matchesfound = []
-                for em in exchangeMatches:
-                    if nameMatches[0].exchange == em.exchange:
-                        matchesfound.append(em)
-                if len(matchesfound) < 2:
-                    exchange = nameMatches[0].exchange
-                elif len(matchesfound) > 1:
-                    raise ValueError('too many matches found')
+                elif len(nameMatches) > 1:
+                    e0nx.append(symbol)
+                    if verbose > 1: print('e0nx too many name matches error')
+                    raise ValueError('e0nx, too many matches found')
+            elif len(exchangeMatches) == 1:
+                if len(nameMatches) == 0:
+                    if verbose > 1: print('no name matches for exch match, using', exchangeMatches[0], '\ntickers', tickers)
+                    exchange = exchangeMatches[0].exchange
+                elif len(nameMatches) == 1:
+                    if exchangeMatches[0].exchange == nameMatches[0].exchange:
+                        if verbose > 1: print('matched\n', exchangeMatches[0], '\n', nameMatches[0])
+                        exchange = exchangeMatches[0].exchange
+                    else:
+                        e1n1.append(symbol)
+                        if verbose > 1: print('e1n1 mismatch error')
+                        raise ValueError('e1n1, exchange mismatch')
+                elif len(nameMatches) > 1:
+                    matchesfound = []
+                    for nm in nameMatches:
+                        if exchangeMatches[0].exchange == nm.exchange:
+                            matchesfound.append(nm)
+                    # if matchesfound and (
+                    #     (exchange and all(t.exchange == exchange for t in matchesfound)) or
+                    #     (not exchange and len(set([t.exchange for t in matchesfound])) == 1)
+                    # ):
+                    #     ## remove duplicates
+                    #     matchesfound = [matchesfound[0]]
 
-        return exchange, False
+
+                    if len(matchesfound) < 2:
+                        if verbose > 1: print('matched\n', exchangeMatches[0], '\n', shortcdict(matchesfound, 0))
+                        exchange = exchangeMatches[0].exchange
+                    elif len(matchesfound) > 1:
+                        e1nx.append(symbol)
+                        if verbose > 1: print('e1nx too many name matches error')
+                        raise ValueError('e1nx, too many matches found')
+            elif len(exchangeMatches) > 1:
+                if len(nameMatches) == 0:
+                    raise ValueError('too many matches found')
+                elif len(nameMatches) == 1:
+                    matchesfound = []
+                    for em in exchangeMatches:
+                        if nameMatches[0].exchange == em.exchange:
+                            matchesfound.append(em)
+                    # if matchesfound and (
+                    #     (exchange and all(t.exchange == exchange for t in matchesfound)) or
+                    #     (not exchange and len(set([t.exchange for t in matchesfound])) == 1)
+                    # ):
+                    #     ## remove duplicates
+                    #     matchesfound = [matchesfound[0]]
+
+                    if len(matchesfound) < 2:
+                        if verbose > 1: print('matched\n', nameMatches[0], '\n', shortcdict(matchesfound, 0))
+                        exchange = nameMatches[0].exchange
+                    elif len(matchesfound) > 1:
+                        if verbose > 1: print('exn1 too many matches error')
+                        raise ValueError('too many matches found')
+                elif len(nameMatches) > 1:
+                    if verbose > 1: print('exnx too many matches error')
+                    raise ValueError('too many matches found')
+                    ## todo, double loop?
+                    matchesfound = []
+                    for em in exchangeMatches:
+                        if nameMatches[0].exchange == em.exchange:
+                            matchesfound.append(em)
+                    if len(matchesfound) < 2:
+                        exchange = nameMatches[0].exchange
+                    elif len(matchesfound) > 1:
+                        # if not all(t.exchange == exchange for t in matchesfound):
+                        raise ValueError('too many matches found')
+
+            return exchange
 
 ## possibly only single use, meant to consolidate earnings date dump data from multiple apis/tables into a single table, which would receive all future retrieved data
 ## OBSOLETE: data moved back to individual tables based on the API supplying the data (2023-08-16)
@@ -261,7 +314,7 @@ def transferYahooEarningsDateDumpTableToStaging(symbolList=[], dryrun=False, ver
             totalexceptionslength = len(e0nx) + len(e1n1) + len(e1nx)
 
             try:
-                exchange = getYahooExchangeForSymbol(s, data[0].name, verbose)
+                exchange = getExchange(s, companyName=data[0].name, verbose=verbose)
             except ValueError as e:
                 if len(e0nx) + len(e1n1) + len(e1nx) == totalexceptionslength:
                     raise e ## some unknown exception occurred
@@ -301,6 +354,8 @@ if __name__ == '__main__':
     try:
         # transferYahooEarningsDateDumpTableToStaging(dryrun=False)
         # transferMarketwatchEarningsDateDumpTableToStaging(dryrun=False)
+        exch = getExchange('NEWP', companyName='New Pacific Metals Corp.')
+        print(exch)
         pass
     finally:
         print('e0nx, too many matches found:', ','.join(e0nx))
@@ -314,7 +369,7 @@ if __name__ == '__main__':
     #     print(f'-----{s} --------------------------------------------')
     #     try:
     #         # anyrow = dbm.dbc.execute(f'''select * from {dbm.getTableString("earnings_dates_yahoo_d")} where symbol=?''', (s,)).fetchone()
-    #         # exchange = getYahooExchangeForSymbol(s, shortcdict(anyrow, 'name'), 2)
+    #         # exchange = getExchange(s, companyName=shortcdict(anyrow, 'name'), verbose=2)
     #         # print('exchange:', exchange)
     #         histdata = dbm.getStockDataDaily_basic(symbol=s)
     #         histdatatickers = dbm.getStockDataDaily_basic(symbol=s, sqlColumns='DISTINCT exchange,symbol')

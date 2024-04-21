@@ -23,7 +23,7 @@ from structures.api.googleTrends.gt_exceptions import ResponseError
 from structures.sql.sqlArgumentObj import SQLArgumentObj
 
 from constants.exceptions import APILimitReached, APIError, APITimeout, NotSupportedYet
-from utils.collectorSupport import getYahooExchangeForSymbol
+from utils.collectorSupport import getExchange
 from utils.dbSupport import convertToSnakeCase, getTableString
 from utils.other import parseCommandLineOptions
 from utils.support import asDate, asDatetime, asISOFormat, asList, getIndex, recdotdict, shortcdict, tqdmLoopHandleWrapper
@@ -1061,7 +1061,7 @@ class Collector:
                     'earningsDate': cdate if api == Api.NASDAQ else d['date']
                 }
                 if api != Api.NASDAQ:
-                    datapointKWArgs['exchange'] = getYahooExchangeForSymbol(shortcdict(d, 'ticker', shortcdict(d, 'symbol')), shortcdict(d, 'companyshortname', shortcdict(d, 'name')))
+                    datapointKWArgs['exchange'] = getExchange(shortcdict(d, 'ticker', shortcdict(d, 'symbol')), companyName=shortcdict(d, 'companyshortname', shortcdict(d, 'name')))
 
                 for k,v in d.items():
                     ## ignore keys
