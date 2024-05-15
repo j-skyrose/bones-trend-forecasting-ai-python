@@ -1745,15 +1745,20 @@ class DatabaseManager(Singleton):
         ## todo cleanup data_sets table, ON DELETE CASCADE not working?
             
 
-    def deleteNeuralNetwork(self, id):
-        # stmt = f'DELETE FROM {self.getTableString("google_interests_c")} WHERE network_id = ?'
-        # self.dbc.execute(stmt, (id,))
+    def deleteNetwork(self, id):
+        stmt = f'DELETE FROM {getTableString("networks")} WHERE id = ?'
+        self.dbc.execute(stmt, (id,))
 
-        # stmt = 'DELETE FROM data_sets WHERE network_id = ?'
-        # self.dbc.execute(stmt, (id,))
+    def deleteInputVectorFactory(self, id):
+        stmt = f'DELETE FROM {getTableString("input_vector_factories")} WHERE id = ?'
+        self.dbc.execute(stmt, (id,))
 
-        ## SQL cascade should handle deletion
-        stmt = 'DELETE FROM networks WHERE id = ?'
+    def deleteNetworkTrainingConfig(self, id):
+        stmt = f'DELETE FROM {getTableString("network_training_config")} WHERE id = ?'
+        self.dbc.execute(stmt, (id,))
+
+    def deleteNetworkAccuracy(self, id):
+        stmt = f'DELETE FROM {getTableString("network_accuracies")} WHERE network_id = ?'
         self.dbc.execute(stmt, (id,))
 
     def deleteVectorSimilarities(self, exchange, symbol, seriesType: SeriesType=None, dt=None, vclass: OutputClass=None, precedingRange=None, followingRange=None, threshold=None):

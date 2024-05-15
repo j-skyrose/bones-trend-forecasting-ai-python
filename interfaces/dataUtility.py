@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import tqdm, numpy, numba, calendar, sqlite3
+import tqdm, numpy, numba, calendar, sqlite3, shutil
 from datetime import date, timedelta
 from functools import partial
 from numpy.core import _exceptions as numpy_exceptions
@@ -422,6 +422,28 @@ def technicalIndicatorDataCalculationAndInsertion(exchange=None, symbol=None, se
 
     print('Updated {} tickers'.format(tickersupdated))
     print('Added or replaced {} rows'.format(rowsadded))
+
+#region network
+def deleteNetwork(networkId):
+    '''deletes network and associated data from all database tables; and deletes neural network save'''
+    for nid in asList(networkId):
+        nrow = dbm.getNetworks_basic(nid)
+        dbm.startBatch()
+        dbm.deleteNetwork(nid)
+        if nrow:
+            factoryId = nrow[0].factory_id
+            othernrows = dbm.getNetworks_basic(factoryId=factoryId)
+            if not othernrows:
+                ## only delete if not used by any other networks
+                dbm.deleteInputVectorFactory(factoryId)
+        dbm.deleteNetworkTrainingConfig(nid)
+        dbm.deleteNetworkAccuracy(nid)
+        dbm.commitBatch()
+        try:
+            shutil.rmtree(os.path.join(path, f'data/network_saves/{nid}'), ignore_errors=True)
+        except FileNotFoundError:
+            pass
+#endregion network
 
 def _getHistoricalGaps(data, startDate, endDate, vix=False, verbose=0) -> List[date]:
     '''helper for helper function _getDailyHistoricalGaps'''
