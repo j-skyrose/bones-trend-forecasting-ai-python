@@ -23,7 +23,7 @@ from constants.values import unusableSymbols, apiList, standardExchanges
 from managers.apiManager import APIManager
 from managers.configManager import StaticConfigManager
 from managers.dbCacheManager import DBCacheManager
-from managers.marketDayManager import MarketDayManager
+from managers.persistentDatabaseConnectionManager import PersistentDatabaseConnectionManagerFactory
 from structures.normalizationColumnObj import NormalizationColumnObj
 from structures.normalizationDataHandler import NormalizationDataHandler
 from structures.sql.sqlArgumentObj import SQLArgumentObj
@@ -35,16 +35,15 @@ from utils.support import asDate, asISOFormat, asList, condenseWhitespace, flatt
 configManager: StaticConfigManager = StaticConfigManager()
 
 ## generate before import to ensure things are up-to-date for the current execution
-if current_process().name == 'MainProcess': generateDatabaseAnnotationObjectsFile()
+if sys.argv[0].endswith('databaseConnectionServer.py'): generateDatabaseAnnotationObjectsFile()
 from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, CboeVolatilityIndexRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, StockDataDailyCRow, QueryCachesCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, GoogleTopicIdsDRow, QueueStockDataDailyDRow
 from managers._generatedDatabaseExtras.databaseRowObjects import symbolsSnakeCaseTableColumns, stockDataDailyCCamelCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns, symbolInfoAlphavantageDSnakeCaseTableColumns, symbolInfoPolygonDSnakeCaseTableColumns, symbolInfoYahooDSnakeCaseTableColumns
 
 class DatabaseManager(Singleton):
 
-    def init(self, propertiesDatabasePath=None, computedDatabasePath=None, dumpDatabasePath=None, commitAtExit=True):
+    def init(self, commitAtExit=True, runServer=True):
         self.commitAtExit = commitAtExit
-        atexit.register(self.close)
-        self.connect, self.dbc = generateCompleteDBConnectionAndCursor(propertiesDatabasePath, computedDatabasePath, dumpDatabasePath)
+        self.dbc = PersistentDatabaseConnectionManagerFactory(runServer=runServer)
 
         ## caching
         self.cacheManager = DBCacheManager()
@@ -64,17 +63,14 @@ class DatabaseManager(Singleton):
         if self.commitAtExit: 
             self.commit()
             if current_process().name == 'MainProcess': print('Committed changes')
-        self.connect.close()
 
     def commit(self):
-        self.connect.commit()
+        self.dbc.commit()
 
     ## for SQL transactions
-    def startBatch(self): 
-        self.commit()
-        self.dbc.execute('BEGIN')
-    def commitBatch(self): self.dbc.execute('COMMIT')
-    def rollbackBatch(self): self.dbc.execute('ROLLBACK')
+    def startBatch(self): self.dbc.startBatch()
+    def commitBatch(self): self.dbc.commitBatch()
+    def rollbackBatch(self): self.dbc.rollbackBatch()
 
     def _resetCachedStockDataDailyCount(self):
         self.stockDataDailyCount = None
@@ -92,7 +88,7 @@ class DatabaseManager(Singleton):
             data = cache
         else: 
             print('no cache, executing')
-            data = self.dbc.execute(query, qarg).fetchall()
+            data = self.dbc.execute(query, qarg)
             self.cacheManager.add(tag, query, validationObj, data)
         return data
 
@@ -423,16 +419,16 @@ class DatabaseManager(Singleton):
         return getTableString(tableName)
 
     def getMaxRowID(self, table='google_interests_d') -> int:
-        return self.dbc.execute(f'SELECT MAX(rowid) FROM {getTableString(table)}').fetchone()['MAX(rowid)']
+        return self.dbc.execute(f'SELECT MAX(rowid) FROM {getTableString(table)}')[0]['MAX(rowid)']
 
     def getRowCount(self, table) -> int:
-        return self.dbc.execute(f'SELECT count(*) as rowcount FROM {self.getTableString(table)}').fetchone()['rowcount']
+        return self.dbc.execute(f'SELECT count(*) as rowcount FROM {self.getTableString(table)}')[0]['rowcount']
 
     def getTableColumns(self, tableName) -> List[str]:
         return getTableColumns(self.dbc, tableName)
 
     def getLoadedQuarters(self):
-        qrts = self.dbc.execute(f'SELECT period FROM {self.getTableString("financial_stmts_loaded_periods_d")} WHERE type=\'quarter\'').fetchall()
+        qrts = self.dbc.execute(f'SELECT period FROM {self.getTableString("financial_stmts_loaded_periods_d")} WHERE type=\'quarter\'')
         return [q.period for q in qrts]
 
     def getAliasesDictionary(self, api:Api=None):
@@ -604,7 +600,7 @@ class DatabaseManager(Singleton):
             queryString = queryString.replace('?', str(a), 1)
 
         startt = time.time()
-        generateValueFunction = lambda: self.dbc.execute(stmt, args).fetchall()
+        generateValueFunction = lambda: self.dbc.execute(stmt, args)
         if len(asList(exchange)) == 1 and len(asList(symbol)) == 1:
             ## do not cache for individual tickers as performance gain may be negligible
             tickers = generateValueFunction()
@@ -642,7 +638,7 @@ class DatabaseManager(Singleton):
         # stmt += ' OR ' + api + '_description IS NULL'
         # stmt += ')'
 
-        return self.dbc.execute(stmt).fetchall()
+        return self.dbc.execute(stmt)
 
     ## get symbols of which financials retrieval has not already been attempted
     def getSymbols_forFinancialStaging(self, api, ftype: FinancialReportType=None) -> List[SymbolsRow]:
@@ -652,7 +648,7 @@ class DatabaseManager(Singleton):
         substmt = f'SELECT * FROM {self.getTableString("staging_financials_d")} WHERE exchange = symbols.exchange AND symbol = symbols.symbol AND ' + api + ' IS NOT NULL'
         if ftype: substmt += ' AND period = \'' + ftype.name + '\''
         stmt = 'SELECT * FROM symbols WHERE NOT EXISTS (' + substmt + ') AND api_' + api + ' = 1'
-        return self.dbc.execute(stmt).fetchall()
+        return self.dbc.execute(stmt)
 
     ## get the row for each symbol with the latest datetime from historical_data_minute
     def getLatestMinuteDataRows(self, api):
@@ -662,7 +658,7 @@ class DatabaseManager(Singleton):
             WHERE s.api_{api} = 1
             GROUP BY s.exchange, s.symbol
         '''.format(api=api)
-        return purgeUnusableTickers(self.dbc.execute(stmt).fetchall())
+        return purgeUnusableTickers(self.dbc.execute(stmt))
 
     ## get raw data from last_updates
     def getLastUpdatedInfo(self, seriesType, dt=None, dateModifier=OperatorDict.EQUAL, **kwargs):
@@ -686,7 +682,7 @@ class DatabaseManager(Singleton):
             stmt += ' LIMIT ' + str(gconfig.testing.predictorStockQueryLimit)
             # print(stmt)
             # print(args)
-        return purgeUnusableTickers(self.dbc.execute(stmt, tuple(args)).fetchall()
+        return purgeUnusableTickers(self.dbc.execute(stmt, tuple(args))
                                     # ,**kwargs
                                     )
 
@@ -762,13 +758,13 @@ class DatabaseManager(Singleton):
         if rawStatement:
             return stmt, args
         else:
-            rows = self.dbc.execute(stmt, args).fetchall()
+            rows = self.dbc.execute(stmt, args)
             return onlyColumnListProcessing(rows, onlyColumn_asList)
 
     ## get all neural networks including factories and training config
     def getNetworks(self):
         stmt = 'SELECT n.*, ntc.*, ivf.factory, ivf.config FROM networks n JOIN input_vector_factories ivf ON n.factory_id = ivf.id JOIN network_training_config ntc ON n.id = ntc.id'
-        return self.dbc.execute(stmt).fetchall()
+        return self.dbc.execute(stmt)
 
     def getQueryCache(self,
                         ## select columns
@@ -933,13 +929,13 @@ class DatabaseManager(Singleton):
 
     def getFinancialData(self, exchange, symbol, raw=False):
         stmt = 'SELECT * FROM vwtb_edgar_financial_nums n JOIN vwtb_edgar_quarters q ON n.exchange = q.exchange AND n.symbol = q.symbol AND n.ddate = q.period WHERE n.exchange=? AND n.symbol=? ORDER BY q.period'
-        res = self.dbc.execute(stmt, (exchange, symbol)).fetchall()
+        res = self.dbc.execute(stmt, (exchange, symbol))
 
         return processDBQuartersToDicts(res) if not raw else res
 
     def getVIXMax(self) -> float:
         stmt = 'SELECT max(high) FROM cboe_volatility_index'
-        m = self.dbc.execute(stmt).fetchone()['max(high)']
+        m = self.dbc.execute(stmt)[0]['max(high)']
         if m > 100:
             raise Exception('VIX has new max exceeding 100')
         return 100
@@ -1005,7 +1001,7 @@ class DatabaseManager(Singleton):
         stmt += 'ORDER BY gi.date ASC'
         if queryLimit: stmt += ' LIMIT ' + str(queryLimit)
 
-        return self.dbc.execute(stmt, tuple(args)).fetchall()
+        return self.dbc.execute(stmt, tuple(args))
 
     def getMaxGoogleInterestStream(self, exchange=None, symbol=None, gtopicid=None, itype:InterestType=InterestType.DAILY) -> int:
         stmt = f'SELECT MAX(stream) AS maxstream FROM {self.getTableString("google_interests_d")} gi '
@@ -1024,7 +1020,7 @@ class DatabaseManager(Singleton):
             stmt += ' AND gi.type=? '
             args.append(itype.name)
 
-        res = self.dbc.execute(stmt, tuple(args)).fetchall()
+        res = self.dbc.execute(stmt, tuple(args))
         if len(res) > 0:
             return res[0].maxstream
         else:
@@ -1201,7 +1197,7 @@ class DatabaseManager(Singleton):
     def saveDataSet(self, id, trainingSet, validationSet, testingSet, setId=None):
         if not setId:
             stmt = 'SELECT max(network_set_id) as set_id FROM data_sets WHERE network_id = ?'
-            setId = self.dbc.execute(stmt, (id,)).fetchall()[0]['set_id']
+            setId = self.dbc.execute(stmt, (id,))[0]['set_id']
             if not setId: setId = 1
         
         # def _getSet(dset, stype):
@@ -1250,7 +1246,7 @@ class DatabaseManager(Singleton):
 
             ## check if factory/config combination is already present
             tpl = (factoryblob, configdill)
-            res = self.dbc.execute('SELECT * FROM input_vector_factories WHERE factory=? AND config=?', tpl).fetchall()
+            res = self.dbc.execute('SELECT * FROM input_vector_factories WHERE factory=? AND config=?', tpl)
             if len(res) > 0:
                 factoryId = res[0].id
             else:
@@ -1510,7 +1506,7 @@ class DatabaseManager(Singleton):
             notfound = 0
             for s in tqdm(sub, desc='Submissions'):
                 try:
-                    ticker = self.dbc.execute(f'SELECT * FROM {self.getTableString("symbol_info_polygon_d")} WHERE polygon_cik IN (?,?)', (s.cik, s.cik.rjust(10, '0'))).fetchall()[0]
+                    ticker = self.dbc.execute(f'SELECT * FROM {self.getTableString("symbol_info_polygon_d")} WHERE polygon_cik IN (?,?)', (s.cik, s.cik.rjust(10, '0')))[0]
                 except IndexError as e:
                     notfound += 1
                     ticker = recdotdict({ 'exchange': None, 'symbol': None })
@@ -1522,7 +1518,7 @@ class DatabaseManager(Singleton):
                    self.dbc.execute(tag_stmt, tuple(t.values()))
                 except sqlite3.IntegrityError:
                     # print(t)
-                    # print(self.dbc.execute('SELECT * FROM {self.getTableString("financial_stmts_tag_data_set_edgar_d")} WHERE tag=? AND version=?', (t.tag, t.version)).fetchall())
+                    # print(self.dbc.execute('SELECT * FROM {self.getTableString("financial_stmts_tag_data_set_edgar_d")} WHERE tag=? AND version=?', (t.tag, t.version)))
                     # raise e
                     pass
 
@@ -1534,11 +1530,11 @@ class DatabaseManager(Singleton):
                 except sqlite3.IntegrityError:
                     # if n.adsh == lastadsh:
                     #     print(n)
-                    #     print(self.dbc.execute(f'SELECT * FROM {self.getTableString("financial_stmts_num_data_set_edgar_d")} WHERE adsh=? AND tag=? AND version=? AND ddate=? AND qtrs=?', (n.adsh, n.tag, n.version, n.ddate, n.qtrs)).fetchall())
+                    #     print(self.dbc.execute(f'SELECT * FROM {self.getTableString("financial_stmts_num_data_set_edgar_d")} WHERE adsh=? AND tag=? AND version=? AND ddate=? AND qtrs=?', (n.adsh, n.tag, n.version, n.ddate, n.qtrs)))
 
                     #     raise e
                     # else:
-                    # existingkey_row = self.dbc.execute('SELECT * FROM {self.getTableString("financial_stmts_num_data_set_edgar_d")} WHERE adsh=? AND tag=? AND version=? AND coreg=? AND ddate=? AND qtrs=? AND uom=?', (n.adsh, n.tag, n.version, n.coreg, n.ddate, n.qtrs, n.uom)).fetchall()[0]
+                    # existingkey_row = self.dbc.execute('SELECT * FROM {self.getTableString("financial_stmts_num_data_set_edgar_d")} WHERE adsh=? AND tag=? AND version=? AND coreg=? AND ddate=? AND qtrs=? AND uom=?', (n.adsh, n.tag, n.version, n.coreg, n.ddate, n.qtrs, n.uom))[0]
                     # if existingkey_row.value != n.value:
                     #     duplicatekey_diffnums.append(n)
                     self.dbc.execute(num_stmt, tuple(list(n.values()) + [True]))
@@ -1567,7 +1563,7 @@ class DatabaseManager(Singleton):
         wherestmt = ' WHERE network_id=? AND accuracy_type=? AND subtype1=? and subtype2=?'
         stmt = 'SELECT * FROM network_accuracies' + wherestmt
         tple = [nnid, AccuracyAnalysisTypes.STOCK.value, exchange, symbol]
-        currentrow = self.dbc.execute(stmt, tuple(tple)).fetchone()
+        currentrow = self.dbc.execute(stmt, tuple(tple))[0]
 
         stmt = 'UPDATE network_accuracies SET sum=?, count=?' + wherestmt
         tple = [currentrow.sum + acc * count, currentrow.count + count] + tple
@@ -1583,7 +1579,7 @@ class DatabaseManager(Singleton):
             tple2 = tple + [k.value]
             for cb in CorrBool:
                 tple3 = tple2 + [cb.value]
-                currentrow = self.dbc.execute(stmt, tuple(tple3)).fetchone()
+                currentrow = self.dbc.execute(stmt, tuple(tple3))[0]
                 self.dbc.execute(stmt2, tuple([currentrow.count + v[cb]] + tple3))
 
     def updateAccuraciesLastUpdated(self, nnid, acctype: AccuracyAnalysisTypes, dataCount, minDate=None, lastExchange=None, lastSymbol=None):
@@ -1788,12 +1784,12 @@ class DatabaseManager(Singleton):
     def deleteDumpTicker_polygon(self, primary_exchange, ticker, delisted_utc):
         additionalStmt, arguments = generateSQLSuffixStatementAndArguments(**locals())
         stmt = f'DELETE FROM {self.getTableString("symbol_info_polygon_d")}'
-        return self.dbc.execute(stmt + additionalStmt, arguments).fetchall()
+        return self.dbc.execute(stmt + additionalStmt, arguments)
 
     def deleteDumpTicker_alphavantage(self, exchange, symbol, delisting_date):
         additionalStmt, arguments = generateSQLSuffixStatementAndArguments(**locals())
         stmt = f'DELETE FROM {self.getTableString("symbol_info_alphavantage_d")}'
-        return self.dbc.execute(stmt + additionalStmt, arguments).fetchall()
+        return self.dbc.execute(stmt + additionalStmt, arguments)
 
     def dequeueStockDataDailyTickerFromUpdate(self, symbol, source: StockDataSource, exchange='UNKNOWN'):
         '''removes ticker from queue after data has been consolidated'''
@@ -1850,7 +1846,7 @@ class DatabaseManager(Singleton):
 
     def _condenseSectorTuples(self):
         stmt = f'SELECT * FROM {self.getTableString("staging_symbol_info_d")} WHERE fmp_sector IS NOT NULL AND polygon_sector IS NOT NULL AND alphavantage_sector IS NOT NULL AND migrated=0'
-        symbolList = self.dbc.execute(stmt).fetchall()
+        symbolList = self.dbc.execute(stmt)
         sectorList = self.getSectors_basic(orderBy='rowid', onlyColumn_asList='sector')
 
         print('Checking', len(symbolList), 'symbols in staging')
@@ -2287,7 +2283,7 @@ class DatabaseManager(Singleton):
             stmt += f' AND exchange in ({",".join(exchange)})'
         stmt += ' ORDER BY symbol'
 
-        res = self.dbc.execute(stmt).fetchall()
+        res = self.dbc.execute(stmt)
         symbolGroups = { e: {} for e in exchange }
         for s in tqdm(res, desc='Sorting symbols'):
             sdict = symbolGroups[s.exchange]
@@ -2330,7 +2326,7 @@ class DatabaseManager(Singleton):
     def validateStockSplits(self, dryRun=False, verbose=0):
         stmt = f'SELECT * FROM stock_splits sp JOIN (SELECT DISTINCT exchange, symbol FROM {self.stockDataDailyTableString}) h ON sp.exchange = h.exchange AND sp.symbol = h.symbol WHERE sp.exchange <> ? AND sp.status = ?'
         tpl = ('UNKNOWN', 0)
-        tickersToCheck = self.dbc.execute(stmt, tpl).fetchall()
+        tickersToCheck = self.dbc.execute(stmt, tpl)
 
         errorTickers = []
         ratioErrorTickers = []
@@ -2340,7 +2336,7 @@ class DatabaseManager(Singleton):
         for t in tqdm(tickersToCheck, desc='Validating stock splits') if verbose > 0 and not dryRun else tickersToCheck:
             tpl = (t.date, t.exchange, t.symbol)
             try:
-                splitDayData, prevDayData = self.dbc.execute(selectStmt, ((date.fromisoformat(t.date)-timedelta(days=4)).isoformat(),)+tpl).fetchall()
+                splitDayData, prevDayData = self.dbc.execute(selectStmt, ((date.fromisoformat(t.date)-timedelta(days=4)).isoformat(),)+tpl)
                 if splitDayData.period_date != t.date: raise ValueError
             except (ValueError, AttributeError):
             # except Exception as e:
@@ -2449,7 +2445,7 @@ class DatabaseManager(Singleton):
                 if a2==0: return a1
                 return 0
 
-            tickers = self.dbc.execute('SELECT * FROM symbols WHERE exchange=? AND symbol LIKE ?', ('TSX','%.TO')).fetchall()
+            tickers = self.dbc.execute('SELECT * FROM symbols WHERE exchange=? AND symbol LIKE ?', ('TSX','%.TO'))
 
             for idx, t in enumerate(tickers):
                 massagedSymbol = t.symbol.replace('.TO','').replace('-','.')
@@ -2594,7 +2590,7 @@ class DatabaseManager(Singleton):
         requiredTables = ['symbols', 'stock_data_daily_c', 'google_interests_d']
         for table in requiredTables:
             dbalias = getDBAliasForTable(table)
-            src_table = self.dbc.execute(f'SELECT * from {dbalias}.sqlite_master WHERE type=\'table\' AND tbl_name=?', (table,)).fetchall()[0]
+            src_table = self.dbc.execute(f'SELECT * from {dbalias}.sqlite_master WHERE type=\'table\' AND tbl_name=?', (table,))[0]
             try:
                 destination_cursor.execute(src_table['sql'])
             except sqlite3.OperationalError as e:
@@ -2700,13 +2696,13 @@ class DatabaseManager(Singleton):
 def printSectorColumnInfos(dbm: DatabaseManager):
     ## compare sectors from temp table
     stmt = 'SELECT DISTINCT {}_sector' + f' FROM {dbm.getTableString("staging_symbol_info_d")} ORDER BY 1'
-    # ds_fmp = [d['fmp_sector'] for d in d.dbc.execute(stmt.format('fmp')).fetchall()]
-    # ds_polygon = [d['polygon_sector'] for d in d.dbc.execute(stmt.format('polygon')).fetchall()]
-    # ds_alphavantage = [d['alphavantage_sector'] for d in d.dbc.execute(stmt.format('alphavantage')).fetchall()]
+    # ds_fmp = [d['fmp_sector'] for d in d.dbc.execute(stmt.format('fmp'))]
+    # ds_polygon = [d['polygon_sector'] for d in d.dbc.execute(stmt.format('polygon'))]
+    # ds_alphavantage = [d['alphavantage_sector'] for d in d.dbc.execute(stmt.format('alphavantage'))]
     # dss = [ds_fmp, ds_polygon, ds_alphavantage]
     dss = []
     for a in apiList:
-        dss.append([d[a + '_sector'] for d in dbm.dbc.execute(stmt.format(a)).fetchall()])
+        dss.append([d[a + '_sector'] for d in dbm.dbc.execute(stmt.format(a))])
 
 
     for l in dss:
@@ -2725,7 +2721,7 @@ def printSectorColumnInfos(dbm: DatabaseManager):
     for ac in range(len(apiList)):
         dcl = []
         for dc in dss[ac]:
-            dcl.append(dbm.dbc.execute(stmt.format(apiList[ac]), (dc,)).fetchone()['count'])
+            dcl.append(dbm.dbc.execute(stmt.format(apiList[ac]), (dc,))[0]['count'])
         counts.append(dcl)
 
 
@@ -2786,7 +2782,7 @@ if __name__ == '__main__':
         # print(updatedrows)
 
         ## graph earnings dates
-        # edata = d.dbc.execute(f'SELECT * FROM {self.getTableString("staging_earnings_dates")}').fetchall()
+        # edata = d.dbc.execute(f'SELECT * FROM {self.getTableString("staging_earnings_dates")}')
         edata = flatten([d.getDumpEarningsDates(eapi, symbol='AA') for eapi in EarningsCollectionAPI])
         uniquetickerdates = set()
         for e in tqdm(edata, desc='Creating tuples'):
@@ -2831,9 +2827,9 @@ if __name__ == '__main__':
         # checking uniqueness of symbols retrieved for earnings date data dumps
         ## appears marketwatch symbols are covered by nasdaq and yahoo APIs, only a few OTCBB symbols are not but none of the 4 stock data APIs can get them
         ## nasdaq is mostly covered by yahoo, only ~375 symbols are unique
-        nasdaqtablesymbols = [r.symbol for r in d.dbc.execute(f'select distinct symbol from {d.getTableString("earnings_dates_nasdaq_d")}').fetchall()]
-        marketwatchtablesymbols = [r.symbol for r in d.dbc.execute(f'select distinct symbol from {d.getTableString("earnings_dates_marketwatch_d")}').fetchall()]
-        yahootablesymbols = [r.symbol for r in d.dbc.execute(f'select distinct symbol from {d.getTableString("earnings_dates_yahoo_d")}').fetchall()]
+        nasdaqtablesymbols = [r.symbol for r in d.dbc.execute(f'select distinct symbol from {d.getTableString("earnings_dates_nasdaq_d")}')]
+        marketwatchtablesymbols = [r.symbol for r in d.dbc.execute(f'select distinct symbol from {d.getTableString("earnings_dates_marketwatch_d")}')]
+        yahootablesymbols = [r.symbol for r in d.dbc.execute(f'select distinct symbol from {d.getTableString("earnings_dates_yahoo_d")}')]
 
         print('nasdaq vs marketwatch uniques')
         nasdaquniques = []
@@ -2927,7 +2923,7 @@ if __name__ == '__main__':
 
 
         ## check if any 100 daily dates are within the same week, which will cause problems when framing using weekly and monthly data
-        # gidata = d.dbc.execute('select * from google_interests_raw where relative_interest=100 and type=\'DAILY\' order by exchange,symbol,date').fetchall()
+        # gidata = d.dbc.execute('select * from google_interests_d where relative_interest=100 and type=\'DAILY\' order by exchange,symbol,date')
         # curticker = None
         # lastdate = None
         # count=0
@@ -2961,9 +2957,9 @@ if __name__ == '__main__':
 
         ## deleting google interest data under conditions, e.g. interest = 100 for dates past threshold 2022-09-30
         # src_tickers = []
-        # messedupgidatatickers = d.dbc.execute('select DISTINCT exchange,symbol from google_interests_raw where date>=\'2022-10-01\' and type=\'DAILY\'').fetchall()
+        # messedupgidatatickers = d.dbc.execute('select DISTINCT exchange,symbol from google_interests_d where date>=\'2022-10-01\' and type=\'DAILY\'')
         # for t in messedupgidatatickers:
-        #     src_tickers.append(d.dbc.execute('SELECT * FROM symbols WHERE exchange=? AND symbol=?', (t.exchange, t.symbol)).fetchone())
+        #	 src_tickers.append(d.dbc.execute('SELECT * FROM symbols WHERE exchange=? AND symbol=?', (t.exchange, t.symbol))[0])
         # for t in src_tickers:
         #     # dest_cursor.execute(f'INSERT INTO symbols VALUES ({getValueQS(src_tickers[0])})', list(t.values()))
         #     d.dbc.execute('DELETE FROM google_interests_raw WHERE exchange=? AND symbol=? AND type=\'DAILY\' and date>=\'2022-10-01\'', (t.exchange, t.symbol))

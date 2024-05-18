@@ -286,11 +286,11 @@ def getExchange(symbol, source:Enum=None, companyName:str=None, fromOptions=Fals
 ## OBSOLETE: data moved back to individual tables based on the API supplying the data (2023-08-16)
 def transferYahooEarningsDateDumpTableToStaging(symbolList=[], dryrun=False, verbose=1):
         ## nasdaq is mostly covered by yahoo, only ~375 symbols are unique
-        # nasdaqtablesymbols = [r.symbol for r in dbm.dbc.execute('select distinct symbol from earnings_dates_nasdaq_d').fetchall()]
+        # nasdaqtablesymbols = [r.symbol for r in dbm.dbc.execute('select distinct symbol from earnings_dates_nasdaq_d')]
         if symbolList:
             yahootablesymbols = symbolList if type(symbolList[0]) == str else [r.symbol for r in symbolList]
         else:
-            yahootablesymbols = [r.symbol for r in dbm.dbc.execute(f'select distinct symbol from {dbm.getTableString("earnings_dates_yahoo_d")}').fetchall()]
+            yahootablesymbols = [r.symbol for r in dbm.dbc.execute(f'select distinct symbol from {dbm.getTableString("earnings_dates_yahoo_d")}')]
 
         # brokensymbols = ['AACQ']
         ## Exantas Capital Corp. Changes Name to ACRES: NYSE:ACR
@@ -301,7 +301,7 @@ def transferYahooEarningsDateDumpTableToStaging(symbolList=[], dryrun=False, ver
         notfound = []
         checkpoint = False
         for indx,s in enumerate(tqdmLoopHandleWrapper(yahootablesymbols, verbose, desc='Migrating data')):
-            # anyrow = dbm.dbc.execute(f'''select * from {dbm.getTableString("staging_earnings_dates")} where symbol=?''', (s,)).fetchone()
+            # anyrow = dbm.dbc.execute(f'''select * from {dbm.getTableString("staging_earnings_dates")} where symbol=?''', (s,))[0]
             # if anyrow: continue
 
             # if s in brokensymbols: continue
@@ -310,7 +310,7 @@ def transferYahooEarningsDateDumpTableToStaging(symbolList=[], dryrun=False, ver
             # elif not checkpoint: continue
             if verbose > 1: print(f'----- {indx}/{len(yahootablesymbols)}: {s} --------------------------------------------')
 
-            data = dbm.dbc.execute(f'select * from {dbm.getTableString("earnings_dates_yahoo_d")} WHERE symbol=?', (s,)).fetchall()
+            data = dbm.dbc.execute(f'select * from {dbm.getTableString("earnings_dates_yahoo_d")} WHERE symbol=?', (s,))
             totalexceptionslength = len(e0nx) + len(e1n1) + len(e1nx)
 
             try:
@@ -321,7 +321,7 @@ def transferYahooEarningsDateDumpTableToStaging(symbolList=[], dryrun=False, ver
                 else:
                     continue
 
-            existingRows = dbm.dbc.execute(f'''select * from {dbm.getTableString("staging_earnings_dates")} where exchange=? and symbol=?''', (exchange, s)).fetchall()
+            existingRows = dbm.dbc.execute(f'''select * from {dbm.getTableString("staging_earnings_dates")} where exchange=? and symbol=?''', (exchange, s))
 
             for r in data:
                 ## check if row should be new
@@ -368,15 +368,15 @@ if __name__ == '__main__':
     # for s in exceptionsymbols:
     #     print(f'-----{s} --------------------------------------------')
     #     try:
-    #         # anyrow = dbm.dbc.execute(f'''select * from {dbm.getTableString("earnings_dates_yahoo_d")} where symbol=?''', (s,)).fetchone()
+    #         # anyrow = dbm.dbc.execute(f'''select * from {dbm.getTableString("earnings_dates_yahoo_d")} where symbol=?''', (s,))[0]
     #         # exchange = getExchange(s, companyName=shortcdict(anyrow, 'name'), verbose=2)
     #         # print('exchange:', exchange)
     #         histdata = dbm.getStockDataDaily_basic(symbol=s)
     #         histdatatickers = dbm.getStockDataDaily_basic(symbol=s, sqlColumns='DISTINCT exchange,symbol')
-    #         lastupd = dbm.dbc.execute('select * from last_updates where symbol=? and api is not null', (s,)).fetchall()
-    #         lastupdtickers = dbm.dbc.execute('select distinct exchange,symbol from last_updates where symbol=? ', (s,)).fetchall()
+    #         lastupd = dbm.dbc.execute('select * from last_updates where symbol=? and api is not null', (s,))
+    #         lastupdtickers = dbm.dbc.execute('select distinct exchange,symbol from last_updates where symbol=? ', (s,))
     #         syms = dbm.getSymbols(symbol=s)
-    #         ysym = dbm.dbc.execute(f'''select * from {dbm.getTableString("symbol_info_yahoo_d")} where symbol=?''', (s,)).fetchall()
+    #         ysym = dbm.dbc.execute(f'''select * from {dbm.getTableString("symbol_info_yahoo_d")} where symbol=?''', (s,))
 
     #         if len(histdata) > 0:
     #             print('has hist data')

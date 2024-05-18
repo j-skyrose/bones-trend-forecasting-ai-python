@@ -113,7 +113,7 @@ def expandSQLStatementArguments(stmt, args=[]):
 
     if args:
         for a in args:
-            stmt = stmt.replace('?', a, 1)
+            stmt = stmt.replace('?', str(a), 1)
     return stmt
 
 def parseNormalizationColumn(c) -> Tuple[NormalizationGroupings, str]:
@@ -281,7 +281,7 @@ def _dbGetter(table, sqlColumns='*', onlyColumn_asList=None, rawStatement=False,
     if rawStatement:
         return stmt, arguments
     else:
-        rows = dbm.dbc.execute(stmt, arguments).fetchall()
+        rows = dbm.dbc.execute(stmt, arguments)
         return onlyColumnListProcessing(rows, onlyColumn_asList)
 
 def getDBAliases():
@@ -300,7 +300,7 @@ def getDBAliasForTable(tableName: str):
 
 def getDBConnectionAndCursor(dbpath, row_factory=recdotdict_factory):
     '''return (connection, cursor) for given database path'''
-    dbconnect = sqlite3.connect(dbpath, timeout=15)
+    dbconnect = sqlite3.connect(dbpath, timeout=15, check_same_thread=False)
     dbconnect.row_factory = row_factory
     return dbconnect, dbconnect.cursor()
 
@@ -339,7 +339,7 @@ def getTableString(tableName) -> str:
 
 def getTableColumns(dbc, tableName) -> List:
     '''returns all table column objects'''
-    return dbc.execute(f'PRAGMA {getDBAliasForTable(tableName)}.table_info({tableName})').fetchall()
+    return dbc.execute(f'PRAGMA {getDBAliasForTable(tableName)}.table_info({tableName})')
 
 def generateDatabaseAnnotationObjectsFile(propertiesDatabasePath=None, computedDatabasePath=None, dumpDatabasePath=None):
     '''auto-generates file with annotation objects for the rows of each table in the database, at _generatedDatabaseExtras/databaseRowObjects.py'''

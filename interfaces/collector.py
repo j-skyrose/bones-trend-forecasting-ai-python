@@ -373,6 +373,7 @@ class Collector:
         except KeyboardInterrupt:
             pass
         
+        dbm.commit()
         if verbose:
             print(f'Inserted {insertCount} rows')
 
@@ -401,7 +402,7 @@ class Collector:
                 
             else:
                 ## gather symbols for this collection run
-                lastUpdatedList = dbm.getLastUpdatedCollectorInfo(seriesType=seriesType, api=api, googleTopicID=Direction.DESCENDING).fetchall()
+                lastUpdatedList = dbm.getLastUpdatedCollectorInfo(seriesType=seriesType, api=api, googleTopicID=Direction.DESCENDING)
                 if DEBUG: print('lastUpdatedList length',len(lastUpdatedList))
 
                 if api == 'alphavantage':
@@ -460,7 +461,8 @@ class Collector:
             for r in results:
                 resDict = {**resDict, **r}
 
-            dbm.insertData('NEO', symbol, SeriesType.DAILY, api, resDict, currentDate=currentDate)            
+            dbm.insertData('NEO', symbol, SeriesType.DAILY, api, resDict, currentDate=currentDate)
+            dbm.commit()
 
     def startAPICollection_exploratoryAlphavantageAPIUpdates(self, **kwargs):
         api = 'alphavantage'
@@ -543,6 +545,7 @@ class Collector:
 
             else:
                 print('Unable to get Friday data')
+        dbm.commit()
 
     def _addMissingColumns(self, table, data, verbose=0):
         '''adds missing columns to table based on the keys of the data objects'''
@@ -668,6 +671,7 @@ class Collector:
 
         if not active:
             self._verifyActiveTickerIntegrity(api, verbose=verbose)
+        dbm.commit()
 
     def startTickerDetailsCollection(self, api:Api, active=True, limit=None, verbose=1, **kwargs):
         '''collects individual ticker details (extended) for those supported by the given API and updates the symbol_info_polygon_d table'''
@@ -755,11 +759,12 @@ class Collector:
         #region update table with details
         rowCountBefore = dbm.getRowCount(tableName)
         insertFunction(tickerDetails)
+        dbm.commit()
         if verbose > 0:
             insertCount = dbm.getRowCount(tableName) - rowCountBefore
             print(f'Inserted {insertCount} new tickers')
             print(f'Updated {len(tickerDetails) - insertCount} existing tickers')
-        #endregion        
+        #endregion
 
     def startGoogleTopicIDCollection(self, exchange=None, symbol=None, tickers=None, dryrun=False, verbose=1):
         '''ignores tickers without a determined exchange'''
@@ -813,6 +818,7 @@ class Collector:
                         topicsNotFound.append((exchange, symbol))
             except ResponseError:
                 topicErrors.append((exchange, symbol))
+
         if verbose:
             if verbose > 1: print(topicsNotFound)
             print(f'Unabled to determine topic for {len(topicsNotFound)} tickers')
@@ -832,7 +838,7 @@ class Collector:
         ## still pulling NYSE:AAC even though row is present in dump table
 
         stmt = f'SELECT ssi.exchange, ssi.symbol FROM {dbm.getTableString("staging_symbol_info_d")} ssi JOIN symbols ON ssi.exchange = symbols.exchange AND ssi.symbol = symbols.symbol WHERE NOT EXISTS (' + substmt + ') AND polygon_sector NOT IN (\'e\',\'x\') AND api_' + api + ' = 1'
-        tickers = dbm.dbc.execute(stmt).fetchall()
+        tickers = dbm.dbc.execute(stmt)
 
         # print(tickers[0].exchange, tickers[0].symbol)
         # return
@@ -901,6 +907,7 @@ class Collector:
             else:
                 dbm.insertFinancials_staging(api, t.exchange, res.results)
             # break
+        dbm.commit()
 
     ## financials seem to be premium APIs
     def collectFMPFinancials(self, ftype: FinancialReportType, stype: FinancialStatementType, **kwargs):
@@ -937,8 +944,7 @@ class Collector:
             except APIError:
                 dbm.insertFinancials_staging_empty(api, t.exchange, t.symbol, FinancialReportType.QUARTER)
                 dbm.insertFinancials_staging_empty(api, t.exchange, t.symbol, FinancialReportType.YEAR)
-
-            # break
+            dbm.commit()        
 
     ## collect stock split dates/amounts and insert to DB
     def startSplitsCollection(self, api:Api, **kwargs):
@@ -1145,6 +1151,7 @@ class Collector:
                     firstIntegrityError = False
                 pass
 
+        dbm.commit()
         print(f'got data for {len(uniquedates)} days')
         print(f'inserted {insertcount} earnings dates')
 
@@ -1417,6 +1424,7 @@ class Collector:
             priority_zeropercentagethreshold += 0.1
             if collectStatsOnly: break
 
+        dbm.commit()
         finish()
 
 if __name__ == '__main__':
@@ -1457,7 +1465,7 @@ if __name__ == '__main__':
 
             ## alphavantage active tickers not already collected in dump table and not already present in old historical_data table
             stmt = f"SELECT a.exchange, a.symbol FROM {getTableString('symbol_info_alphavantage_d')} a WHERE a.status = 'Active' AND a.exchange||a.symbol NOT IN (SELECT DISTINCT h.exchange||h.symbol FROM {getTableString('historical_data')} h) AND a.exchange||a.symbol NOT IN (SELECT DISTINCT d.exchange||d.symbol FROM {getTableString('stock_data_daily_alphavantage_d')} d)"
-            res = dbm.dbc.execute(stmt).fetchall()
+            res = dbm.dbc.execute(stmt)
             c.collectDailyStockData(api='alphavantage', symbol=res, dryrun=False)
             ## done av active tickers
 

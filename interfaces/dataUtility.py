@@ -255,7 +255,7 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
     exchange, symbol = ticker
     latestIndicators = localdbm.dbc.execute(f'''
         SELECT MAX(date) AS date, COUNT(*) AS count, exchange, symbol, indicator, period, value FROM {localdbm.getTableString("technical_indicator_data_c")} WHERE date_type=? AND exchange=? AND symbol=? group by exchange, symbol, indicator, period
-    ''', (seriesType.name, exchange, symbol)).fetchall()
+    ''', (seriesType.name, exchange, symbol))
     def getLatestIndicator(i: IndicatorType, period):
         for li in latestIndicators:
             if li.indicator == i.key and li.period == period:
@@ -419,6 +419,8 @@ def technicalIndicatorDataCalculationAndInsertion(exchange=None, symbol=None, se
 
         for tplchunk in tqdmLoopHandleWrapper(inserttpls, verbose=0.5 if len(exchanges) > 1 else 1, desc='Inserting data'):
             stmtExecFunc(tplchunk)
+
+        dbm.commit()
 
     print('Updated {} tickers'.format(tickersupdated))
     print('Added or replaced {} rows'.format(rowsadded))
@@ -633,6 +635,7 @@ def historicalTradingDayGapDeterminationAndInsertion(exchange=None, symbol=None,
             if verbose>=1: print(f'Writing {len(insertData)} gap fillers to database')
             if not dryrun:
                 dbm.insertStockData(data=insertData)
+                dbm.commit()
             elif verbose>=1:
                 insertData = recdotobj(insertData)
                 ## count number of gaps for each ticker
@@ -1034,6 +1037,7 @@ def earningsDateCalculationAndInsertion(simple=True, verbose=1):
         
         continue
 
+    dbm.commit()
     print(f'Inserted {totalRowsInserted} rows')
 
 ## combines from various dump tables: alphavantage, polygon, old historical_data

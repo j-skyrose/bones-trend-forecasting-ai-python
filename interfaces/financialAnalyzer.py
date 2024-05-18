@@ -770,12 +770,12 @@ def analyzeNUMFormulae():
         #     skipqcount -= 1
         #     continue
 
-        companies = dbm.dbc.execute(f'SELECT DISTINCT s.adsh FROM {dbm.getTableString("financial_stmts_sub_data_set_edgar_d")} s JOIN {dbm.getTableString("financial_stmts_num_data_set_edgar_d")} n, edgar_sub_balance_status b ON s.adsh=n.adsh and s.adsh=b.adsh WHERE b.status=0 AND fy=? AND fp=? AND exchange IS NOT NULL AND coreg=\'\' AND qtrs=\'0\' AND n.version LIKE \'%gaap%\'', (q[:4], q[4:].upper())).fetchall()
+        companies = dbm.dbc.execute(f'SELECT DISTINCT s.adsh FROM {dbm.getTableString("financial_stmts_sub_data_set_edgar_d")} s JOIN {dbm.getTableString("financial_stmts_num_data_set_edgar_d")} n, edgar_sub_balance_status b ON s.adsh=n.adsh and s.adsh=b.adsh WHERE b.status=0 AND fy=? AND fp=? AND exchange IS NOT NULL AND coreg=\'\' AND qtrs=\'0\' AND n.version LIKE \'%gaap%\'', (q[:4], q[4:].upper()))
         # print(len(companies))
         # print(q)
         # print('keyspread', keyspread)
         for c in tqdm.tqdm(companies, desc='Companies', leave=False):
-            numValues = dbm.dbc.execute(f'SELECT * FROM {dbm.getTableString("financial_stmts_num_data_set_edgar_d")} WHERE adsh=?', (c.adsh,)).fetchall()
+            numValues = dbm.dbc.execute(f'SELECT * FROM {dbm.getTableString("financial_stmts_num_data_set_edgar_d")} WHERE adsh=?', (c.adsh,))
             ## map to tag names
             ddatedict = {}
             for n in numValues:
@@ -865,7 +865,7 @@ if __name__ == '__main__':
         # print(list(tagdict.keys()))
 
         ## remove deprecated tags
-        deprecatedtags = dbm.dbc.execute(f'select distinct tag from {dbm.getTableString("financial_stmts_tag_data_set_edgar_d")} where abstract=0 and tlabel like \'%deprecated%\'').fetchall()
+        deprecatedtags = dbm.dbc.execute(f'select distinct tag from {dbm.getTableString("financial_stmts_tag_data_set_edgar_d")} where abstract=0 and tlabel like \'%deprecated%\'')
         for t in deprecatedtags:
             try:
                 taglist.remove(t.tag)

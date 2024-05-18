@@ -59,7 +59,6 @@ class APIManager(Singleton):
             self.savedState.set(apiName, 'updated', self.apis[api].updatedOn)
         self.savedState.save()
         self.config.save()
-        print('saved config and state')
 
     def _initializeAPI(self, api:Api, apiClass, requiresAPIKey=True):
         apiName = api.name.lower()

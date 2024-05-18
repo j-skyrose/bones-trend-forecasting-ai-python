@@ -32,7 +32,6 @@ def processRawGoogleInterests(exchange=None, symbol=None, verbose=1):
     if exchange and symbol:
         symbolList = [recdotdict({'exchange': exchange, 'symbol': symbol})]
     else:
-        # symbolList = dbm.dbc.execute('SELECT DISTINCT exchange, symbol FROM google_interests_d').fetchall()
         symbolList = dbm.getSymbols(exchange=exchange, topicId=SQLHelpers.NOTNULL)
 
     ddh: DailyDataHandler
@@ -134,6 +133,6 @@ def processRawGoogleInterests(exchange=None, symbol=None, verbose=1):
     dbm.commit()
 
 if __name__ == '__main__':
-    # print(dbm.dbc.execute('SELECT MAX(rowid) FROM google_interests_d').fetchone()['MAX(rowid)'])
+    # print(dbm.dbc.execute('SELECT MAX(rowid) FROM google_interests_d')[0]['MAX(rowid)'])
     # processRawGoogleInterests('NASDAQ','VTSI')
     processRawGoogleInterests()

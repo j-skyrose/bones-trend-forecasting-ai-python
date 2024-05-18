@@ -751,14 +751,14 @@ class DataManager():
 
                             # data = dbm.getFinancialData(s.exchange, s.symbol)
                             stmt = 'SELECT * FROM vwtb_edgar_financial_nums n JOIN vwtb_edgar_quarters q ON n.exchange = q.exchange AND n.symbol = q.symbol AND n.ddate = q.period WHERE n.exchange=? AND n.symbol=? ORDER BY q.period'
-                            restotal.append((s, dbm.dbc.execute(stmt, (s.exchange, s.symbol)).fetchall()))
+                            restotal.append((s, dbm.dbc.execute(stmt, (s.exchange, s.symbol))))
                             gettingtime += time.time() - startt
                         elif ANALYZE1:
                             startt = time.time()
 
                             # data = dbm.getFinancialData(s.exchange, s.symbol)
                             stmt = 'SELECT * FROM vwtb_edgar_financial_nums n JOIN vwtb_edgar_quarters q ON n.exchange = q.exchange AND n.symbol = q.symbol AND n.ddate = q.period WHERE n.exchange=? AND n.symbol=? ORDER BY q.period'
-                            res = dbm.dbc.execute(stmt, (s.exchange, s.symbol)).fetchall()
+                            res = dbm.dbc.execute(stmt, (s.exchange, s.symbol))
                             gettingtime += time.time() - startt
 
                             startt = time.time()
@@ -790,7 +790,7 @@ class DataManager():
 
                 # data = dbm.getFinancialData(s.exchange, s.symbol)
                 stmt = 'SELECT * FROM vwtb_edgar_financial_nums n JOIN vwtb_edgar_quarters q ON n.exchange = q.exchange AND n.symbol = q.symbol AND n.ddate = q.period ORDER BY n.exchange, n.symbol, q.period'
-                res = dbm.dbc.execute(stmt).fetchall()
+                res = dbm.dbc.execute(stmt)
                 gettingtime += time.time() - startt
 
                 startt = time.time()

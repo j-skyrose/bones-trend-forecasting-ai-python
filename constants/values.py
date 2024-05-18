@@ -1,6 +1,7 @@
 from datetime import date
 
 tab = '    '
+backslash = '\\'
 
 normalizationColumnPrefix = 'highest'
 defaultConfigFileSection = 'DEFAULT'

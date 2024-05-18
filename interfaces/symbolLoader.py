@@ -19,7 +19,7 @@ symbolDumpPath=os.path.dirname(os.path.realpath(__file__))
 
 def getAliasesDictionary(api):
     ret = {}
-    for r in dbm.dbc.execute('SELECT exchange, alias FROM exchange_aliases WHERE api=?', (api,)).fetchall():
+    for r in dbm.dbc.execute('SELECT exchange, alias FROM exchange_aliases WHERE api=?', (api,)):
         ret[r['alias']] = r['exchange']
     return recdotdict(ret)
 
@@ -46,7 +46,7 @@ def importFromFMP():
 
             try: exchange=aldict[s['exchange']]
             except KeyError: exchange=str(s['exchange']).upper()
-            existing = dbm.dbc.execute('SELECT * from symbols WHERE exchange=? AND symbol=?', (exchange, s['symbol'])).fetchone()
+            existing = dbm.dbc.execute('SELECT * from symbols WHERE exchange=? AND symbol=?', (exchange, s['symbol']))[0]
 
             if existing:
                 dbm.dbc.execute('UPDATE symbols SET api_fmp=1 WHERE exchange=? AND symbol=?', (exchange, s['symbol']))
@@ -74,7 +74,7 @@ def importFromPolygon(dbc):
             ## gids, mdx, nsx, spic: only few records, ignore?
             if exchange not in ['NYSE','NASDAQ','BATS','NYSE ARCA','NYSE MKT']: continue
 
-            existing = dbm.dbc.execute('SELECT * from symbols WHERE exchange=? AND symbol=?', (exchange, ticker)).fetchone()
+            existing = dbm.dbc.execute('SELECT * from symbols WHERE exchange=? AND symbol=?', (exchange, ticker))[0]
 
             if existing:
                 # if existing['asset_type']:
@@ -145,7 +145,7 @@ def importFromSymbolDumps(specificSource=None, specificFile=None):
                             linecount += 1
                         except sqlite3.IntegrityError:
                             try:
-                                if dbm.dbc.execute("SELECT asset_type FROM symbols WHERE exchange=? AND symbol=?", (exchange, symbol)).fetchone()[0] is None:
+                                if dbm.dbc.execute("SELECT asset_type FROM symbols WHERE exchange=? AND symbol=?", (exchange, symbol))[0][0] is None:
                                     dbm.dbc.execute('UPDATE symbols SET asset_type=?, api_alphavantage=1 WHERE exchange=? AND symbol=?', (assetType, exchange, symbol))
                                     lineupdated += 1
                             except Exception as e:
