@@ -58,15 +58,23 @@ class Yahoo(APIBase, Singleton):
         totalRows = None
         offset = 0
         retds = []
+        pageSize = self.pageSize
         while totalRows is None or len(retds) < totalRows:
-            resp = self._request(lambda: self._requestEarningsDates(dt, offset))
-            rjson = resp.json()
-            totalRows = rjson['finance']['result'][0]['total']
-            docsObj = rjson['finance']['result'][0]['documents'][0]
+            for pageSizeReductionLoop in range(2):
+                resp = self._request(lambda: self._requestEarningsDates(dt, offset), verbose)
+                if not resp.ok and resp.status_code == 500:
+                    # response data would be too large (>16GB)
+                    pageSize = int(pageSize/2)
+                    if verbose: print('Data too large, reducing page size')
+                    continue
+                rjson = resp.json()
+                totalRows = rjson['finance']['result'][0]['total']
+                docsObj = rjson['finance']['result'][0]['documents'][0]
 
-            retds.extend(self._buildRowsObjs(docsObj['columns'], docsObj['rows']))
-            offset += self.pageSize
-            print(f'Got {len(retds)}/{totalRows} rows')
+                retds.extend(self._buildRowsObjs(docsObj['columns'], docsObj['rows']))
+                offset += pageSize
+                if verbose: print(f'Got {len(retds)}/{totalRows} rows')
+                break
 
         for rd in retds:
             rd['date'] = dt.isoformat()

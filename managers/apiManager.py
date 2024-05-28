@@ -50,7 +50,8 @@ class APIManager(Singleton):
 
     @staticmethod
     def getEarningsCollectionAPIs():
-        return [Api.MARKETWATCH, Api.NASDAQ, Api.YAHOO]
+        # return [Api.MARKETWATCH, Api.NASDAQ, Api.YAHOO] # MarketWatch implemented Captcha sometime between 2024-03-05 and 2024-05-19, returning 401 errors
+        return [Api.NASDAQ, Api.YAHOO]
 
     def saveConfig(self):
         for api in self.apis.keys():

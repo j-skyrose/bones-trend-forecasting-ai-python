@@ -15,8 +15,8 @@ from utils.support import Singleton, shortc
 
 class CacheManagerBase(Singleton):
     def __init__(self, cachePath=os.path.join(path, 'caches'), folder='', readMode='r', keyFunction=None, readFunction=None):
-        self.__key = shortc(keyFunction, self.__key)
-        self.__read = shortc(readFunction, self.__read)
+        self.__key = shortc(keyFunction, self.__key, eCanBeenCalledForValue=False)
+        self.__read = shortc(readFunction, self.__read, eCanBeenCalledForValue=False)
         self.cachePath = os.path.join(cachePath, folder)
         self.caches = {}
 

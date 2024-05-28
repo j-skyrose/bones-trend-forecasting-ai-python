@@ -106,19 +106,26 @@ def keySortedValues(d):
     '''ensures consistent order of values according to order of keys'''
     return [d[k] for k in sortedKeys(d)]
 
-def shortc(val, e=None):
-    ## and (type(val) is not list or (type(val) is list and len(val) > 0))
-    # try:
+def shortc(val, e=None, eCanBeenCalledForValue=True):
     listCond = len(val) > 0 if type(val) is list else True
-    return val if val != '' and val != None and listCond else e
-    # except:
-
-def shortcdict(dict, key, e=None, shortcValue=True):
-    try:
-        if shortcValue: return shortc(dict[key], e)
-        else: return dict[key]
-    except (KeyError, TypeError):
+    if val != '' and val != None and listCond:
+        return val
+    elif eCanBeenCalledForValue and isinstance(e, Callable):
+        return e()
+    else:
         return e
+
+def shortcdict(dict, key, e=None, shortcValue=True, eCanBeenCalledForValue=True):
+    try:
+        if shortcValue:
+            return shortc(dict[key], e, eCanBeenCalledForValue)
+        else:
+            return dict[key]
+    except (KeyError, TypeError):
+        if eCanBeenCalledForValue and isinstance(e, Callable):
+            return e()
+        else:
+            return e
 
 def flatten(li: list):
     return list(_flattenGen(li))

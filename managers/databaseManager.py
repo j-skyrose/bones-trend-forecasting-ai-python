@@ -601,7 +601,7 @@ class DatabaseManager(Singleton):
 
         startt = time.time()
         generateValueFunction = lambda: self.dbc.execute(stmt, args)
-        if len(asList(exchange)) == 1 and len(asList(symbol)) == 1:
+        if len(asList(symbol)) == 1:
             ## do not cache for individual tickers as performance gain may be negligible
             tickers = generateValueFunction()
         else:
