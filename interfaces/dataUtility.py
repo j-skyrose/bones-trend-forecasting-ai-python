@@ -657,7 +657,7 @@ def historicalTradingDayGapDeterminationAndInsertion(exchange=None, symbol=None,
                         if c > 4:
                             break
 
-
+#region earnings dates
 def _getAdjustedDate(masterDate, operandDate, yearOnly=False, modifierOnly=False):
     if yearOnly and modifierOnly: raise ValueError("'xxxOnly' args are mutually exclusive")
     masterDate = asDate(masterDate)
@@ -974,7 +974,7 @@ def earningsDateCalculationAndInsertion(simple=True, verbose=1):
         for r in upcomingRows:
             for qbindx in range(len(upcomingQrBuckets)):
                 if len(upcomingQrBuckets[qbindx]) > 0:
-                    if _dateDifference(r.earnings_date, upcomingQrBuckets[qbindx][0].earnings_date) < 30:
+                    if _dateDifference(r.earnings_date, upcomingQrBuckets[qbindx][0].earnings_date, excludeYear=True) < 30:
                         upcomingQrBuckets[qbindx].append(r)
                         break
                 else:
@@ -997,8 +997,26 @@ def earningsDateCalculationAndInsertion(simple=True, verbose=1):
                         pass
                 else:
                     lastrow = r
-        ## remove incorrect upcoming data for known earnings dates
+
+        ## separate (quarter) buckets by year
+        upcomingQrYrBuckets = []
         for qrBucket in upcomingQrBuckets:
+            yrBuckets = []
+            qrBucket.sort(key=lambda x: x.earnings_date)
+            lastRow = None
+            for r in qrBucket:
+                if not lastRow:
+                    lastRow = r
+                    yrBuckets.append([r])
+                else:
+                    if _dateDifference(r.earnings_date, lastRow.earnings_date) > 180:
+                        yrBuckets.append([r])
+                    else:
+                        yrBuckets[-1].append(r)
+            upcomingQrYrBuckets.extend(yrBuckets)
+
+        ## remove incorrect upcoming data for known earnings dates
+        for qrBucket in upcomingQrYrBuckets:
             for r in qrBucket:
                 realEarningsDate = None
                 for idr in interimData:
@@ -1039,6 +1057,7 @@ def earningsDateCalculationAndInsertion(simple=True, verbose=1):
 
     dbm.commit()
     print(f'Inserted {totalRowsInserted} rows')
+#endregion earnings dates
 
 ## combines from various dump tables: alphavantage, polygon, old historical_data
 ## alphavantage seems to be the more correct one than polygon, i.e. NASDAQ:AACG 2023-05-30 volume according to NASDAQ site is incorrect for polygon row (17k vs 9.5k); open is off by 1c but rest is correct
