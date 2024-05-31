@@ -24,6 +24,7 @@ from managers.inputVectorFactory import InputVectorFactory
 from managers.marketDayManager import MarketDayManager
 from structures.skipsObj import SkipsObj
 from structures.sql.sqlOrderObj import SQLOrderObj
+from utils.dbSupport import getTableString
 from utils.other import buildCommaSeparatedTickerPairString, getIndicatorPeriod, getInstancesByClass, parseCommandLineOptions
 from utils.support import addItemToContainerAtDictKey, asDate, asISOFormat, asList, flatten, getIndex, partition, recdotdict, recdotobj, shortc, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.types import TickerKeyType
@@ -245,16 +246,17 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
 
     print(f' {"Would insert" if dryrun else "Inserted"} {numpy.count_nonzero(similaritiesSum)-len(dbsums)} new values and {"would update" if dryrun else "updated"} {len(dbsums)} values for', ticker.getTuple())
 
-
+#region technical indicators
 def _verifyTechnicalIndicatorDataIntegrity(stockdata, indicator: IndicatorType, indicatorCount, indicatorPeriod, indicatorMaxDate=None):
     if indicatorMaxDate and indicatorMaxDate > stockdata[-1].period_date: return False
     return indicatorCount == getExpectedLengthForIndicator(indicator, len(stockdata), indicatorPeriod)
+    # exp = getExpectedLengthForIndicator(indicator, len(stockdata), indicatorPeriod)
+    # return indicatorCount == exp
 
-def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cacheIndicators, indicatorConfig):
-    localdbm = DatabaseManager(commitAtExit=False)
+def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cacheIndicators, indicatorConfig, verbose=0):
     exchange, symbol = ticker
-    latestIndicators = localdbm.dbc.execute(f'''
-        SELECT MAX(date) AS date, COUNT(*) AS count, exchange, symbol, indicator, period, value FROM {localdbm.getTableString("technical_indicator_data_c")} WHERE date_type=? AND exchange=? AND symbol=? group by exchange, symbol, indicator, period
+    latestIndicators = dbm.dbc.execute(f'''
+        SELECT MAX(date) AS date, COUNT(*) AS count, exchange, symbol, indicator, period, value FROM {getTableString("technical_indicator_data_c")} WHERE date_type=? AND exchange=? AND symbol=? group by exchange, symbol, indicator, period
     ''', (seriesType.name, exchange, symbol))
     def getLatestIndicator(i: IndicatorType, period):
         for li in latestIndicators:
@@ -262,12 +264,12 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
                 return li
 
     ## data should already be in ascending (date) order
-    stkdata = localdbm.getStockDataDaily(exchange, symbol)
+    stkdata = dbm.getStockDataDaily(exchange, symbol)
 
     ## skip if everything is already updated
     missingIndicators = []
     notuptodateIndicators = []
-    if len(latestIndicators) > 0:
+    if latestIndicators:
         ## check if any indicators are missing in DB
         for ik in IndicatorType:
             missing = True
@@ -288,7 +290,7 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
             if not lindc: continue ## likely not configured for caching
 
             if not _verifyTechnicalIndicatorDataIntegrity(stkdata, ik, lindc.count, iperiod, indicatorMaxDate=lindc.date):
-                print(f'{ik.longForm} integrity check failed for {latestIndicators[0].exchange}:{latestIndicators[0].symbol}; will regenerate')
+                if verbose: print(f'{ik.longForm} integrity check failed for {latestIndicators[0].exchange}:{latestIndicators[0].symbol}; will regenerate')
                 missingIndicators.append(ik)
         if len(missingIndicators) == 0 and len(notuptodateIndicators) == 0: return 0
     else:
@@ -357,7 +359,7 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
                 if _verifyTechnicalIndicatorDataIntegrity(stkdata, i, len(indcdata), iperiod):
                     break
                 else:
-                    print(f'Integrity check failed for {latestIndicators[0].exchange}:{latestIndicators[0].symbol}; regenerating')
+                    if verbose: print(f'Integrity check failed for {latestIndicators[0].exchange}:{latestIndicators[0].symbol}; regenerating')
 
             else: ## already up to date
                 continueFlag = True
@@ -382,8 +384,8 @@ def _multicore_updateTechnicalIndicatorData(ticker, seriesType: SeriesType, cach
 
     return returntpls
 
-## generates or updates cached technical indicator data; should be run after every stock data dump
-def technicalIndicatorDataCalculationAndInsertion(exchange=None, symbol=None, seriesType: SeriesType=SeriesType.DAILY, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, doNotCacheADX=True, sequential=False):
+def technicalIndicatorDataCalculationAndInsertion(exchange=None, symbol=None, seriesType: SeriesType=SeriesType.DAILY, indicatorConfig=gconfig.defaultIndicatorFormulaConfig, doNotCacheADX=True, sequential=False, maxTickerChunkSize=500):
+    '''Generates or updates cached technical indicator data; should be run after every stock data dump, but can be time-consuming as there is no easy way to determine if the data is already up to date or not'''
     if seriesType != SeriesType.DAILY: raise NotSupportedYet
     
     if exchange is None:
@@ -400,30 +402,23 @@ def technicalIndicatorDataCalculationAndInsertion(exchange=None, symbol=None, se
     for exch in tqdmLoopHandleWrapper(exchanges, verbose=1, desc='Exchanges'):
         tickers = dbm.getDistinct(exchange=exch, symbol=symbol, purgeUnusables=True)
         print('Got {} tickers'.format(len(tickers)))
-
-        inserttpls = []
-        for tpls in tqdmProcessMapHandlerWrapper(partial(_multicore_updateTechnicalIndicatorData, seriesType=seriesType, cacheIndicators=cacheIndicators, indicatorConfig=indicatorConfig), tickers, verbose=1, sequentialOverride=sequential, desc='Calculating techInd data for tickers'):
-            if len(tpls) != 0:
-                rowsadded += len(tpls)
-                tickersupdated += 1
-                inserttpls.extend(tpls)
-        
-        stmt = f'INSERT OR REPLACE INTO {dbm.getTableString("technical_indicator_data_c")} VALUES (?,?,?,?,?,?,?)'
-        stmtExecFunc = lambda t: dbm.dbc.execute(stmt, t)
-        ## ideally split into chunks to speed up insertion
-        try:
-            inserttpls[:] = numpy.array_split(inserttpls, 10)
-            stmtExecFunc = lambda t: dbm.dbc.executemany(stmt, t)
-        except numpy_exceptions._ArrayMemoryError:
-            pass
-
-        for tplchunk in tqdmLoopHandleWrapper(inserttpls, verbose=0.5 if len(exchanges) > 1 else 1, desc='Inserting data'):
-            stmtExecFunc(tplchunk)
-
+        for tickerChunk in tqdmLoopHandleWrapper(numpy.array_split(tickers, int(math.ceil(len(tickers)/maxTickerChunkSize))), verbose=0.5, desc='Ticker chunks'):
+            inserttpls = []
+            gc.collect()
+            for tpls in tqdmProcessMapHandlerWrapper(partial(_multicore_updateTechnicalIndicatorData, seriesType=seriesType, cacheIndicators=cacheIndicators, indicatorConfig=indicatorConfig), tickerChunk, verbose=1, sequentialOverride=sequential, desc='Calculating techInd data for tickers'):
+                if len(tpls) != 0:
+                    rowsadded += len(tpls)
+                    tickersupdated += 1
+                    inserttpls.extend(tpls)
+            
+            stmt = f'INSERT OR REPLACE INTO {dbm.getTableString("technical_indicator_data_c")} VALUES (?,?,?,?,?,?,?)'
+            dbm.dbc.executemany(stmt, inserttpls)
+            
         dbm.commit()
 
     print('Updated {} tickers'.format(tickersupdated))
     print('Added or replaced {} rows'.format(rowsadded))
+#endregion technical indicators
 
 #region network
 def deleteNetwork(networkId):
