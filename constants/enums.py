@@ -45,6 +45,10 @@ class InterestType(Enum):
     WEEKLY = 'WEEKLY'
     MONTHLY = 'MONTHLY'
 
+class OptionType(Enum):
+    CALL = 'CALL'
+    PUT = 'PUT'
+
 class LimitType(Enum):
     NONE = 'NONE'
     DAILY = 'DAILY'
@@ -373,6 +377,17 @@ class StockDataSource(Enum):
     @classmethod
     def getInPriorityOrder(cls):
         return [cls.ALPHAVANTAGE, cls.HISTORIC, cls.POLYGON]
+
+class OptionsDataSource(Enum):
+    '''API/table holding raw options data. Assists with collection and consolidation'''
+    POLYGON = 'options_data_daily_polygon_d'
+    
+    def __init__(self, a):
+        self.tableName = a
+    
+    @classmethod
+    def getInPriorityOrder(cls):
+        return [cls.POLYGON]
 
 if __name__ == '__main__':
     print(AccuracyType.OVERALL.name, AccuracyType.OVERALL.value, AccuracyType.OVERALL.statsName)

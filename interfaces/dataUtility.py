@@ -10,11 +10,10 @@ sys.path.append(path)
 import tqdm, numpy, numba, calendar, sqlite3, shutil
 from datetime import date, timedelta
 from functools import partial
-from numpy.core import _exceptions as numpy_exceptions
-from typing import Dict, List
+from typing import Dict, List, Union
 
 from globalConfig import config as gconfig
-from constants.enums import Api, ChangeType, Direction, FeatureExtraType, IndicatorType, NormalizationMethod, OutputClass, SQLInsertHelpers, SeriesType, StockDataSource
+from constants.enums import Api, ChangeType, Direction, FeatureExtraType, IndicatorType, NormalizationMethod, OperatorDict, OptionsDataSource, OutputClass, SQLInsertHelpers, SeriesType, StockDataSource
 from constants.exceptions import DamageDetected, InsufficientDataAvailable, NotSupportedYet
 from constants.values import indicatorsKey, unusableSymbols
 from managers.apiManager import APIManager
@@ -22,8 +21,11 @@ from managers.databaseManager import DatabaseManager
 from managers.dataManager import DataManager
 from managers.inputVectorFactory import InputVectorFactory
 from managers.marketDayManager import MarketDayManager
+from structures.optionsContract import OptionsContract
 from structures.skipsObj import SkipsObj
+from structures.sql.sqlArgumentObj import SQLArgumentObj
 from structures.sql.sqlOrderObj import SQLOrderObj
+from utils.collectorSupport import getExchange
 from utils.dbSupport import getTableString
 from utils.other import buildCommaSeparatedTickerPairString, getIndicatorPeriod, getInstancesByClass, parseCommandLineOptions
 from utils.support import addItemToContainerAtDictKey, asDate, asISOFormat, asList, flatten, getIndex, partition, recdotdict, recdotobj, shortc, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
@@ -442,7 +444,8 @@ def deleteNetwork(networkId):
             pass
 #endregion network
 
-def _getHistoricalGaps(data, startDate, endDate, vix=False, verbose=0) -> List[date]:
+#region historical data gaps
+def _getHistoricalGaps(data, startDate, endDate, vix=False, options=False, verbose=0) -> List[date]:
     '''helper for helper function _getDailyHistoricalGaps'''
 
     exchange = data[0].exchange if not vix else 'NYSE'
@@ -482,39 +485,79 @@ def _getHistoricalGaps(data, startDate, endDate, vix=False, verbose=0) -> List[d
             gaps.append(cdate)
             gapStreak += 1
 
-            if not vix and gapStreak > 40:
+            if not vix and not options and gapStreak > 40:
                 raise DamageDetected
         else:
             dindex += 1
             gapStreak = 0
     return gaps
 
+def _verifyAndGetTickerList(exchange=None, symbol=None, optionTicker=None, tickers=None, **kwargs):
+    '''argument check and ticker list setup if required'''
+    if (exchange or symbol or optionTicker) and tickers: raise ValueError
+    if (exchange or symbol or optionTicker) and not tickers:
+        if optionTicker:
+            tickers = [(exchange, symbol, optionTicker)]
+        else:
+            tickers = [(exchange, symbol)]
+    return asList(tickers)
+
 ## helper function to fillHistoricalGaps
-def _getAllDailyHistoricalGaps(exchange=None, symbol=None, tickers=[], autoUpdateDamagedSymbols=True, verbose=1):
-    if (exchange or symbol) and tickers: raise ValueError
-    if (exchange or symbol) and not tickers: tickers = [(exchange, symbol)]
+def _getAllDailyHistoricalGaps(exchange=None, symbol=None, optionTicker=None, tickers=[], options=False, autoUpdateDamagedSymbols=True, verbose=1) -> Union[List[date], Dict[date,List[str]]]:
+    tickers = _verifyAndGetTickerList(**locals())
+    if tickers and len(tickers[0]) == 3: options = True
 
+    ## exclude purgable (i.e. damaged, extreme, etc) tickers from passed list
     allTickers = dbm.getDistinct(purgeUnusables=True)
-    loopTickers = [r for r in allTickers if r in tickers] if tickers else allTickers
+    if tickers:
+        if options and len(tickers) == 1 and len(tickers[0]) == 2:
+            exchange, symbol = tickers[0]
+            optionTickers = dbm.getDistinct('options_data_daily_c', 'ticker', exchange=exchange, symbol=symbol)
+            loopTickers = [(exchange, symbol, ot) for ot in optionTickers]
+        else:
+            checkList = [(t[0],t[1]) for t in tickers] if options else tickers
+            loopTickers = [r for r in allTickers if r in checkList]
+    else:
+        if options:
+            loopTickers = []
+            for exchange,symbol in allTickers:
+                optionTickers = dbm.getDistinct('options_data_daily_c', 'ticker', exchange=exchange, symbol=symbol)
+                loopTickers.extend([(exchange, symbol, ot) for ot in optionTickers])
+        else:
+            loopTickers = allTickers
 
-    dateGapsInit = lambda: ({} if len(tickers) > 1 else [])
+    dateGapsInit = lambda: ({} if len(tickers) > 1 or options else [])
     dateGaps = dateGapsInit()
     currentDamagedTickers = set()
     lastDamagedTickers = set()
     for rerun in range(2):
         for ticker in tqdmLoopHandleWrapper(loopTickers, verbose, desc='Determining DAILY historical gaps'):
-            if ticker in lastDamagedTickers: continue
-            exchange, symbol = ticker
-            data = dbm.getStockDataDaily(exchange=exchange, symbol=symbol)
+            if not options and ticker in lastDamagedTickers: continue
+            if options:
+                exchange, symbol, optionsTicker = ticker
+                data = dbm.getOptionsDataDaily_basic(exchange=exchange, symbol=symbol, ticker=optionsTicker, orderBy='period_date')
+                endDate = OptionsContract.getExpirationDate(optionsTicker) + timedelta(days=1)
+                data.append(recdotdict({
+                    'period_date': endDate.isoformat(),
+                    'open': 0,
+                    'high': 0,
+                    'low': 0,
+                    'close': 0
+                }))
+            else:
+                exchange, symbol = ticker
+                data = dbm.getStockDataDaily(exchange=exchange, symbol=symbol)
+                endDate = date.fromisoformat(data[-1].period_date)
 
             try:
                 gaps = _getHistoricalGaps(
                     data,
                     date.fromisoformat(data[0].period_date),
-                    date.fromisoformat(data[-1].period_date),
+                    endDate,
+                    options=options,
                     verbose=verbose
                 )
-                if len(tickers) > 1:
+                if len(tickers) > 1 or options:
                     for cdt in gaps:
                         try:
                             dateGaps[cdt].append(ticker)
@@ -546,7 +589,7 @@ def _getAllDailyHistoricalGaps(exchange=None, symbol=None, tickers=[], autoUpdat
                             tickers = line.split(')')[:-1] ## drop empty
                             for tindx in range(len(tickers)):
                                 tickers[tindx] = (*tickers[tindx].replace('\'','').split(','),)
-                            newDamagedTickers = set(tickers + currentDamagedTickers)
+                            newDamagedTickers = set(tickers + list(currentDamagedTickers))
 
                             line = buildCommaSeparatedTickerPairString(newDamagedTickers) + '\n'
                             autoWrittenLineIsNext = False
@@ -593,43 +636,101 @@ def vixTradingDayGapDeterminationAndInsertion(fillForNonUSMarkets=True, dryrun=F
 
     if verbose: print(f'{len(gaps)} gaps filled')
 
-def historicalTradingDayGapDeterminationAndInsertion(exchange=None, symbol=None, tickers=[], seriesType=SeriesType.DAILY, dryrun=False, autoUpdateDamagedSymbols=True, verbose=1):
+def historicalTradingDayGapDeterminationAndInsertion(exchange=None, symbol=None, optionTicker=None, tickers=[], options=False, seriesType=SeriesType.DAILY, dryrun=False, autoUpdateDamagedSymbols=True, verbose=1):
     '''Fill any data gaps with artificial data using last real trading day.\n\nGenerally only used after large data acquisitions/dumps.'''
     if seriesType != SeriesType.DAILY: raise NotSupportedYet
-    if (exchange or symbol) and tickers: raise ValueError
-    if (exchange or symbol) and not tickers: tickers = [(exchange, symbol)]
-    ALL = not (exchange and symbol)
+    tickers = _verifyAndGetTickerList(**locals())
+    if tickers and len(tickers[0]) == 3: options = True
+
     insertData = []
-    gaps = _getAllDailyHistoricalGaps(tickers=tickers, autoUpdateDamagedSymbols=autoUpdateDamagedSymbols, verbose=verbose)
+    gaps = _getAllDailyHistoricalGaps(tickers=tickers, autoUpdateDamagedSymbols=autoUpdateDamagedSymbols, options=options, verbose=verbose)
 
     if len(gaps) == 0:
         if verbose>=1: print('No gaps found')
     else:
         for g in tqdmLoopHandleWrapper(gaps, verbose, desc='Determining historical gap fillers for ' + seriesType.name):
-            for exchange, symbol in tqdmLoopHandleWrapper(gaps[g], verbose-0.5, desc=str(g)) if len(tickers) != 1 else tickers:
+            for gap in tqdmLoopHandleWrapper(gaps[g], verbose-0.5, desc=str(g)) if len(tickers) != 1 or options else tickers:
+                if options:
+                    exchange, symbol, optionTicker = gap
+                else:
+                    exchange, symbol = gap
                 if (exchange, symbol) in unusableSymbols: continue
                 ## find closest date without going over
-                prevclose = None
-                for d in dbm.getStockDataDaily(exchange=exchange, symbol=symbol):
-                    if date.fromisoformat(d.period_date) > g: break
-                    prevclose = d.close
-                insertData.append({
-                    'exchange': exchange,
-                    'symbol': symbol,
-                    'period_date': str(g),
-                    'open': prevclose,
-                    'high': prevclose,
-                    'low': prevclose,
-                    'close': prevclose,
-                    'artificial': True,
-                })
+                if options:
+                    expiryDate = OptionsContract.getExpirationDate(optionTicker)
+                    daysUntilExpiry = lambda d: (expiryDate - asDate(d)).days + 1
+                    prevRealOptionDay = None
+                    nextRealOptionDay = None
+                    for d in dbm.getOptionsDataDaily_basic(exchange=exchange, symbol=symbol, ticker=optionTicker, artificial=False, orderBy='period_date'):
+                        if date.fromisoformat(d.period_date) > g:
+                            nextRealOptionDay = d
+                            break
+                        prevRealOptionDay = d
+                    if not nextRealOptionDay:
+                        nextRealOptionDay = recdotdict({
+                            'period_date': (expiryDate + timedelta(days=1)).isoformat(),
+                            'open': 0,
+                            'high': 0,
+                            'low': 0,
+                            'close': 0
+                        })
+                    # prevStockDay = dbm.getStockDataDaily_basic(exchange=exchange, symbol=symbol, periodDate=prevRealOptionDay.period_date, limit=1)[0]
+                    # currStockDay = dbm.getStockDataDaily_basic(exchange=exchange, symbol=symbol, periodDate=str(g), limit=1)[0]
+                    # nextStockDay = dbm.getStockDataDaily_basic(exchange=exchange, symbol=symbol, periodDate=nextRealOptionDay.period_date, limit=1)[0]
+
+                    prevDaysUntilExpiry = daysUntilExpiry(prevRealOptionDay.period_date)
+                    currDaysUntilExpiry = daysUntilExpiry(g)
+                    nextDaysUntilExpiry = daysUntilExpiry(nextRealOptionDay.period_date)
+
+                    artificalDay = {
+                        'exchange': exchange,
+                        'symbol': symbol,
+                        'ticker': optionTicker,
+                        'period_date': str(g),
+                        'artificial': True,
+                    }
+
+                    #region method 1: linear transition from last known day to next known day
+                    for pkey in ['high', 'low', 'open', 'close']:
+
+                        slope = (nextRealOptionDay[pkey] - prevRealOptionDay[pkey]) / (nextDaysUntilExpiry - prevDaysUntilExpiry)
+                        yint = prevRealOptionDay[pkey] - slope * prevDaysUntilExpiry
+                        artificialp = slope * currDaysUntilExpiry + yint
+                        if pkey == 'close':
+                            artificalDay[pkey] = min(artificialp, artificalDay['high'])
+                        elif pkey == 'open':
+                            artificalDay[pkey] = max(artificialp, artificalDay['low'])
+                        else:
+                            artificalDay[pkey] = artificialp
+
+                    insertData.append(artificalDay)
+                    #endregion
+
+                else:
+                    prevclose = None
+                    for d in dbm.getStockDataDaily(exchange=exchange, symbol=symbol):
+                        if date.fromisoformat(d.period_date) > g: break
+                        prevclose = d.close
+                    insertData.append({
+                        'exchange': exchange,
+                        'symbol': symbol,
+                        'period_date': str(g),
+                        'open': prevclose,
+                        'high': prevclose,
+                        'low': prevclose,
+                        'close': prevclose,
+                        'artificial': True,
+                    })
 
         if len(insertData) == 0:
             if verbose>=1: print('No filling required')
         else:
             if verbose>=1: print(f'Writing {len(insertData)} gap fillers to database')
             if not dryrun:
-                dbm.insertStockData(data=insertData)
+                if options:
+                    dbm.insertOptionsData(data=insertData)
+                else:
+                    dbm.insertStockData(data=insertData)
                 dbm.commit()
             elif verbose>=1:
                 insertData = recdotobj(insertData)
@@ -651,6 +752,7 @@ def historicalTradingDayGapDeterminationAndInsertion(exchange=None, symbol=None,
                             c+=1
                         if c > 4:
                             break
+#endregion historical data gaps
 
 #region earnings dates
 def _getAdjustedDate(masterDate, operandDate, yearOnly=False, modifierOnly=False):
@@ -1054,6 +1156,7 @@ def earningsDateCalculationAndInsertion(simple=True, verbose=1):
     print(f'Inserted {totalRowsInserted} rows')
 #endregion earnings dates
 
+#region data consolidation
 ## combines from various dump tables: alphavantage, polygon, old historical_data
 ## alphavantage seems to be the more correct one than polygon, i.e. NASDAQ:AACG 2023-05-30 volume according to NASDAQ site is incorrect for polygon row (17k vs 9.5k); open is off by 1c but rest is correct
 def consolidateDailyStockData(limit=None, fillGaps=True, verbose=1, **kwargs):
@@ -1111,6 +1214,76 @@ def consolidateDailyStockData(limit=None, fillGaps=True, verbose=1, **kwargs):
 
     if exceptionTickers: print('Exceptions:', len(exceptionTickers), exceptionTickers)
     print(f'{len(tickersUpdated)} tickers updated')
+
+def consolidateDailyOptionsData(limit=None, fillGaps=True, verbose=1, **kwargs):
+    '''
+        consolidates daily options data from various dump tables: alphavantage, polygon, old historical_data\n
+        Alphavantage seems to be the more correct one compared to Polygon, e.g. NASDAQ:AACG 2023-05-30 volume according to NASDAQ site is incorrect from Polygon (17k vs 9.5k); open is off by $0.01 but rest is correct
+    '''
+    exceptionTickers = []
+    limitTickers = []
+    tickersUpdated = set()
+    
+    if len(OptionsDataSource.getInPriorityOrder()) == 1:
+        ## only POLYGON as source, can utilize quick dirty transfer of options data from dump table to computed
+        data = dbm.getDumpOptionsDataDailyPolygon_basic()
+        alreadydata = dbm.getOptionsDataDaily_basic(sqlColumns='DISTINCT exchange,symbol,ticker', onlyColumn_asList=['exchange','symbol','ticker'])
+        exchdict = {}
+        for d in tqdm.tqdm(data):
+            sym = OptionsContract.getSymbol(d.ticker)
+            try:
+                exch = exchdict[sym]
+            except KeyError:
+                exch = getExchange(sym, source=OptionsDataSource.POLYGON)
+                exchdict[sym] = exch
+            if (exch, sym, d.ticker) in alreadydata: continue
+            dbm.insertOptionsData(exch, sym, d.ticker, d.period_date, d.open, d.high, d.low, d.close, d.volume, d.transactions, )
+        dbm.dequeueOptionsDataDailyTickerFromUpdate(None, None, None, None) ## delete all
+    else:
+        for source in OptionsDataSource.getInPriorityOrder():
+            getFunction = getattr(dbm, f'getDumpOptionsDataDaily{source.name.capitalize()}_basic')
+            def kwargsBuilder(optionsTicker, minDate=None):
+                ret = {}
+                if source == OptionsDataSource.POLYGON:
+                    ret['ticker'] = optionsTicker
+                    ret['periodDate'] = SQLArgumentObj(asISOFormat(minDate), OperatorDict.GREATERTHAN) if minDate else None
+                return ret
+            insertStrategy = SQLInsertHelpers.IGNORE ## only one source currently, will need to change depending on reliability of further sources
+            
+            ## check which tickers have new data and require consolidation
+            queuedTickers = dbm.getDumpQueueOptionsDataDaily_basic(source=source.name)
+
+            for exchange,symbol,optionsTicker,_ in tqdmLoopHandleWrapper([qt.values() for qt in queuedTickers], verbose=verbose, desc=f'Transfering {source.name} data'):
+                latestDataDate = None # mainly for polygon, not alphavantage
+                exchangeWasUnknown = False
+                if source == OptionsDataSource.POLYGON:
+                    if exchange == 'UNKNOWN':
+                        exchangeWasUnknown = True
+                        exchange = getExchange(symbol, source=OptionsDataSource.POLYGON)
+                        if exchange == 'UNKNOWN' or exchange is None:
+                            exceptionTickers.append(symbol)
+                            continue
+                    latestDataDate = dbm.getOptionsDataDaily_basic(exchange=exchange, symbol=symbol, ticker=optionsTicker, sqlColumns='MAX(period_date) as dt', onlyColumn_asList='dt')[0]
+
+                ## do not proceed if limit is in force and ticker was not updated with a previous source this run
+                if limit and len(limitTickers) == limit and (exchange, symbol) not in limitTickers: continue
+
+                data = getFunction(**kwargsBuilder(optionsTicker, latestDataDate))
+                if not data and insertStrategy == SQLInsertHelpers.REPLACE: raise ValueError((exchange, symbol, optionsTicker))
+
+                ## insert data to DB
+                dbm.insertOptionsData(exchange, symbol, optionsTicker, data=data, insertStrategy=insertStrategy)
+                dbm.dequeueOptionsDataDailyTickerFromUpdate(exchange='UNKNOWN' if exchangeWasUnknown else exchange, symbol=symbol, optionsTicker=optionsTicker, source=source)
+                tickersUpdated.add((exchange, symbol, optionsTicker))
+                dbm.commit()
+
+                if limit and len(limitTickers) < limit: limitTickers.append((exchange, symbol))
+
+    if fillGaps: historicalTradingDayGapDeterminationAndInsertion(tickers=tickersUpdated, verbose=verbose, options=True, **kwargs)
+
+    if exceptionTickers: print('Exceptions:', len(exceptionTickers), exceptionTickers)
+    print(f'{len(tickersUpdated)} tickers updated')
+#endregion data consolidation
 
 if __name__ == '__main__':
     opts, kwargs = parseCommandLineOptions()

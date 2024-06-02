@@ -20,14 +20,15 @@ from managers.databaseManager import DatabaseManager
 from managers.apiManager import APIManager
 from managers.marketDayManager import MarketDayManager
 from structures.api.googleTrends.gt_exceptions import ResponseError
+from structures.optionsContract import OptionsContract
 from structures.sql.sqlArgumentObj import SQLArgumentObj
 
 from constants.exceptions import APILimitReached, APIError, APITimeout, NotSupportedYet
 from utils.collectorSupport import getExchange
 from utils.dbSupport import convertToSnakeCase, getTableString
 from utils.other import parseCommandLineOptions
-from utils.support import asDate, asDatetime, asISOFormat, asList, getIndex, recdotdict, shortcdict, tqdmLoopHandleWrapper
-from constants.enums import APIState, Api, FinancialReportType, FinancialStatementType, InterestType, MarketType, OperatorDict, SQLHelpers, SeriesType, Direction, TimespanType
+from utils.support import asDate, asDatetime, asISOFormat, asList, recdotdict, shortc, shortcdict, tqdmLoopHandleWrapper, unixToDatetime
+from constants.enums import APIState, Api, FinancialReportType, FinancialStatementType, InterestType, MarketType, OperatorDict, OptionType, SQLHelpers, SQLInsertHelpers, SeriesType, Direction, TimespanType
 from constants.values import tseNoCommissionSymbols, minGoogleDate
 
 dbm: DatabaseManager = DatabaseManager()
@@ -766,6 +767,228 @@ class Collector:
             print(f'Updated {len(tickerDetails) - insertCount} existing tickers')
         #endregion
 
+    def startOptionsContractInfoCollection(self, api:Api, active=None, retryNoContractsSymbols=False, skipFirst=0, verbose=1, **kwargs):
+        '''collects and inserts option contract details, i.e. symbol, ticker, type, expiration, strike, etc.'''
+        if api != Api.POLYGON: raise NotSupportedYet
+        if active is not False: raise NotSupportedYet # TODO: track 'inflection' date, so time periods where contracts are collected as 'active' can be re-collected to get any new contracts that were added after the initial collection date, especially when period is (now) in the past
+
+        tickerErrors = []
+        noDataTickers = []
+
+        tickers = dbm.getDistinct(**kwargs)
+        if not retryNoContractsSymbols:
+            removedCount = 0
+            noContractsTickers = dbm.getDumpOptionsNoContractsSymbolsPolygon_basic(onlyColumn_asList=['exchange', 'symbol'])
+            for t in tickers[:]:
+                if t in noContractsTickers:
+                    tickers.remove(t)
+                    removedCount += 1
+            print(f'Removed {removedCount} tickers known to not have any options contracts')
+
+        for tindx, (exchange, symbol) in enumerate(tqdmLoopHandleWrapper(tickers, verbose=verbose, desc='Collecting options for tickers')):
+            if tindx < skipFirst: continue
+
+            ## lower bound the new contracts so existing data is not re-collected
+            getKWArgs = {}
+            maxExpirationDate = None
+            if active is False:
+                maxExpirationRow = dbm.getDumpOptionsContractInfoPolygon_basic(underlyingTicker=symbol, sqlColumns='MAX(expiration_date) AS maxExpirationDate')
+                maxExpirationDate = maxExpirationRow[0].maxExpirationDate
+                if maxExpirationDate:
+                    getKWArgs['minExpirationDate'] = (asDate(maxExpirationDate) + timedelta(days=1)) if maxExpirationRow else None
+
+            ## collect
+            try:
+                data = self.apiManager.getOptionsContractInfo(api, symbol, active=active, verbose=verbose, **getKWArgs)
+
+                ## insert additional_underlyings data into separate table
+                for d in data:
+                    if 'additional_underlyings' in d.keys():
+                        rowids = dbm.insertAdditionalUnderlyingsDump(d['additional_underlyings'])
+                        d['additional_underlyings'] = ','.join([str(rid) for rid in rowids])
+                        pass
+
+                ## verify PK integrity
+                pkdata = {}
+                for d in data:
+                    key = (shortcdict(d,'primary_exchange'), shortcdict(d,'underlying_ticker'), shortcdict(d,'contract_type'), shortcdict(d,'expiration_date'), shortcdict(d,'strike_price'), shortcdict(d,'shares_per_contract'), shortcdict(d,'ticker'), shortcdict(d,'cfi'), shortcdict(d, 'additional_underlyings'))
+                    if key in pkdata.keys():
+                        pkdata[key].append(d)
+                    else:
+                        pkdata[key] = [d]
+                for k,v in pkdata.items():
+                    if len(v) > 1:
+                        print(k)
+                        print(v)
+                        break
+
+                ## insert
+                if data:
+                    dbm.insertOptionsContractInfoDump(data, SQLInsertHelpers.IGNORE)
+                elif active or (not active and maxExpirationDate is None):
+                    dbm.insertOptionsNoContractsSymbol(exchange, symbol, date.today())
+                    noDataTickers.append((exchange, symbol))
+            except APIError:
+                tickerErrors.append((exchange, symbol))
+            dbm.commit()
+
+        print(f"Got data for {len(tickers)-len(tickerErrors)-len(noDataTickers)}/{len(tickers)} tickers")
+        if verbose:
+            print(f"No data tickers: {noDataTickers}")
+            print(f"API errors: {tickerErrors}")
+
+    def startOptionsDataCollection(self, api:Api, skipFirst=0, symbols=None, tradePairTuples=None,
+                                   ## strike banding and other reduction
+                                   reductionFromDate=None, reductionToDate=None, strikeBanding=False, strikeBandingPerDay=False, followingRange=None, onlyOptionType=None,
+                                   verbose=1, **kwargs):
+        '''collects and inserts daily price data for options tickers, i.e. open, high, low, close, volume, etc.'''
+        if api != Api.POLYGON: raise NotSupportedYet
+        if strikeBanding and strikeBandingPerDay and followingRange is None: raise ValueError
+        if symbols and tradePairTuples: raise ValueError
+        if tradePairTuples and (reductionFromDate or reductionToDate): raise ValueError
+        if tradePairTuples and not followingRange: raise ValueError
+        if skipFirst > 0: print(f'WARNING: skipping first {skipFirst} symbols')
+
+        minDate = date.today() - timedelta(days=365*2) ## polygon historical limit
+        symbolErrors = []
+        noDataSymbols = set()
+        insertCount = 0
+
+        if tradePairTuples:
+            symbols = set([t[0] for t in tradePairTuples])
+        else:
+            symbols = asList(shortc(symbols, dbm.getDistinct(tableName='options_contract_info_polygon_d', columnNames='underlying_ticker', **kwargs)))
+        for tindx, symbol in enumerate(tqdmLoopHandleWrapper(symbols, verbose=1, desc='Collecting options data for tickers')):
+            if tindx < skipFirst: continue
+
+            exchange = getExchange(symbol, api, fromOptions=True)
+            stockData = dbm.getStockDataDaily(exchange, symbol)
+            fromDate = stockData[0].period_date
+            if asDate(fromDate) < minDate: fromDate = minDate
+
+
+            workingOptionsTickers = dbm.getDistinct(tableName='options_contract_info_polygon_d', columnNames='ticker', underlyingTicker=symbol)
+            allOptionsTickersCount = len(workingOptionsTickers)
+
+            maintainCriteriaLambdas = []
+            # eliminate any non-expired options
+            # TODO: add capability for collection of still active option tickers, and proper handling of (partial/incomplete) ones expired since last collection
+            maintainCriteriaLambdas.append(lambda ot: OptionsContract.getExpirationDate(ot) >= date.today())
+            # eliminate non-desired options type
+            if onlyOptionType:
+                maintainCriteriaLambdas.append(lambda ot: OptionsContract.getOptionType(ot) == onlyOptionType)
+            # eliminate any expired tickers below the minDate
+            maintainCriteriaLambdas.append(lambda ot: OptionsContract.getExpirationDate(ot) >= minDate)
+            if reductionFromDate or reductionToDate:
+                reductionFromDate = asDate(shortc(reductionFromDate, '1900-01-01'))
+                reductionToDate = asDate(shortc(reductionToDate, '2100-01-01'))
+                maintainCriteriaLambdas.append(lambda ot: reductionFromDate <= OptionsContract.getExpirationDate(ot) <= reductionToDate)
+            # eliminate any tickers that are known to have no data
+            noDataOptionsTickers = dbm.getDumpOptionsNoDataTickersPolygon_basic(symbol=symbol, fromDate=SQLArgumentObj(fromDate, OperatorDict.LESSTHANOREQUAL), onlyColumn_asList='ticker')
+            maintainCriteriaLambdas.append(lambda ot: ot not in noDataOptionsTickers)
+
+            workingOptionsTickers = [ot for ot in tqdm.tqdm(workingOptionsTickers, leave=False, desc='Reducing options tickers (pass #1)') if all(ct(ot) for ct in maintainCriteriaLambdas)]
+
+            tickersFoundAtWeekExtension = None
+            if len(workingOptionsTickers) > 0:
+                #region # only get options tickers that expire at the end of the week that the network predicts to, or the next closest expiring one
+                if tradePairTuples:
+                    maxWeekTries = 5
+                    for wk in range(maxWeekTries):
+                        desiredExpiryDates = []
+                        for tpSymbol, tpFromDate,_ in tradePairTuples:
+                            if tpSymbol != symbol: continue
+                            endingDate = MarketDayManager.advance(asDate(tpFromDate), followingRange)
+                            endingDate += timedelta(days=7*wk) ## search forward for next options contract (some symbols only have one option a month)
+                            endingFridayDate = endingDate + timedelta(days=4-endingDate.weekday())
+                            desiredExpiryDates.append(endingFridayDate)
+                        
+                        nextWorkingOptionsTickers = [ot for ot in tqdm.tqdm(workingOptionsTickers, leave=False, desc=f'Reducing options tickers (pass #2 wk #{wk+1})') if any(ddt - timedelta(days=1) <= OptionsContract.getExpirationDate(ot) <= ddt + timedelta(days=1) for ddt in desiredExpiryDates)]
+                        if nextWorkingOptionsTickers:
+                            workingOptionsTickers = nextWorkingOptionsTickers
+                            tickersFoundAtWeekExtension = wk
+                            break
+                        elif wk == maxWeekTries - 1:
+                            ## not able to find a next option
+                            workingOptionsTickers = []
+
+                #endregion
+
+            if len(workingOptionsTickers) > 0:
+                #region # determine strike prices that will totally encompass the stock's price on any day
+                if strikeBanding:
+                    priceRange = 10
+                    if strikeBandingPerDay:
+                        priceRange += 5 # additional buffer to add the 'first' options outside the range too
+                        def withinPerDayStrikeBand(ot):
+                            oc = OptionsContract.fromTicker(ot)
+                            expDate = oc.expirationDate
+                            if expDate.weekday() > 4:
+                                expDate -= timedelta(days=1)
+                            if MarketDayManager.isHoliday(expDate):
+                                expDate -= timedelta(days=1)
+                            anchorDay = MarketDayManager.advance(expDate, -(followingRange-1))
+                            firstDay = anchorDay - timedelta(days=anchorDay.weekday()) ## start of week
+                            lastDay = firstDay + timedelta(days=4)
+                            stockWeekData = [r for r in stockData if firstDay <= asDate(r.period_date) <= lastDay]
+                            minPrice = max(min([r['low'] for r in stockWeekData]) - priceRange, 0)
+                            maxPrice = max([r['high'] for r in stockWeekData]) + priceRange
+                            return minPrice <= oc.strikePrice <= maxPrice
+                        maintainCriteriaLambdas.append(withinPerDayStrikeBand)
+                    else:
+                        minPrice = max(min([r['low'] for r in stockData]) - priceRange, 0)
+                        maxPrice = max([r['high'] for r in stockData]) + priceRange
+                        workingOptionsTickers.sort(key=lambda t: OptionsContract.getStrikePrice(t))
+                        minStrikePrice = OptionsContract.getStrikePrice(workingOptionsTickers[0])
+                        maxStrikePrice = OptionsContract.getStrikePrice(workingOptionsTickers[-1])
+                        for ticker in workingOptionsTickers:
+                            strike = OptionsContract.getStrikePrice(ticker)
+                            if strike > minStrikePrice and strike < minPrice:
+                                minStrikePrice = strike
+                            if strike < maxStrikePrice and strike > maxPrice:
+                                maxStrikePrice = strike
+                        maintainCriteriaLambdas.append(lambda ot: minStrikePrice <= OptionsContract.getStrikePrice(ot) <= maxStrikePrice)
+                #endregion
+
+                # eliminate any tickers who's data has already been collected
+                optionsTickersWithData = dbm.getDistinct(tableName='options_data_daily_polygon_d', columnNames='ticker')
+                maintainCriteriaLambdas.append(lambda ot: ot not in optionsTickersWithData) # TODO: account for still active tickers, or ones that have expired since last data collection
+
+                workingOptionsTickers = [ot for ot in tqdm.tqdm(workingOptionsTickers, leave=False, desc='Reducing options tickers (pass #3)') if all(ct(ot) for ct in maintainCriteriaLambdas)]
+            
+
+            if verbose:
+                if tickersFoundAtWeekExtension is not None:
+                    print(f'Found ticker(s) at week extension {tickersFoundAtWeekExtension}')
+                print(f'Removed {allOptionsTickersCount-len(workingOptionsTickers)}/{allOptionsTickersCount} options tickers through reductions')
+
+            noDataSymbol = len(workingOptionsTickers) > 0
+            for ticker in tqdmLoopHandleWrapper(workingOptionsTickers, verbose=0.5, desc=f'Collecting by options ticker for {symbol}'):
+                expirationDate = OptionsContract.getExpirationDate(ticker)
+
+                try:
+                    data = self.apiManager.getOptionsData(api, ticker, fromDate=fromDate, toDate=expirationDate, verbose=verbose-1)
+                    if data:
+                        for d in data:
+                            d['period_date'] = unixToDatetime(d['unixTimePeriod']).date().isoformat()
+                            del d['unixTimePeriod']
+                        dbm.insertOptionsDataDump_polygon(ticker, data, SQLInsertHelpers.NONE)
+                        insertCount += len(data)
+                        noDataSymbol = False
+                    else:
+                        dbm.insertOptionsNoDataTicker(exchange, symbol, ticker, fromDate=fromDate, toDate=expirationDate)
+                except APIError:
+                    symbolErrors.append(symbol)
+                    break
+                dbm.commit()
+            if noDataSymbol: noDataSymbols.add(symbol)
+
+        if verbose:
+            print(f"No data tickers: {list(noDataSymbols)}")
+            print(f"API errors: {symbolErrors}")
+        print(f"Got data for {len(symbols)-len(symbolErrors)-len(noDataSymbols)}/{len(symbols)} tickers")
+        print(f"{insertCount} total data points inserted")
+
     def startGoogleTopicIDCollection(self, exchange=None, symbol=None, tickers=None, dryrun=False, verbose=1):
         '''ignores tickers without a determined exchange'''
         if (exchange or symbol) and tickers: raise ValueError
@@ -1424,6 +1647,28 @@ if __name__ == '__main__':
             res = dbm.dbc.execute(stmt)
             c.collectDailyStockData(api='alphavantage', symbol=res, dryrun=False)
             ## done av active tickers
+
+            exit()
+            # c.startOptionsContractInfoCollection(Api.POLYGON, active=False, exchange='NASDAQ', 
+            #                                      skipFirst=7691
+            #                                      )
+            tradePairs = []
+            with open(os.path.join(path, 'interfaces/outputs/pt-desired-dates.csv'), 'r') as f:
+                for line in f:
+                    tradePairs.append(line.strip().split(','))
+            # done: 'AAGR', 'AMED', 'ADI', 'ALNY','ALGN','ADP'
+            c.startOptionsDataCollection(Api.POLYGON,
+                                        #  symbols=['AAGR'], 
+                                         tradePairTuples=tradePairs,
+                                        #  strikeBanding=True, 
+                                        # strikeBandingPerDay=True, 
+                                        # reductionFromDate='2022-12-01',
+                                         followingRange=20, 
+                                         onlyOptionType=OptionType.CALL,
+                                        #  skipFirst=350
+                                            # skipFirst=652
+                                            verbose=0
+                                         )
 
             # c.startAPICollection_exploratoryAlphavantageAPIUpdates()
             # c.startSplitsCollection('polygon')

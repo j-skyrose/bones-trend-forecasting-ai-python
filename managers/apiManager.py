@@ -22,7 +22,7 @@ from structures.api.fmp import FMP
 from structures.api.neo import NEO
 from structures.api.yahoo import Yahoo
 from structures.scraper.marketWatch import MarketWatch
-from utils.support import Singleton, asDate, recdotdict, recdotobj, shortc
+from utils.support import Singleton, asDate, recdotdict, recdotobj, shortc, shortcdict
 
 class APIManager(Singleton):
     '''manages APIs, file requests, and web scrapers that are wrapped to function like APIs'''
@@ -274,6 +274,47 @@ class APIManager(Singleton):
             lambda apih: apih.api.getTickerDetails(ticker, verbose=verbose, **kwargs),
             verbose=verbose
         )
+    
+    def getOptionsContractInfo(self, api:Api, ticker, active=True, verbose=0, **kwargs):
+        if api != Api.POLYGON: raise NotSupportedYet()
+
+        resp = self._executeRequestWrapper(api, lambda apih: apih.api.getOptionsContractInfo(ticker, active, verbose=verbose, **kwargs), verbose=verbose)
+
+        retdata = []
+        while True:
+            data = resp['results']
+
+            if verbose: print(len(data),'data points retrieved')
+            retdata.extend(data)
+
+            if 'next_url' in resp.keys():
+                if verbose: print('has next url')
+                resp = self._executeRequestWrapper(api, lambda apih: apih.api.getNextURL(resp['next_url']), verbose=verbose)
+            else:
+                if verbose: print('was last page')
+                break
+        
+        return retdata
+
+    def getOptionsData(self, api:Api, ticker, verbose=0, **kwargs):
+        if api != Api.POLYGON: raise NotSupportedYet()
+
+        resp = self._executeRequestWrapper(api, lambda apih: apih.api.getOptionsData(ticker, verbose=verbose, **kwargs), verbose=verbose)
+
+        retdata = []
+        while True:
+            data = shortcdict(resp, 'results', [])
+            retdata.extend(data)
+
+            if 'next_url' in resp.keys():
+                if verbose > 0: print('has next url')
+                resp = self._executeRequestWrapper(api, lambda apih: apih.api.getNextURL(resp['next_url']), verbose=verbose)
+            else:
+                if verbose > 0: print('was last page')
+                break
+        
+        return retdata
+
 
 def getPolygonSymbols():
     from utils import convertListToCSV

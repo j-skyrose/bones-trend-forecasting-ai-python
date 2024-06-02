@@ -158,6 +158,7 @@ def toUSAFormat(dt, separator='-'):
     return f'{str(dt.month).zfill(2)}{separator}{str(dt.day).zfill(2)}{separator}{dt.year}'
 
 def asISOFormat(dt: Union[date, datetime, str]):
+    '''returns date in YYYY-MM-DD format'''
     if type(dt) == date:
         return dt.isoformat()
     elif type(dt) == datetime:
@@ -168,6 +169,7 @@ def asISOFormat(dt: Union[date, datetime, str]):
     raise ValueError('Unrecognized type')
 
 def asDate(dt: Union[date, datetime, str]):
+    '''returns date as datetime.date object'''
     if type(dt) == str:
         try: 
             return date.fromisoformat(dt)
@@ -183,6 +185,7 @@ def asDate(dt: Union[date, datetime, str]):
     raise ValueError('Unrecognized type')
 
 def asDatetime(dt: Union[date, datetime, str]):
+    '''returns date as datetime.datetime object'''
     if type(dt) == date:
         return datetime(dt.year, dt.month, dt.day)
     elif type(dt) == datetime:
@@ -198,11 +201,27 @@ def asDatetime(dt: Union[date, datetime, str]):
     raise ValueError('Unrecognized type')
 
 def asList(val):
+    '''converts to standard list object, or returns a list containing given argument if not list-like'''
     if val is None: return []
-    return val if type(val) is list else [val]
+    if type(val) is list: return val
+    if type(val) is set: return list(val)
+    if type(val) is numpy.ndarray: return list(val)
+    return [val]
 
 def asBytes(val):
     return val if type(val) == bytes else val.encode()
+
+def asEnum(val, enum):
+    if type(val) is str and issubclass(enum.__class__, Enum):
+        try:
+            val = enum[val.upper()]
+        except KeyError:
+            ## for missing keys, backward compatibility
+            val = enum(val.upper())
+        return enum[val]
+    elif not issubclass(val.__class__, Enum):
+        raise TypeError
+    return val
 
 ## basically a date that is the first day of the month it represents (including year)
 def asMonthKey(dt: Union[date, datetime, str]):

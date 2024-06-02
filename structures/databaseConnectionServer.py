@@ -43,6 +43,7 @@ class DatabaseConnectionManagerProxy(object):
         self.pid = pid
         self.originatingScript = originatingScript
         self.batchQueue: Queue = None
+        self.lastrowid = None
         self.runningOnMainProcess = runningOnMainProcess
         ## if running on Main process, meaning not as a proxy-server then all methods should perform without any threading/queues as there should be no chance of race conditions with other running processes
         if self.runningOnMainProcess:
@@ -51,6 +52,13 @@ class DatabaseConnectionManagerProxy(object):
 
     def _queueTupleFactory(self, etype=None, sql='', params=(), q=None):
         return _queueTupleFactory(etype, sql, params, q, self.pid, self.originatingScript)
+    
+    def getLastRowId(self):
+        if not self.runningOnMainProcess:
+            return self.lastrowid
+        else:
+            global dbcursor
+            return dbcursor.lastrowid
 
     def clearQueryCache(self):
         global queryCache
@@ -100,7 +108,9 @@ class DatabaseConnectionManagerProxy(object):
                 ret = []
                 while True:
                     rec = resq.get()
-                    if rec == _end: break
+                    if type(rec) == tuple and rec[0] == _end:
+                        self.lastrowid = rec[1]
+                        break
                     elif isinstance(rec, Exception): raise rec
                     ret.extend(rec)
                 
@@ -114,6 +124,7 @@ class DatabaseConnectionManagerProxy(object):
         else:
             global dbcursor
             resc = dbcursor.execute(sql, parameters)
+            self.lastrowid = dbcursor.lastrowid
             if isSelect:
                 return resc.fetchall()
 
@@ -126,10 +137,13 @@ class DatabaseConnectionManagerProxy(object):
             putq.put(self._queueTupleFactory(_many, sql, parameters, resq))
 
             rec = resq.get()
-            if isinstance(rec, Exception): raise rec
+            if type(rec) == tuple and rec[0] == _end:
+                self.lastrowid = rec[1]
+            elif isinstance(rec, Exception): raise rec
         else:
             global dbcursor
             dbcursor.executemany(sql, parameters)
+            self.lastrowid = dbcursor.lastrowid
 
 class DatabaseConnectionServer(object):
     def __init__(self, port):
@@ -174,7 +188,7 @@ class DatabaseConnectionServer(object):
                     dbcursor.execute(sql, parameters)
                     if q:
                         q.put(dbcursor.fetchall())
-                        q.put(_end)
+                        q.put((_end, dbcursor.lastrowid))
                 except Exception as e:
                     llog(f'Raising exception {e}')
                     q.put(e)
@@ -183,7 +197,7 @@ class DatabaseConnectionServer(object):
                 llog(f'Executing many: {sql[:100]}{"..." if len(sql) > 100 else ""}')
                 try:
                     dbcursor.executemany(sql, parameters)
-                    q.put(_end)
+                    q.put((_end, dbcursor.lastrowid))
                 except Exception as e:
                     llog(f'Raising exception {e}')
                     q.put(e)

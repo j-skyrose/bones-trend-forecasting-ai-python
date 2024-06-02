@@ -344,6 +344,23 @@ class QueryCachesCRow():
         self.pickled_or_not_value = pickled_or_not_valueValue
         self.query_string = query_stringValue
 
+## TABLE: options_data_daily_c ######################################
+optionsDataDailyCSnakeCaseTableColumns = ['exchange', 'symbol', 'ticker', 'period_date', 'open', 'high', 'low', 'close', 'volume', 'transactions', 'artificial']
+optionsDataDailyCCamelCaseTableColumns = ['exchange', 'symbol', 'ticker', 'periodDate', 'open', 'high', 'low', 'close', 'volume', 'transactions', 'artificial']
+class OptionsDataDailyCRow():
+    def __init__(self, exchangeValue: str, symbolValue: str, tickerValue: str, period_dateValue: str, openValue: float, highValue: float, lowValue: float, closeValue: float, volumeValue: float, transactionsValue: float, artificialValue: bool):
+        self.exchange = exchangeValue
+        self.symbol = symbolValue
+        self.ticker = tickerValue
+        self.period_date = period_dateValue
+        self.open = openValue
+        self.high = highValue
+        self.low = lowValue
+        self.close = closeValue
+        self.volume = volumeValue
+        self.transactions = transactionsValue
+        self.artificial = artificialValue
+
 ## TABLE: sqlite_stat1 ######################################
 sqliteStat1SnakeCaseTableColumns = ['tbl', 'idx', 'stat']
 sqliteStat1CamelCaseTableColumns = ['tbl', 'idx', 'stat']
@@ -1074,4 +1091,75 @@ class QueueStockDataDailyDRow():
         self.exchange = exchangeValue
         self.symbol = symbolValue
         self.source = sourceValue
+
+## TABLE: options_additional_underlyings_d ######################################
+optionsAdditionalUnderlyingsDSnakeCaseTableColumns = ['type', 'underlying', 'amount']
+optionsAdditionalUnderlyingsDCamelCaseTableColumns = ['type', 'underlying', 'amount']
+class OptionsAdditionalUnderlyingsDRow():
+    def __init__(self, typeValue: str, underlyingValue: str, amountValue: float):
+        self.type = typeValue
+        self.underlying = underlyingValue
+        self.amount = amountValue
+
+## TABLE: options_contract_info_polygon_d ######################################
+optionsContractInfoPolygonDSnakeCaseTableColumns = ['primary_exchange', 'underlying_ticker', 'ticker', 'contract_type', 'expiration_date', 'strike_price', 'exercise_style', 'shares_per_contract', 'correction', 'cfi', 'additional_underlyings']
+optionsContractInfoPolygonDCamelCaseTableColumns = ['primaryExchange', 'underlyingTicker', 'ticker', 'contractType', 'expirationDate', 'strikePrice', 'exerciseStyle', 'sharesPerContract', 'correction', 'cfi', 'additionalUnderlyings']
+class OptionsContractInfoPolygonDRow():
+    def __init__(self, primary_exchangeValue: str, underlying_tickerValue: str, tickerValue: str, contract_typeValue: str, expiration_dateValue: str, strike_priceValue: int, exercise_styleValue: str, shares_per_contractValue: int, correctionValue: str, cfiValue: str, additional_underlyingsValue):
+        self.primary_exchange = primary_exchangeValue
+        self.underlying_ticker = underlying_tickerValue
+        self.ticker = tickerValue
+        self.contract_type = contract_typeValue
+        self.expiration_date = expiration_dateValue
+        self.strike_price = strike_priceValue
+        self.exercise_style = exercise_styleValue
+        self.shares_per_contract = shares_per_contractValue
+        self.correction = correctionValue
+        self.cfi = cfiValue
+        self.additional_underlyings = additional_underlyingsValue
+
+## TABLE: options_data_daily_polygon_d ######################################
+optionsDataDailyPolygonDSnakeCaseTableColumns = ['ticker', 'period_date', 'open', 'high', 'low', 'close', 'volume', 'transactions']
+optionsDataDailyPolygonDCamelCaseTableColumns = ['ticker', 'periodDate', 'open', 'high', 'low', 'close', 'volume', 'transactions']
+class OptionsDataDailyPolygonDRow():
+    def __init__(self, tickerValue: str, period_dateValue: str, openValue: float, highValue: float, lowValue: float, closeValue: float, volumeValue: float, transactionsValue: float):
+        self.ticker = tickerValue
+        self.period_date = period_dateValue
+        self.open = openValue
+        self.high = highValue
+        self.low = lowValue
+        self.close = closeValue
+        self.volume = volumeValue
+        self.transactions = transactionsValue
+
+## TABLE: options_no_data_tickers_polygon_d ######################################
+optionsNoDataTickersPolygonDSnakeCaseTableColumns = ['exchange', 'symbol', 'ticker', 'attempt_date', 'from_date', 'to_date']
+optionsNoDataTickersPolygonDCamelCaseTableColumns = ['exchange', 'symbol', 'ticker', 'attemptDate', 'fromDate', 'toDate']
+class OptionsNoDataTickersPolygonDRow():
+    def __init__(self, exchangeValue: str, symbolValue: str, tickerValue: str, attempt_dateValue: str, from_dateValue: str, to_dateValue: str):
+        self.exchange = exchangeValue
+        self.symbol = symbolValue
+        self.ticker = tickerValue
+        self.attempt_date = attempt_dateValue
+        self.from_date = from_dateValue
+        self.to_date = to_dateValue
+
+## TABLE: queue_options_data_daily_d ######################################
+queueOptionsDataDailyDSnakeCaseTableColumns = ['exchange', 'symbol', 'ticker', 'source']
+queueOptionsDataDailyDCamelCaseTableColumns = ['exchange', 'symbol', 'ticker', 'source']
+class QueueOptionsDataDailyDRow():
+    def __init__(self, exchangeValue, symbolValue, tickerValue, sourceValue):
+        self.exchange = exchangeValue
+        self.symbol = symbolValue
+        self.ticker = tickerValue
+        self.source = sourceValue
+
+## TABLE: options_no_contracts_symbols_polygon_d ######################################
+optionsNoContractsSymbolsPolygonDSnakeCaseTableColumns = ['exchange', 'symbol', 'attempt_date']
+optionsNoContractsSymbolsPolygonDCamelCaseTableColumns = ['exchange', 'symbol', 'attemptDate']
+class OptionsNoContractsSymbolsPolygonDRow():
+    def __init__(self, exchangeValue: str, symbolValue: str, attempt_dateValue: str):
+        self.exchange = exchangeValue
+        self.symbol = symbolValue
+        self.attempt_date = attempt_dateValue
 

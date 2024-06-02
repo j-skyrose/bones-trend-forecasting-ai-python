@@ -17,7 +17,7 @@ from decimal import Decimal
 from enum import Enum
 
 from globalConfig import config as gconfig
-from constants.enums import APIState, AccuracyAnalysisTypes, AdvancedOrdering, Api, ChangeType, CorrBool, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, NormalizationMethod, OperatorDict, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, SetType, Direction, StockDataSource, TimeToLiveType
+from constants.enums import APIState, AccuracyAnalysisTypes, AdvancedOrdering, Api, ChangeType, CorrBool, FinancialReportType, IndicatorType, InterestType, NormalizationGroupings, NormalizationMethod, OperatorDict, OptionsDataSource, OutputClass, PrecedingRangeType, SQLHelpers, SQLInsertHelpers, SeriesType, SetType, Direction, StockDataSource, TimeToLiveType
 from constants.exceptions import NotSupportedYet
 from constants.values import unusableSymbols, apiList, standardExchanges
 from managers.apiManager import APIManager
@@ -26,6 +26,7 @@ from managers.dbCacheManager import DBCacheManager
 from managers.persistentDatabaseConnectionManager import PersistentDatabaseConnectionManagerFactory
 from structures.normalizationColumnObj import NormalizationColumnObj
 from structures.normalizationDataHandler import NormalizationDataHandler
+from structures.optionsContract import OptionsContract
 from structures.sql.sqlArgumentObj import SQLArgumentObj
 from structures.sql.sqlOrderObj import SQLOrderObj
 from utils.dbSupport import convertToCamelCase, convertToSnakeCase, expandSQLStatementArguments, generateAllSQLConditionSnippets, generateCommaSeparatedQuestionMarkString, generateExcludeTickersSnippet, generateExcludeUnusableTickersSnippet, generateSQLConditionSnippet, generateSQLSuffixStatementAndArguments, getDBAliasForTable, getTableColumns, getTableFunctionName, getTableString, onlyColumnListProcessing, processDBQuartersToDicts, _dbGetter, generateDatabaseAnnotationObjectsFile, generateCompleteDBConnectionAndCursor, getDBConnectionAndCursor, purgeUnusableTickers, validateQueryCacheRow
@@ -36,7 +37,7 @@ configManager: StaticConfigManager = StaticConfigManager()
 
 ## generate before import to ensure things are up-to-date for the current execution
 if sys.argv[0].endswith('databaseConnectionServer.py'): generateDatabaseAnnotationObjectsFile()
-from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, CboeVolatilityIndexRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, StockDataDailyCRow, QueryCachesCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, GoogleTopicIdsDRow, QueueStockDataDailyDRow
+from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, CboeVolatilityIndexRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, StockDataDailyCRow, QueryCachesCRow, OptionsDataDailyCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, GoogleTopicIdsDRow, QueueStockDataDailyDRow, OptionsAdditionalUnderlyingsDRow, OptionsContractInfoPolygonDRow, OptionsDataDailyPolygonDRow, OptionsNoDataTickersPolygonDRow, QueueOptionsDataDailyDRow, OptionsNoContractsSymbolsPolygonDRow
 from managers._generatedDatabaseExtras.databaseRowObjects import symbolsSnakeCaseTableColumns, stockDataDailyCCamelCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns, symbolInfoAlphavantageDSnakeCaseTableColumns, symbolInfoPolygonDSnakeCaseTableColumns, symbolInfoYahooDSnakeCaseTableColumns
 
 class DatabaseManager(Singleton):
@@ -276,6 +277,12 @@ class DatabaseManager(Singleton):
             rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[QueryCachesCRow]:
         return _dbGetter("query_caches_c", **locals())
 
+    def getOptionsDataDaily_basic(self,
+            exchange=None, symbol=None, ticker=None, periodDate=None,
+            open=None, high=None, low=None, close=None, volume=None, transactions=None, artificial=None,
+            rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[OptionsDataDailyCRow]:
+        return _dbGetter("options_data_daily_c", **locals())
+
     def getSqliteStat1_basic(self,
             tbl=None, idx=None, stat=None,
             rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[SqliteStat1Row]:
@@ -410,6 +417,40 @@ class DatabaseManager(Singleton):
             exchange=None, symbol=None, source=None,
             rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[QueueStockDataDailyDRow]:
         return _dbGetter("queue_stock_data_daily_d", **locals())
+
+    def getDumpOptionsAdditionalUnderlyings_basic(self,
+            type=None, underlying=None, amount=None,
+            rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[OptionsAdditionalUnderlyingsDRow]:
+        return _dbGetter("options_additional_underlyings_d", **locals())
+
+    def getDumpOptionsContractInfoPolygon_basic(self,
+            primaryExchange=None, underlyingTicker=None, ticker=None, contractType=None, expirationDate=None, strikePrice=None, sharesPerContract=None, cfi=None, additionalUnderlyings=None,
+            exerciseStyle=None, correction=None,
+            rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[OptionsContractInfoPolygonDRow]:
+        return _dbGetter("options_contract_info_polygon_d", **locals())
+
+    def getDumpOptionsDataDailyPolygon_basic(self,
+            ticker=None, periodDate=None,
+            open=None, high=None, low=None, close=None, volume=None, transactions=None,
+            rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[OptionsDataDailyPolygonDRow]:
+        return _dbGetter("options_data_daily_polygon_d", **locals())
+
+    def getDumpOptionsNoDataTickersPolygon_basic(self,
+            ticker=None, fromDate=None, toDate=None,
+            exchange=None, symbol=None, attemptDate=None,
+            rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[OptionsNoDataTickersPolygonDRow]:
+        return _dbGetter("options_no_data_tickers_polygon_d", **locals())
+
+    def getDumpQueueOptionsDataDaily_basic(self,
+            exchange=None, symbol=None, ticker=None, source=None,
+            rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[QueueOptionsDataDailyDRow]:
+        return _dbGetter("queue_options_data_daily_d", **locals())
+
+    def getDumpOptionsNoContractsSymbolsPolygon_basic(self,
+            exchange=None, symbol=None,
+            attemptDate=None,
+            rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[OptionsNoContractsSymbolsPolygonDRow]:
+        return _dbGetter("options_no_contracts_symbols_polygon_d", **locals())
 
     #endregion basic generic gets - AUTO-GENERATED SECTION
     ####################################################################################################################################################################
@@ -1187,6 +1228,39 @@ class DatabaseManager(Singleton):
         stmt = f"INSERT {insertStrategy.value} INTO {getTableString('stock_data_daily_c')}({','.join(keySet)}) VALUES ({generateCommaSeparatedQuestionMarkString(keySet)})"
         self.dbc.executemany(stmt, [([(kwargs[k] if k in keysWithValues else shortcdict(d, k)) for k in keySet]) for d in data])
 
+    def insertOptionsData(self, exchange=None, symbol=None, ticker=None,
+                          period_date=None, open=None, high=None, low=None, close=None, volume=None, transactions=None, artificial=None,
+                          data=None,
+                          insertStrategy=SQLInsertHelpers.NONE):
+        '''inserts data into options_data_daily_c, typically consolidated daily options data from across all dump tables'''
+
+        ## get kwargs for table columns, exclude others
+        kwargs = {**locals()}
+        excludeKeys = ['self', 'insertStrategy', 'data']
+        for exk in excludeKeys:
+            del kwargs[exk]
+        
+        ## override data keys with a value passed as an argument
+        keysWithValues = [k for k,v in kwargs.items() if v is not None]
+        dataKeys = set()
+        if data:
+            for d in data:
+                for k in d:
+                    dataKeys.add(k)
+            dataKeys = sorted(list(dataKeys))
+            removeKeys = ['series_type'] + keysWithValues
+            for rk in removeKeys:
+                try: dataKeys.remove(rk)
+                except ValueError: pass
+        else: 
+            data = [{ k: kwargs[k] for k in keysWithValues }]
+
+        keySet = set(list(dataKeys) + keysWithValues)
+        keySet = sorted(list(keySet))
+
+        stmt = f"INSERT {insertStrategy.value} INTO {getTableString('options_data_daily_c')}({','.join(keySet)}) VALUES ({generateCommaSeparatedQuestionMarkString(keySet)})"
+        self.dbc.executemany(stmt, [([(kwargs[k] if k in keysWithValues else shortcdict(d, k)) for k in keySet]) for d in data])
+
     ## insert data in historical_data_minute table
     def insertMinuteBatchData(self, exchange, symbol, data):
         stmt = 'INSERT OR REPLACE INTO historical_data_minute VALUES (?,?,?,?,?,?,?,?,?,?,?)'
@@ -1253,7 +1327,7 @@ class DatabaseManager(Singleton):
                 stmt = 'INSERT OR IGNORE INTO input_vector_factories(factory, config) VALUES (?,?)'
                 if not dryrun: self.dbc.execute(stmt, tpl)
                 else: print('inserting input vector factory\n', stmt, tpl)
-                factoryId = self.dbc.lastrowid
+                factoryId = self.dbc.getLastRowId()
             nn.stats.factoryId = factoryId
         else:
             factoryId = nn.stats.factoryId
@@ -1708,6 +1782,70 @@ class DatabaseManager(Singleton):
         stmt = f"INSERT {insertStrategy.value} INTO {getTableString('query_caches_c')}({','.join(convertToSnakeCase(keySet))}) VALUES ({generateCommaSeparatedQuestionMarkString(keySet)})"
         self.dbc.execute(stmt, keySortedValues(kwargs))
 
+    def insertAdditionalUnderlyingsDump(self, data) -> List[int]:
+        # TBD: have mapping table between this and options_contract_info_polygon_d, DB not normalized with this solution
+        data = asList(data)
+        stmtGenerator = lambda rowObj: f"INSERT INTO {self.getTableString('options_additional_underlyings_d')}({','.join(sortedKeys(rowObj))}) VALUES ({generateCommaSeparatedQuestionMarkString(rowObj.keys())})"
+        rowids = []
+        for d in data:
+            stmt = stmtGenerator(d)
+            args = keySortedValues(d)
+            try:
+                self.dbc.execute(stmt, args)
+                rowids.append(self.dbc.getLastRowId())
+            except sqlite3.IntegrityError:
+                ## row already exists, re-use
+                rowids.append(self.getDumpOptionsAdditionalUnderlyings_basic(**d, sqlColumns='rowid', onlyColumn_asList='rowid')[0])
+        return rowids
+
+    def insertOptionsContractInfoDump(self, data, insertStrategy=SQLInsertHelpers.IGNORE):
+        data = asList(data)
+        stmtGenerator = lambda rowObj: f"INSERT {insertStrategy.value} INTO {self.getTableString('options_contract_info_polygon_d')}({','.join(sortedKeys(rowObj))}) VALUES ({generateCommaSeparatedQuestionMarkString(rowObj.keys())})"
+        for d in data:
+            stmt = stmtGenerator(d)
+            args = keySortedValues(d)
+            self.dbc.execute(stmt, args)
+
+    def insertOptionsDataDump_polygon(self, ticker, data, insertStrategy=SQLInsertHelpers.IGNORE):
+        data = asList(data)
+        stmtGenerator = lambda rowObj: f"INSERT {insertStrategy.value} INTO {self.getTableString('options_data_daily_polygon_d')}({','.join(sortedKeys(rowObj))},ticker) VALUES ({generateCommaSeparatedQuestionMarkString(rowObj.keys())},?)"
+        for d in data:
+            stmt = stmtGenerator(d)
+            args = keySortedValues(d) + [ticker]
+            self.dbc.execute(stmt, args)
+        self.queueOptionsDataDailyTickersForUpdate(OptionsDataSource.POLYGON, symbol=OptionsContract.getSymbol(ticker), optionsTicker=ticker)
+
+    def queueOptionsDataDailyTickersForUpdate(self, source, exchange=None, symbol=None, optionsTicker=None, data=None):
+        '''adds ticker to queue for data consolidation'''
+        stmt = f"INSERT OR IGNORE INTO {getTableString('queue_options_data_daily_d')} VALUES (?,?,?,?)"
+        if data:
+            self.dbc.executemany(stmt, [(
+                d.exchange if source != OptionsDataSource.POLYGON else 'UNKNOWN', 
+                d.symbol if source != OptionsDataSource.POLYGON else d.ticker,
+                d.optionsTicker,
+                source.name
+            ) for d in data])
+        else:
+            if optionsTicker is None: raise ValueError
+            exchange = shortc(exchange, 'UNKNOWN')
+            symbol = shortc(symbol, OptionsContract.getSymbol(optionsTicker))
+            self.dbc.execute(stmt, (exchange, symbol, optionsTicker, source.name))    
+
+    def insertOptionsNoDataTicker(self, exchange=None, symbol=None, ticker=None, attemptDate=None, fromDate=None, toDate=None, insertStrategy=SQLInsertHelpers.IGNORE):
+        kwargs = repackKWArgs(locals(), remove='insertStrategy')
+        keySet = sortedKeys(kwargs)
+
+        stmt = f"INSERT {insertStrategy.value} INTO {getTableString('options_no_data_tickers_polygon_d')}({','.join(convertToSnakeCase(keySet))}) VALUES ({generateCommaSeparatedQuestionMarkString(keySet)})"
+        self.dbc.execute(stmt, keySortedValues(kwargs))
+
+    def insertOptionsNoContractsSymbol(self, exchange=None, symbol=None, attemptDate=None, insertStrategy=SQLInsertHelpers.REPLACE):
+        kwargs = repackKWArgs(locals(), remove='insertStrategy')
+        keySet = sortedKeys(kwargs)
+
+        stmt = f"INSERT {insertStrategy.value} INTO {getTableString('options_no_contracts_symbols_polygon_d')}({','.join(convertToSnakeCase(keySet))}) VALUES ({generateCommaSeparatedQuestionMarkString(keySet)})"
+        self.dbc.execute(stmt, keySortedValues(kwargs))        
+
+
     #endregion
     ####################################################################################################################################################################
     #region deletes removals
@@ -1795,6 +1933,12 @@ class DatabaseManager(Singleton):
         '''removes ticker from queue after data has been consolidated'''
         stmt = f"DELETE FROM {getTableString('queue_stock_data_daily_d')} WHERE exchange=? AND symbol=? AND source=?"
         self.dbc.execute(stmt, (exchange, symbol, source.name))
+
+    def dequeueOptionsDataDailyTickerFromUpdate(self, symbol, optionsTicker, source: OptionsDataSource, exchange='UNKNOWN'):
+        '''removes ticker from queue after data has been consolidated'''
+        additionalStmt, arguments = generateSQLSuffixStatementAndArguments(**locals())
+        stmt = f'DELETE FROM {getTableString("queue_options_data_daily_d")}'
+        return self.dbc.execute(stmt + additionalStmt, arguments)
 
     #endregion
     ####################################################################################################################################################################
@@ -2115,7 +2259,7 @@ class DatabaseManager(Singleton):
 
         stmt = 'INSERT OR REPLACE INTO input_vector_factories VALUES (?,?,?)'
         self.dbc.execute(stmt, (1, blob, cnf))
-        print(d.dbc.lastrowid)     
+        print(d.dbc.getLastRowId())     
 
     # def printTableColumns(self, tablename):
     #      columnnames = [r[0] for r in self.dbc.execute('SELECT * FROM ' + tablename).description]

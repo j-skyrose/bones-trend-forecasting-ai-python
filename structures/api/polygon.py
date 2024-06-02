@@ -15,8 +15,6 @@ from constants.enums import FinancialReportType, MarketType, OperatorDict, Times
 from structures.api.apiBase import APIBase
 from utils.support import Singleton, asISOFormat, recdotdict, shortcdict
 
-# import codecs
-# w=codecs.getwriter("utf-8")(sys.stdout.buffer)
 
 class Polygon(APIBase, Singleton):
 
@@ -192,7 +190,7 @@ class Polygon(APIBase, Singleton):
         return data
 
     def __responseHandler(self, resp: Response, verbose=0):
-        if verbose: print('made request', resp.url)
+        if verbose > 0: print('made request', resp.url)
 
         if resp.ok:
             rjson = resp.json()
@@ -250,3 +248,47 @@ class Polygon(APIBase, Singleton):
         "ticker": "PANW"
         }]
         '''
+
+    def getOptionsContractInfo(self, ticker, active=True, minExpirationDate=None, verbose=0):
+        maxLimit = 1000
+        params = {
+            'apikey': self.apiKey,
+            'limit': maxLimit,
+            'underlying_ticker': ticker,
+            'expired': not active
+        }
+        if minExpirationDate: params['expiration_date.gte'] = asISOFormat(minExpirationDate)
+        return self.__responseHandler(
+            requests.get(f'{self.url}/v3/reference/options/contracts', params=params),
+            verbose
+        )
+
+    def getOptionsData(self, ticker, fromDate, toDate, multipler=1, timeSpan='day', verbose=1):
+        maxLimit = 50000
+        if not ticker.startswith('O:'): ticker = 'O:' + ticker
+        rjson = self.__responseHandler(
+            requests.get(f'{self.url}/v2/aggs/ticker/{ticker}/range/{multipler}/{timeSpan}/{asISOFormat(fromDate)}/{asISOFormat(toDate)}', params={
+                'apikey': self.apiKey,
+                'adjusted': False,
+                'limit': maxLimit
+            }),
+            verbose
+        )
+
+        if rjson['resultsCount'] == maxLimit: raise OverflowError
+
+        data = rjson['results'] if rjson['resultsCount'] > 0 else []
+
+        for d in range(len(data)):
+            data[d] = {
+                'open': data[d]['o'],
+                'high': data[d]['h'],
+                'low': data[d]['l'],
+                'close': data[d]['c'],
+                'volume': data[d]['v'],
+                'transactions': shortcdict(data[d], 'n', 0),
+                'unixTimePeriod': data[d]['t']
+            }
+
+        if verbose == 1: print(f"{rjson['resultsCount']} data points retrieved")
+        return rjson
