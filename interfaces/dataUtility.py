@@ -37,6 +37,7 @@ dbm: DatabaseManager = DatabaseManager()
 
 maxcpus = 3
 
+#region vector similarities
 '''
 Determines the Euclidean similarity between input vectors for all negative instances of each ticker, writes resulting (sum) to DB
 Input vector must only contain positive numbers, negatives may slightly change how accurate the similarity calculation is
@@ -45,7 +46,7 @@ Can be interuptted and resumed, and should be able to handle new stock data addi
 def similarityCalculationAndInsertion(exchange=None, **kwargs):
     '''KWARGS: checkDBIntegrity, wipeDataOnDBIntegrityFailure, correctImproperlyInsertedDates, dryrun, freshrun'''
     ''' DB Integrity gets messed up when stock data is updated (or possibly due to a [local] symbol lookup bug); just something that needs to be dealt with whenever updating vector similarities
-            alphavantage: high/low/close/volume values can change possibly because the previous last day may not have gone til end of after-market trading
+            alphavantage: high/low/close/volume values can change possibly because the previous last day may not have gone til end of after-market trading, or post-date corrections are made
                 Data mismatch found for TSX FST
                 {'exchange': 'TSX', 'symbol': 'FST', 'type': 'DAILY', 'date': '2023-05-19', 'open': 43.24, 'high': 43.24, 'low': 43.14, 'close': 43.24, 'volume': 460.0}
                 {'exchange': 'TSX', 'symbol': 'FST', 'type': 'DAILY', 'date': '2023-05-19', 'open': 43.24, 'high': 43.26, 'low': 43.14, 'close': 43.26, 'volume': 500.0}
@@ -72,10 +73,10 @@ def similarityCalculationAndInsertion(exchange=None, **kwargs):
     cf.data.normalizationMethod.earningsDate.value = 181
 
     props = {
-        'precedingRange': 60,
-        'followingRange': 10,
-        'changeType': ChangeType.ENDING_ABSOLUTE,
-        'changeValue': 2
+        'precedingRange': cf.training.precedingRange,
+        'followingRange': cf.training.followingRange,
+        'changeType': cf.training.changeType,
+        'changeValue': cf.training.changeValue
     }
 
     if gconfig.testing.enabled:
@@ -88,7 +89,7 @@ def similarityCalculationAndInsertion(exchange=None, **kwargs):
         **props,
         maxPageSize=1,
         # exchange=['NASDAQ'],
-        exchange=asList(exchange),
+        exchange=asList(exchange) if exchange else None,
 
         inputVectorFactory=InputVectorFactory(cf),
         verbose=0.5
@@ -147,13 +148,19 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
         return neginstances[indx].getAnchorDay().period_date
 
     ## prepare get/insert arguments
-    def prepareArgs(indx=None):
+    def prepareArgs(indx=None, dt=None):
+        if indx is not None:
+            if dt is not None: raise ValueError
+            dt = getDTArg(indx)
+        else:
+            if dt is not None:
+                dt = asISOFormat(dt)
         return {
             'exchange': ticker.exchange,
             'symbol': ticker.symbol,
-            'seriesType': dm.seriesType,
-            'dt': getDTArg(indx) if indx is not None else None,
-            'vclass': OutputClass.NEGATIVE,
+            'dateType': dm.seriesType,
+            'date': dt,
+            'vectorClass': OutputClass.NEGATIVE,
             **props
         }
 
@@ -217,8 +224,7 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
                     newDate = getDTArg(dindx)
                     oldDate = dm.stockDataHandlers[ticker].data[dindx].period_date
                     if not dryrun:
-                        args = [asISOFormat(newDate), ticker.exchange, ticker.symbol, dm.seriesType.name, asISOFormat(oldDate), OutputClass.NEGATIVE.name, *list(props.values())]
-                        dbm.dbc.execute(f'UPDATE {dbm.getTableString("vector_similarities_c")} SET date=? WHERE exchange=? AND symbol=? AND date_type=? AND date=? AND vector_class=? AND preceding_range=? AND following_range=? AND change_threshold=?', tuple(args))
+                        dbm.updateVectorSimilarity(**prepareArgs(dt=oldDate), newPeriodDate=asISOFormat(newDate))
                     else:
                         print(oldDate, '->', newDate)
 
@@ -242,11 +248,12 @@ def _calculateSimiliaritesAndInsertToDB(ticker, props: Dict, config, normalizati
 
     if not dryrun:
         dbm.startBatch()
-        for vsindx in range(numpy.count_nonzero(similaritiesSum)): ## only iterate through calculated values, filled 0 values indicate otherwise
+        for vsindx in range(numpy.count_nonzero(similaritiesSum)): ## only iterate through calculated values, filled 0 values indicate no calculation was performed
             dbm.insertVectorSimilarity(*prepareArgs(vsindx).values(), similaritiesSum[vsindx], upsert=True)
         dbm.commitBatch()
 
     print(f' {"Would insert" if dryrun else "Inserted"} {numpy.count_nonzero(similaritiesSum)-len(dbsums)} new values and {"would update" if dryrun else "updated"} {len(dbsums)} values for', ticker.getTuple())
+#endregion vector similarities
 
 #region technical indicators
 def _verifyTechnicalIndicatorDataIntegrity(stockdata, indicator: IndicatorType, indicatorCount, indicatorPeriod, indicatorMaxDate=None):

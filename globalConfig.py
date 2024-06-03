@@ -52,10 +52,15 @@ if TESTING and SEED_RANDOM:
 
 ## default
 trainingConfig = {
+    ## general
     'seriesType': SeriesType.DAILY,
-    'changeType': ChangeType.ENDING_PERCENTAGE,
+    'changeType': ChangeType.ANY_DAY_ABSOLUTE,
     'accuracyType': AccuracyType.NEGATIVE,
-    'setSplitTuple': (1/3,1/3)
+    'setSplitTuple': (2/3,1/3),
+    ## more specific, likely to be overridden locally e.g. trainer.py
+    'precedingRange': 60,
+    'followingRange': 20,
+    'changeValue': 10
 }
 
 def genFeatureObj(enabled, extype:FeatureExtraType, dataRequired=True):
@@ -66,10 +71,10 @@ config = recdotdict({
     'useMainGPU': useMainGPU,
     'multicore': not ('VSCODE_GIT_IPC_HANDLE' in os.environ),
     'similarityCalculation': {
-        'enabled': False,
+        'enabled': False, # should only be enabled programmatically by calculation function(s)
         'earningsDate': {
             'maxDayDifference': 180,
-            # for scalar representation, which is default for similarity calculation as it should better capture the perceived difference between the days of vectors
+            # for scalar representation (which is default for similarity calculation) which should better capture the perceived difference between the number of days from vector to vector
             # 0 <- postDateThreshold: days before known earnings
             # postDateThreshold -> 1: days after known earnings (up to maxPostDays)
             # 1: days until next earnings unknown

@@ -37,8 +37,8 @@ configManager: StaticConfigManager = StaticConfigManager()
 
 ## generate before import to ensure things are up-to-date for the current execution
 if sys.argv[0].endswith('databaseConnectionServer.py'): generateDatabaseAnnotationObjectsFile()
-from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, CboeVolatilityIndexRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, VectorSimilaritiesCRow, StockDataDailyCRow, QueryCachesCRow, OptionsDataDailyCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, GoogleTopicIdsDRow, QueueStockDataDailyDRow, OptionsAdditionalUnderlyingsDRow, OptionsContractInfoPolygonDRow, OptionsDataDailyPolygonDRow, OptionsNoDataTickersPolygonDRow, QueueOptionsDataDailyDRow, OptionsNoContractsSymbolsPolygonDRow
-from managers._generatedDatabaseExtras.databaseRowObjects import symbolsSnakeCaseTableColumns, stockDataDailyCCamelCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns, symbolInfoAlphavantageDSnakeCaseTableColumns, symbolInfoPolygonDSnakeCaseTableColumns, symbolInfoYahooDSnakeCaseTableColumns
+from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, CboeVolatilityIndexRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, QueryCachesCRow, OptionsDataDailyCRow, VectorSimilaritiesCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, GoogleTopicIdsDRow, QueueStockDataDailyDRow, OptionsAdditionalUnderlyingsDRow, OptionsContractInfoPolygonDRow, OptionsDataDailyPolygonDRow, OptionsNoDataTickersPolygonDRow, QueueOptionsDataDailyDRow, OptionsNoContractsSymbolsPolygonDRow
+from managers._generatedDatabaseExtras.databaseRowObjects import symbolsSnakeCaseTableColumns, stockDataDailyCCamelCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns, symbolInfoAlphavantageDSnakeCaseTableColumns, symbolInfoPolygonDSnakeCaseTableColumns, symbolInfoYahooDSnakeCaseTableColumns, vectorSimilaritiesCCamelCaseTableColumns
 
 class DatabaseManager(Singleton):
 
@@ -259,12 +259,6 @@ class DatabaseManager(Singleton):
             rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[GoogleInterestsCRow]:
         return _dbGetter("google_interests_c", **locals())
 
-    def getVectorSimilarities_basic(self,
-            exchange=None, symbol=None, dateType=None, date=None, vectorClass=None, precedingRange=None, followingRange=None, changeValue=None, changeType=None,
-            value=None,
-            rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[VectorSimilaritiesCRow]:
-        return _dbGetter("vector_similarities_c", **locals())
-
     def getStockDataDaily_basic(self,
             exchange=None, symbol=None, periodDate=None,
             preMarket=None, open=None, high=None, low=None, close=None, afterHours=None, volume=None, transactions=None, artificial=None,
@@ -282,6 +276,12 @@ class DatabaseManager(Singleton):
             open=None, high=None, low=None, close=None, volume=None, transactions=None, artificial=None,
             rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[OptionsDataDailyCRow]:
         return _dbGetter("options_data_daily_c", **locals())
+
+    def getVectorSimilarities_basic(self,
+            exchange=None, symbol=None, dateType=None, date=None, vectorClass=None, precedingRange=None, followingRange=None, changeType=None, changeValue=None,
+            value=None,
+            rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[VectorSimilaritiesCRow]:
+        return _dbGetter("vector_similarities_c", **locals())
 
     def getSqliteStat1_basic(self,
             tbl=None, idx=None, stat=None,
@@ -1358,6 +1358,21 @@ class DatabaseManager(Singleton):
         if upsert:
             stmt = f'UPDATE {self.getTableString("vector_similarities_c")} SET value=? WHERE exchange=? AND symbol=? AND date_type=? AND date=? AND vector_class=? AND preceding_range=? AND following_range=? AND change_type=? AND change_value=?'
             self.dbc.execute(stmt, tuple([val] + args))
+
+    def updateVectorSimilarity(self,
+                               exchange=None, symbol=None, dateType:SeriesType=None, date=None, vectorClass:OutputClass=None, precedingRange=None, followingRange=None, changeType:ChangeType=None, changeValue=None, value=None,
+                               newExchange=None, newSymbol=None, newDateType:SeriesType=None, newDate=None, newVectorClass:OutputClass=None, newPrecedingRange=None, newFollowingRange=None, newChangeType:ChangeType=None, newChangeValue=None, newValue=None
+                               ):
+        kwargs = repackKWArgs(locals())
+        currentKWArgs = { k:v for k,v in kwargs if k in vectorSimilaritiesCCamelCaseTableColumns }
+        newKWArgs = { convertToCamelCase(k.replace('new', '')):v for k,v in kwargs if k.startswith('new') }
+
+        snippets, args = generateAllSQLConditionSnippets(**currentKWArgs)
+        sqlSetSnippet = ','.join([f'{k}=?' for k in sortedKeys(newKWArgs)])
+        sqlSetArgs = keySortedValues(newKWArgs)
+
+        stmt = f'UPDATE {self.getTableString("vector_similarities_c")} SET {sqlSetSnippet} WHERE {" AND ".join(snippets)}'
+        self.dbc.execute(stmt, sqlSetArgs + args)
 
     ## for updating symbol details like sector, industry, founded
     ## updateDetails is expected to be a dict with keys corresponding to the column names

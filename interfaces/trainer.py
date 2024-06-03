@@ -234,15 +234,25 @@ if __name__ == '__main__':
         arg1 = 'new'
 
     if arg1.lower() == 'new':
+        changeType = gconfig.training.changeType
+        accuracyType = gconfig.training.accuracyType
+        setSplitTuple = gconfig.training.setSplitTuple
+        precrange = gconfig.training.precedingRange
+        folrange = gconfig.training.followingRange
+        changeValue = gconfig.training.changeValue
+
         # useAllSets = True
         useAllSets = False
         # precrange = 95
-        precrange = 60
-        folrange = 10
-        changeValue = 0.05
-        changeType = ChangeType.ENDING_PERCENTAGE
+        # precrange = 60
+        # folrange = 20
+        # changeValue = 0.05
+        # changeType = ChangeType.ENDING_PERCENTAGE
+        # changeValue = 10
+        # changeType = ChangeType.ANY_DAY_ABSOLUTE
+        # accuracyType = AccuracyType.NEGATIVE
 
-        setSplitTuple = (0.80,0.20)
+        # setSplitTuple = (0.80,0.20)
         explicitValidationSymbolList = []
         # setSplitTuple = (0.99,0)
         # explicitValidationSymbolList = dbm.getSymbols(exchange='TSX', symbol='XQQ')
@@ -302,7 +312,7 @@ if __name__ == '__main__':
             changeType=changeType,
             setCount=setCount,
             setSplitTuple=setSplitTuple,
-            accuracyType=AccuracyType.NEGATIVE,
+            accuracyType=accuracyType,
             minimumSetsPerSymbol=minimumSetsPerSymbol,
             requireEarningsDates=True,
 
@@ -331,12 +341,8 @@ if __name__ == '__main__':
     
 
 
-    p.train(validationType=AccuracyType.NEGATIVE, 
-        patience=30, 
-        # initialPatience=10, finalPatience=30
-        
-    # stopTime=getTimestamp(hour=22, minute=0)
-    )
+    try:
+        res1 = p.train(validationType=accuracyType, patience=4)
 
 
     ## debugging getAdjustedSlidingWindowPercentage on real data
@@ -345,8 +351,11 @@ if __name__ == '__main__':
     #     vsize = len(p.dm._getSetSlice(p.dm.validationSet, i))
     #     tssize = len(p.dm._getSetSlice(p.dm.testingSet, i))
     #     print('it', i, 'sizes:', trsize, vsize, tssize)
-
-    # p.saveNetwork()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        # p.saveNetwork(dryrun=False)
+        pass
 
     print('done')
 

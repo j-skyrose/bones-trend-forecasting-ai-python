@@ -292,22 +292,6 @@ class GoogleInterestsCRow():
         self.date = dateValue
         self.relative_interest = relative_interestValue
 
-## TABLE: vector_similarities_c ######################################
-vectorSimilaritiesCSnakeCaseTableColumns = ['exchange', 'symbol', 'date_type', 'date', 'vector_class', 'preceding_range', 'following_range', 'change_value', 'change_type', 'value']
-vectorSimilaritiesCCamelCaseTableColumns = ['exchange', 'symbol', 'dateType', 'date', 'vectorClass', 'precedingRange', 'followingRange', 'changeValue', 'changeType', 'value']
-class VectorSimilaritiesCRow():
-    def __init__(self, exchangeValue: str, symbolValue: str, date_typeValue: str, dateValue: str, vector_classValue: str, preceding_rangeValue: float, following_rangeValue: float, change_valueValue: float, change_typeValue: str, valueValue: float):
-        self.exchange = exchangeValue
-        self.symbol = symbolValue
-        self.date_type = date_typeValue
-        self.date = dateValue
-        self.vector_class = vector_classValue
-        self.preceding_range = preceding_rangeValue
-        self.following_range = following_rangeValue
-        self.change_value = change_valueValue
-        self.change_type = change_typeValue
-        self.value = valueValue
-
 ## TABLE: stock_data_daily_c ######################################
 stockDataDailyCSnakeCaseTableColumns = ['exchange', 'symbol', 'period_date', 'pre_market', 'open', 'high', 'low', 'close', 'after_hours', 'volume', 'transactions', 'artificial']
 stockDataDailyCCamelCaseTableColumns = ['exchange', 'symbol', 'periodDate', 'preMarket', 'open', 'high', 'low', 'close', 'afterHours', 'volume', 'transactions', 'artificial']
@@ -360,6 +344,22 @@ class OptionsDataDailyCRow():
         self.volume = volumeValue
         self.transactions = transactionsValue
         self.artificial = artificialValue
+
+## TABLE: vector_similarities_c ######################################
+vectorSimilaritiesCSnakeCaseTableColumns = ['exchange', 'symbol', 'date_type', 'date', 'vector_class', 'preceding_range', 'following_range', 'change_type', 'change_value', 'value']
+vectorSimilaritiesCCamelCaseTableColumns = ['exchange', 'symbol', 'dateType', 'date', 'vectorClass', 'precedingRange', 'followingRange', 'changeType', 'changeValue', 'value']
+class VectorSimilaritiesCRow():
+    def __init__(self, exchangeValue: str, symbolValue: str, date_typeValue: str, dateValue: str, vector_classValue: str, preceding_rangeValue: float, following_rangeValue: float, change_typeValue: str, change_valueValue: float, valueValue: float):
+        self.exchange = exchangeValue
+        self.symbol = symbolValue
+        self.date_type = date_typeValue
+        self.date = dateValue
+        self.vector_class = vector_classValue
+        self.preceding_range = preceding_rangeValue
+        self.following_range = following_rangeValue
+        self.change_type = change_typeValue
+        self.change_value = change_valueValue
+        self.value = valueValue
 
 ## TABLE: sqlite_stat1 ######################################
 sqliteStat1SnakeCaseTableColumns = ['tbl', 'idx', 'stat']

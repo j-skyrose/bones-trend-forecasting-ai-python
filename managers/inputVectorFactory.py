@@ -255,11 +255,11 @@ class InputVectorFactory(Singleton):
                                     itlist = [normalizeValue(daydiff, earningsDateNormalizationMax) * self.config.similarityCalculation.earningsDate.postDateThreshold]
                                 else: ## after earnings
                                     daydiff = abs(daydiff)
-                                    if daydiff > self.config.similarityCalculation.earningDate.maxPostDays:
+                                    if daydiff > self.config.similarityCalculation.earningsDate.maxPostDays:
                                         itlist = [1]
                                     else:
-                                        stepSize = (1 - self.config.similarityCalculation.earningDate.postDateThreshold) / (self.config.similarityCalculation.earningsDate.maxPostDays + 1)
-                                        itlist = [0.7 + (daydiff * stepSize)]
+                                        stepSize = (1 - self.config.similarityCalculation.earningsDate.postDateThreshold) / (self.config.similarityCalculation.earningsDate.maxPostDays + 1)
+                                        itlist = [self.config.similarityCalculation.earningsDate.postDateThreshold + (daydiff * stepSize)]
                             else: ## earnings date unknown or exceeds max difference
                                 itlist = [1]
 

@@ -1388,39 +1388,27 @@ class DataManager():
 
 if __name__ == '__main__':
 
-    ## determine ticker split for optimized use of all sets for training
-    # setcount = 10000
-    # tsplit = DataManager.determineAllSetsTickerSplit(
-    #     setcount,
-    #     # NeuralNetworkManager().get(1641959005),
-    #     # assetTypes=['CS','CLA','CLB','CLC']
-    #     # exchange=['BATS','NASDAQ','NEO','NYSE','NYSE ARCA','NYSE MKT','TSX']
-    #     precedingRange=60, followingRange=10,
-    #     changeType=ChangeType.ABSOLUTE, changeValue=4,
+    # determine ticker split for optimized use of all sets for training
+    setcount = 25000
+    tsplit = DataManager.determineAllSetsTickerSplit(
+        setcount,
+        # NeuralNetworkManager().get(1641959005),
+        # assetTypes=['CS','CLA','CLB','CLC']
+        # exchange=['BATS','NASDAQ','NEO','NYSE','NYSE ARCA','NYSE MKT','TSX']
+        precedingRange=gconfig.training.precedingRange,
+        followingRange=gconfig.training.followingRange,
+        changeType=gconfig.training.changeType,
+        changeValue=gconfig.training.changeValue,
         
-    #     exchange=usExchanges,
-    #     assetType=['Stock', 'CS', 'CLA', 'CLB', 'CLC'],
-    #     close=SQLArgumentObj(9.99, OperatorDict.GREATERTHAN),
-    #     requireEarningsDates=True,
-    # )
-    # dbm.saveTickerSplit('split{}'.format(str(int(time.time()))), setcount, tsplit)
-    # exit()
-    ## end
-
-
-    s: DataManager = DataManager.forTraining(
-        SeriesType.DAILY,
-        precedingRange=90,
-        followingRange=30,
-        threshold=0.1,
-        setCount=25000,
-        setSplitTuple=(1/3,1/3),
-        minimumSetsPerSymbol=1,
-        useAllSets=True
+        exchange=usExchanges,
+        # assetType=['Stock', 'CS', 'CLA', 'CLB', 'CLC'],
+        # close=SQLArgumentObj(9.99, OperatorDict.GREATERTHAN),
+        close=SQLArgumentObj(1500, OperatorDict.LESSTHAN),
+        requireEarningsDates=True,
     )
-    # s.getKerasSets(classification=1)
-    s.getKerasSets(slice=2)
-
+    dbm.saveTickerSplit('split{}'.format(str(int(time.time()))), setcount, tsplit)
+    exit()
+    # end
 
     # s=DataManager.forStats(
     #     precedingRange=100,
