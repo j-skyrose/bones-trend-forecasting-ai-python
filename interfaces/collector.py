@@ -873,7 +873,7 @@ class Collector:
             maintainCriteriaLambdas = []
             # eliminate any non-expired options
             # TODO: add capability for collection of still active option tickers, and proper handling of (partial/incomplete) ones expired since last collection
-            maintainCriteriaLambdas.append(lambda ot: OptionsContract.getExpirationDate(ot) >= date.today())
+            maintainCriteriaLambdas.append(lambda ot: OptionsContract.getExpirationDate(ot) < date.today())
             # eliminate non-desired options type
             if onlyOptionType:
                 maintainCriteriaLambdas.append(lambda ot: OptionsContract.getOptionType(ot) == onlyOptionType)
