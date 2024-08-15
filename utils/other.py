@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import re, optparse
+import re, optparse, operator
 from math import ceil
 from typing import Dict, List, Union
 from calendar import monthrange
@@ -106,7 +106,8 @@ def getOutputClass(data, index, followingRange, changeType, changeValue, normali
             change = 0
         if normalizationMax:
             change = denormalizeValue(change, normalizationMax, normalizationOffset)
-        if change >= changeValue:
+        operatorFunction = operator.ge if changeValue >= 0 else operator.le
+        if operatorFunction(change, changeValue):
             oupclass = OutputClass.POSITIVE
             break
     return oupclass
