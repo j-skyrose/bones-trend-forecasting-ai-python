@@ -19,7 +19,7 @@ from argparse import ArgumentError
 from globalConfig import config as gconfig
 from constants.enums import ChangeType, DataFormType, Direction, NormalizationGroupings, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetClassificationType, SetType, DataManagerType, IndicatorType
 from constants.exceptions import InsufficientInstances
-from utils.support import asList, generateFibonacciSequence, getAdjustedSlidingWindowPercentage, partition, recdotlist, shortc, multicore_poolIMap, shortcdict, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
+from utils.support import asList, generateFibonacciSequence, getAdjustedSlidingWindowPercentage, partition, recdotlist, shortc, multicore_poolIMap, shortcdict, shortcobj, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.other import getInstancesByClass, getMaxIndicatorPeriod, getOutputClass, maxQuarters, getIndicatorPeriod, addAdditionalDefaultKWArgs
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
 from constants.values import unusableSymbols, indicatorsKey
@@ -656,7 +656,7 @@ class DataManager():
         for h in tqdmLoopHandleWrapper(stockDataHandlers, verbose, desc='Initializing stock instances'):
             availableIndexes = { o: [] for o in OutputClass }
             for sindex in h.getAvailableSelections():
-                oupclass = getOutputClass(h.data, sindex, self.followingRange, self.changeType, self.changeValue, h.stockPriceNormalizationMax, h.dataOffset)
+                oupclass = getOutputClass(h.data, sindex, self.followingRange, self.changeType, self.changeValue, shortcobj(h, 'stockPriceNormalizationMax'), h.dataOffset)
 
                 if collectOutputClassesOnly:
                     outputClassCounts[oupclass] += 1

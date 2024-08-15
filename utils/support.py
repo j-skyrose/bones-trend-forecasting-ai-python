@@ -127,6 +127,13 @@ def shortcdict(dict, key, e=None, shortcValue=True, eCanBeenCalledForValue=True)
         else:
             return e
 
+def shortcobj(obj, key, e=None, shortcValue=True):
+    try:
+        if shortcValue: return shortc(getattr(obj, key), e)
+        else: return getattr(obj, key)
+    except (KeyError, TypeError, AttributeError):
+        return e
+
 def flatten(li: list):
     return list(_flattenGen(li))
 
