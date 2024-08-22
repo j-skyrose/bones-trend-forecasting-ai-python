@@ -140,9 +140,9 @@ class Trainer:
                 else: print()
 
             noProgressStreak = 0
-            if trainingPatience:
+            if trainingPatience is not None:
                 kwargs['patience'] = trainingPatience
-            elif patience:
+            elif patience is not None:
                 iterationPatience = patience
             print('Iterating through set slices')
             for s in range(maxIterations):
