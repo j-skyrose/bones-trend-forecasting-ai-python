@@ -9,7 +9,7 @@ sys.path.append(path)
 
 from globalConfig import config as gconfig
 
-import tqdm, math, gc, time, numpy
+import tqdm, math, gc, time, numpy, optparse
 from numpy.lib.function_base import median
 from tensorflow.keras.optimizers import Adam
 from datetime import date, datetime, timedelta
@@ -227,6 +227,11 @@ class Trainer:
         nnm.save(self.network, dryrun)
 
 if __name__ == '__main__':
+    parser = optparse.OptionParser()
+    parser.add_option('-n', '--no-save',
+        action='store_true', dest='no_save'
+    )
+    options, args = parser.parse_args()
 
     try:
         fl, arg1, *argv = sys.argv
@@ -354,7 +359,8 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         pass
     finally:
-        # p.saveNetwork(dryrun=False)
+        if not options.no_save and not gconfig.testing.enabled:
+            p.saveNetwork(dryrun=False)
         pass
 
     print('done')
