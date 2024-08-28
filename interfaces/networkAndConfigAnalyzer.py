@@ -97,7 +97,7 @@ class NetworkAndConfigAnalyzer:
         else:
             self.dataManager: DataManager = DataManager.forTraining(inputVectorFactory=network.inputVectorFactory, useAllSets=self.__useAllSets, maxPageSize=self.__maxPageSize, **self.__trainingConfig)
 
-        network.updateStats(
+        network.updateProperties(
             normalizationData=self.dataManager.normalizationData, useAllSets=useAllSets, seriesType=self.dataManager.seriesType,
             **self.__trainingConfig
         )
@@ -106,23 +106,23 @@ class NetworkAndConfigAnalyzer:
 
     def compareNetworks(self, **kwargs):
         '''compare different networks for the same data/training config'''
-        networkStats = []
+        metrics = []
         for nnindx in range(len(self.__network)):
             self._initializeTrainer(networkIndx=nnindx)
             self.currentTrainer.train(**kwargs)
-            networkStats.append(self.currentTrainer.network.getAccuracyStats())
+            metrics.append(self.currentTrainer.network.getMetricsDict())
         
-        for indx,nns in enumerate(networkStats):
+        for indx,nns in enumerate(metrics):
             print(f"Network '{self.__networkLabels[indx]}'")
-            NeuralNetworkInstance.printAccuracyStats(nns)
+            NeuralNetworkInstance.printMetrics(nns)
         
-        return networkStats
+        return metrics
 
     def compareConfigs(self, iterations=1, **kwargs):
         '''compare different data/training configs for the same network'''
         skippedConfigs = []
         missedIterationConfigs = []
-        configStats = [[] for i in range(len(self.__config))]
+        configMetrics = [[] for i in range(len(self.__config))]
 
         if iterations == max:
             self._initializeTrainer(configIndx=0, page=0)
@@ -132,18 +132,18 @@ class NetworkAndConfigAnalyzer:
                 try:
                     self._initializeTrainer(configIndx=cfindx, page=i)
                     self.currentTrainer.train(**kwargs)
-                    configStats[cfindx].append(self.currentTrainer.network.getAccuracyStats())
+                    configMetrics[cfindx].append(self.currentTrainer.network.getMetricsDict())
                 except InsufficientInstances:
                     pass
         
-        for indx,cfs in enumerate(configStats):
+        for indx,cfs in enumerate(configMetrics):
             if not cfs:
                 skippedConfigs.append(indx)
                 continue
             if len(cfs) < iterations:
                 missedIterationConfigs.append(indx)
             print(f"Config '{self.__configLabels[indx]}'")
-            NeuralNetworkInstance.printAccuracyStats(cfs, config=self.__config[indx])
+            NeuralNetworkInstance.printMetrics(cfs, config=self.__config[indx])
 
         if skippedConfigs:
             print('Skipped below configs due to insufficient instances available')
@@ -155,7 +155,7 @@ class NetworkAndConfigAnalyzer:
             for cfindx in missedIterationConfigs:
                 print(f'{cfindx+1} : {self.__configLabels[cfindx]}')                
         
-        return configStats
+        return configMetrics
 
 if __name__ == '__main__':
     # useAllSets = True

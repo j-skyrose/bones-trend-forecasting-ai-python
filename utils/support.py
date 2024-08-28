@@ -460,6 +460,12 @@ def condenseWhitespace(string):
     '''condenses all whitespace into single spaces'''
     return re.sub('\s{2,}', ' ', string)
 
+def getMetricsNames(model):
+    metrics = model.compiled_metrics._metrics
+    if len(metrics) and type(metrics[0]) is list:
+        metrics = metrics[0]
+    return ['loss'] + [m.name if type(m) is not str else m for m in metrics]
+
 if __name__ == '__main__':
     # print(processRawValueToInsertValue(44))
     # print(processRawValueToInsertValue('dave'))

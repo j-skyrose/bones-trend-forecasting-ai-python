@@ -9,7 +9,11 @@ sys.path.append(path)
 
 os.environ['FOR_DISABLE_CONSOLE_CTRL_HANDLER'] = '1'
 import math, time
+from keras.callbacks import EarlyStopping
+from typing import Dict
 
+from globalConfig import trainingConfig
+from constants.enums import SeriesType, AccuracyType
 from managers.dataManager import DataManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
@@ -17,9 +21,7 @@ from structures.EvaluationDataHandler import EvaluationDataHandler
 from structures.callbacks.EarlyStoppingWithCustomValidationCallback import EarlyStoppingWithCustomValidation
 from structures.callbacks.TimeBasedEarlyStoppingCallback import TimeBasedEarlyStopping
 from structures.callbacks.DeviationFromBasedEarlyStoppingCallback import DeviationFromBasedEarlyStopping
-from constants.enums import SeriesType, AccuracyType
 from utils.support import recdotdict, shortc
-from globalConfig import trainingConfig
 
 
 class TrainingInstance():
@@ -45,6 +47,9 @@ class TrainingInstance():
 
         if (type(testingSet) is list and (len(testingSet[0][0] if self.network.config.network.recurrent else testingSet[0]))) or (testingPSet and testingNSet):
             self.testingDataHandler: EvaluationDataHandler = EvaluationDataHandler(testingSet, testingPSet, testingNSet)
+
+    def updateNetworkMetrics(self, resultsObj: Dict, dryRun=False):
+        return self.network.updateMetrics(resultsObj, self.validationDataHandler, dryRun)
 
     def setTrainingConfig(self, config=None, epochs=None, batchSize=None):
         if config:
@@ -99,23 +104,17 @@ class TrainingInstance():
                     ]
                 )
 
+            fitKWArgs = {}
             callbacks = [TimeBasedEarlyStopping(stopTime=stopTime, timeDuration=timeDuration)]
-            if patience: 
-                callbacks.append(EarlyStoppingWithCustomValidation(
-                    network = self.network, batchSize=self.config.batchSize,
-                    verbose=verbose, restore_best_weights=True,
-
-                    custom_validation_data= None if validationType == AccuracyType.OVERALL else [
-                        self.validationDataHandler.getTuple(AccuracyType.POSITIVE),
-                        self.validationDataHandler.getTuple(AccuracyType.NEGATIVE)
-                    ],
-                    custom_validation_data_values=[self.network.config.trainer.customValidationClassValueRatio, 1 - self.network.config.trainer.customValidationClassValueRatio] if validationType != AccuracyType.OVERALL else None,
-                    monitor='val_accuracy', mode='max',
+            if patience:
+                callbacks.append(EarlyStopping(
+                    restore_best_weights=True,
                     # monitor='val_loss', mode='min',
-                    override_stops_on_value=(1-self.network.config.trainer.customValidationClassValueRatio),
-
-                    patience=patience
+                    monitor=f'val_{self.network.properties.focusedMetric}', mode='max',
+                    patience=patience,
+                    min_delta=0.00001
                 ))
+                fitKWArgs['validation_data'] = self.validationDataHandler.getTuple(AccuracyType.OVERALL)
 
             if stopTime and verbose > 0: 
                 print('Stopping at', stopTime)
@@ -124,14 +123,15 @@ class TrainingInstance():
             if len(self.validationDataHandler[validationType][0]) == 0:
                 raise IndexError('Validation set empty')
 
-            self.network.fit(*self.trainingSet, 
+            self.network.fit(*self.trainingSet,
+                                       **fitKWArgs, 
                 epochs=sys.maxsize if stopTime or timeDuration or patience else shortc(epochs, self.config.epochs), 
                 batch_size=self.config.batchSize, verbose=verbose, 
                 callbacks=callbacks
             )
             
             ## update stats
-            return self.evaluate(verbose)
+            return self.evaluate(verbose, **kwargs)
             
             pass
         except KeyboardInterrupt:
@@ -142,7 +142,6 @@ class TrainingInstance():
     def evaluate(self, verbose=1, **kwargs):
         if not self.validationDataHandler: raise AttributeError
         return self.network.evaluate(self.validationDataHandler, batch_size=self.config.batchSize, verbose=verbose, **kwargs)
-
 
     def test(self, verbose=1):
         if not self.testingDataHandler: raise AttributeError

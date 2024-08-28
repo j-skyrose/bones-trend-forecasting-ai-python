@@ -444,6 +444,7 @@ def deleteNetwork(networkId):
                 dbm.deleteInputVectorFactory(factoryId)
         dbm.deleteNetworkTrainingConfig(nid)
         dbm.deleteNetworkAccuracy(nid)
+        dbm.deleteMetrics(nid)
         dbm.commitBatch()
         try:
             shutil.rmtree(os.path.join(path, f'data/network_saves/{nid}'), ignore_errors=True)

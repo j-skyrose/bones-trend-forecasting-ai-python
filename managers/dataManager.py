@@ -307,9 +307,9 @@ class DataManager():
 
         if network:
             kwargs['inputVectorFactory'] = network.inputVectorFactory
-            kwargs = { **kwargs, **network.stats.getNetworksTableData(camelCase=True) }
+            kwargs = { **kwargs, **network.properties.getNetworksTableData(camelCase=True) }
             if shouldNormalize:
-                kwargs['normalizationData'] = network.stats.normalizationData
+                kwargs['normalizationData'] = network.properties.normalizationData
         else:
             if shouldNormalize:
                 kwargs['normalizationData'] = dbm.getNormalizationData(config, **kwargs)
@@ -333,7 +333,7 @@ class DataManager():
     def forPredictor(cls, nn: NeuralNetworkInstance, anchorDate, **kwargs):
         nn = NeuralNetworkManager().get(nn)
         if nn.config.data.normalize:
-            kwargs['normalizationData'] = nn.stats.normalizationData
+            kwargs['normalizationData'] = nn.properties.normalizationData
         symbolList = dbm.getSymbols(periodDate=MarketDayManager.advance(anchorDate, -1), **kwargs)
 
         if shortcdict(kwargs, 'verbose', 1) >= 1: print('OG list length', len(symbolList))
@@ -342,13 +342,12 @@ class DataManager():
             symbolList[:] = symbolList[:gconfig.testing.REDUCED_SYMBOL_SCOPE]
 
         return cls(
-            **nn.stats.getNetworkTrainingConfigTableData(camelCase=True),
+            **nn.properties.getNetworkTrainingConfigTableData(camelCase=True),
             inputVectorFactory=nn.inputVectorFactory,
             symbolList=symbolList,
             forPredictor=True,
             **kwargs
         )
-
 
     ## basically just to run through initialization to get all the print() info on pos/neg split counts
     @classmethod

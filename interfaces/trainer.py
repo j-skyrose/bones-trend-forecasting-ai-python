@@ -24,9 +24,9 @@ from managers.inputVectorFactory import InputVectorFactory
 from structures.trainingInstance import TrainingInstance
 from managers.statsManager import StatsManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
-from constants.enums import AccuracyType, ChangeType, SetClassificationType, LossAccuracy, OperatorDict, SeriesType
+from constants.enums import AccuracyType, ChangeType, SetClassificationType, OperatorDict, SeriesType
 from constants.exceptions import SufficientlyUpdatedDataNotAvailable
-from utils.other import getCustomAccuracy
+from utils.other import getCustomAccuracy, getPrecision
 from utils.support import repackKWArgs, shortcdict, xorGeneralized
 from constants.values import tseNoCommissionSymbols
 
@@ -36,10 +36,11 @@ dbm: DatabaseManager = DatabaseManager()
 def getTimestamp(year=datetime.now().year, month=datetime.now().month, day=datetime.now().day, hour=datetime.now().hour, minute=datetime.now().minute):
     return time.mktime(datetime(year, month, day, hour, minute).timetuple())
 
-accuracyStatsHeaderLine1 = ['','Curr Accum Acc', 'Future Accum Acc','Future Accum Acc']
-accuracyStatsHeaderLine2 = ['','', 'bef-Training-acc', 'aft-Training-acc']
-def getAccDiffStr(forwardAccuracy, currentAccuracy):
-    return f"{ '+' if forwardAccuracy > currentAccuracy else '' }{forwardAccuracy - currentAccuracy:.5f}"
+metricsHeaderLine1 = ['','Curr Accum Met', 'Future Accum Met','Future Accum Met']
+metricsHeaderLine2 = ['','', 'before Training', 'after Training']
+def getDiffString(forwardValue, currentValue):
+    if forwardValue == currentValue: return ''
+    return f"{ '+' if forwardValue > currentValue else '' }{forwardValue - currentValue:.{min(5, max(getPrecision(forwardValue), getPrecision(currentValue)))}f}"
 
 class Trainer:
     def __init__(self, network=None, networkId=None, useAllSets=False, dataManager=None, **kwargs):
@@ -54,7 +55,7 @@ class Trainer:
         self.useAllSets = useAllSets
 
         if network:
-            self.network.updateStats(
+            self.network.updateProperties(
                 normalizationData=self.dm.normalizationData, useAllSets=useAllSets, seriesType=self.dm.seriesType,
                 **kwargs
             ) 
@@ -151,7 +152,7 @@ class Trainer:
 
                 ## snapshot state/stats before training
                 currentWeights = self.instance.network.model.get_weights()
-                currentAccuracyStats = self.instance.network.getAccuracyStats()
+                currentMetrics = self.instance.network.getMetricsDict()
 
                 ## pre-training setup
                 if usePatienceGradient:
@@ -159,44 +160,44 @@ class Trainer:
                     print('Patience:', kwargs['patience'])
                 self.instance.updateSets(**self._getSetKWParams(slice=s))
 
-                ## snapshot accuracy stats on the new validation set before training
-                prevaluateResults = self.instance.evaluate(updateAccuracyStats=False, verbose=verbose-1)
-                futureAccuracyStats_prevaluate = self.instance.network.updateAccuracyStats(prevaluateResults, dryRun=True)
+                ## snapshot metrics values on the new validation set before training
+                prevaluateMetrics = self.instance.evaluate(updateMetrics=False, verbose=verbose-1)
+                futureMetrics_prevaluate = self.instance.updateNetworkMetrics(prevaluateMetrics, dryRun=True)
 
                 ## train and evaluate
                 if verbose >= 1: print('Training...')
-                postEvaluateResults = self.instance.train(updateAccuracyStats=False, **{**kwargs, 'verbose': verbose-1})
-                futureAccuracyStats_postEvaluate = self.instance.network.updateAccuracyStats(postEvaluateResults, dryRun=True)
+                postEvaluateMetrics = self.instance.train(updateMetrics=False, **kwargs)
+                futureMetrics_postEvaluate = self.instance.updateNetworkMetrics(postEvaluateMetrics, dryRun=True)
 
                 ## compare accuracy stats before and after training
-                accuracyRows = []
-                for acctype in AccuracyType:
-                    currentAccuracy = currentAccuracyStats[acctype.name].current
-                    futureAccuracy_prevaluate = futureAccuracyStats_prevaluate[acctype.name].current
-                    futureAccuracy_postEvaluate = futureAccuracyStats_postEvaluate[acctype.name].current
-                    accuracyRows.append([acctype.name, currentAccuracy, futureAccuracy_prevaluate, futureAccuracy_postEvaluate])
-                    accuracyRows.append(['', '', getAccDiffStr(futureAccuracy_prevaluate, currentAccuracy), getAccDiffStr(futureAccuracy_postEvaluate, currentAccuracy)])
-                currentCustomAccuracy = getCustomAccuracy(currentAccuracyStats)
-                futureCustomAccuracy_prevaluate = getCustomAccuracy(futureAccuracyStats_prevaluate)
-                futureCustomAccuracy_postEvaluate = getCustomAccuracy(futureAccuracyStats_postEvaluate)
-                accuracyRows.append(['CUSTOM', currentCustomAccuracy, futureCustomAccuracy_prevaluate, futureCustomAccuracy_postEvaluate])
-                accuracyRows.append(['','', getAccDiffStr(futureCustomAccuracy_prevaluate, currentCustomAccuracy), getAccDiffStr(futureCustomAccuracy_postEvaluate, currentCustomAccuracy)])
+                metricsRows = []
+                for m,v in currentMetrics.items():
+                    currentMetric = v.current
+                    futureMetric_prevaluate = futureMetrics_prevaluate[m].current
+                    futureMetric_postEvaluate = futureMetrics_postEvaluate[m].current
+                    metricsRows.append([m, currentMetric, futureMetric_prevaluate, futureMetric_postEvaluate])
+                    metricsRows.append(['', '', getDiffString(futureMetric_prevaluate, currentMetric), getDiffString(futureMetric_postEvaluate, currentMetric)])
+                # currentCustomAccuracy = getCustomAccuracy(currentMetrics)
+                # futureCustomAccuracy_prevaluate = getCustomAccuracy(futureMetrics_prevaluate)
+                # futureCustomAccuracy_postEvaluate = getCustomAccuracy(futureMetrics_postEvaluate)
+                # metricsRows.append(['CUSTOM', currentCustomAccuracy, futureCustomAccuracy_prevaluate, futureCustomAccuracy_postEvaluate])
+                # metricsRows.append(['','', getDiffString(futureCustomAccuracy_prevaluate, currentCustomAccuracy), getDiffString(futureCustomAccuracy_postEvaluate, currentCustomAccuracy)])
 
-                for r in [accuracyStatsHeaderLine1, accuracyStatsHeaderLine2, *accuracyRows]:
-                    print("{: >10} {: >21} {: >21} {: >21}".format(*r))
+                for r in [metricsHeaderLine1, metricsHeaderLine2, *metricsRows]:
+                    print("{: >16} {: >21} {: >21} {: >21}".format(*r))
 
-                ## if network was in a better state accuracy-wise before the training, then restore it to that original
-                if futureCustomAccuracy_prevaluate > futureCustomAccuracy_postEvaluate:
+                ## if network was in a better state metrics-wise before the training, then restore those weights
+                if futureMetrics_prevaluate[self.instance.network.properties.focusedMetric].current > futureMetrics_postEvaluate[self.instance.network.properties.focusedMetric].current:
                     noProgressStreak += 1
                     print('Future state is worse, restoring weights...')
                     self.instance.network.model.set_weights(currentWeights)
-                    self.instance.network.updateAccuracyStats(prevaluateResults)
+                    self.instance.updateNetworkMetrics(prevaluateMetrics)
                     if iterationPatience and noProgressStreak > iterationPatience:
                         print(f'No progress made in past {iterationPatience} slices, stopping training')
                         break
                 else:
                     noProgressStreak = 0
-                    self.instance.network.updateAccuracyStats(postEvaluateResults)
+                    self.instance.updateNetworkMetrics(postEvaluateMetrics)
 
                 print()
 
@@ -218,10 +219,10 @@ class Trainer:
                     self.instance.updateSets(**self._getSetKWParams(slice=s, validationSetOnly=True))
                     self.instance.evaluate()
                     gc.collect()
-
                     iterationTimes.append(time.time() - startt)
+                    print()
 
-            self.instance.network.printAllAccuracyStats()
+            self.instance.network.printAllMetrics()
 
     def saveNetwork(self, withSets=False, dryrun=False):
         nnm.save(self.network, dryrun)
@@ -240,7 +241,7 @@ if __name__ == '__main__':
 
     if arg1.lower() == 'new':
         changeType = gconfig.training.changeType
-        accuracyType = gconfig.training.accuracyType
+        focusedMetric = gconfig.training.focusedMetric
         setSplitTuple = gconfig.training.setSplitTuple
         precrange = gconfig.training.precedingRange
         folrange = gconfig.training.followingRange
@@ -317,7 +318,8 @@ if __name__ == '__main__':
             changeType=changeType,
             setCount=setCount,
             setSplitTuple=setSplitTuple,
-            accuracyType=accuracyType,
+            focusedMetric=focusedMetric,
+
             minimumSetsPerSymbol=minimumSetsPerSymbol,
             requireEarningsDates=True,
 
@@ -347,7 +349,7 @@ if __name__ == '__main__':
 
 
     try:
-        res1 = p.train(validationType=accuracyType, patience=4)
+        res1 = p.train(patience=4)
 
 
     ## debugging getAdjustedSlidingWindowPercentage on real data

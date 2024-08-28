@@ -55,7 +55,7 @@ trainingConfig = {
     ## general
     'seriesType': SeriesType.DAILY,
     'changeType': ChangeType.ANY_DAY_ABSOLUTE,
-    'accuracyType': AccuracyType.NEGATIVE,
+    'focusedMetric': 'tfpr_metric',
     'setSplitTuple': (2/3,1/3),
     ## more specific, likely to be overridden locally e.g. trainer.py
     'precedingRange': 60,

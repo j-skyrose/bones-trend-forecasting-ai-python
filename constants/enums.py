@@ -116,10 +116,6 @@ class FinancialStatementType(Enum):
     BALANCE_SHEET = 'BALANCE_SHEET'
     CASH_FLOW = 'CASH_FLOW'
 
-class LossAccuracy(Enum):
-    LOSS = 'LOSS'
-    ACCURACY = 'ACCURACY'
-
 class CorrBool(Enum):
     CORRECT = 'CORRECT'
     INCORRECT = 'INCORRECT'
@@ -388,6 +384,10 @@ class OptionsDataSource(Enum):
     @classmethod
     def getInPriorityOrder(cls):
         return [cls.POLYGON]
+
+class MetricType(Enum):
+    ACCURACY = 'ACCURACY'
+    SUM = 'SUM'
 
 if __name__ == '__main__':
     print(AccuracyType.OVERALL.name, AccuracyType.OVERALL.value, AccuracyType.OVERALL.statsName)

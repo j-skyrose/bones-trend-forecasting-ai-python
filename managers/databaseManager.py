@@ -37,7 +37,7 @@ configManager: StaticConfigManager = StaticConfigManager()
 
 ## generate before import to ensure things are up-to-date for the current execution
 if sys.argv[0].endswith('databaseConnectionServer.py'): generateDatabaseAnnotationObjectsFile()
-from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworksRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, CboeVolatilityIndexRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, QueryCachesCRow, OptionsDataDailyCRow, VectorSimilaritiesCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, GoogleTopicIdsDRow, QueueStockDataDailyDRow, OptionsAdditionalUnderlyingsDRow, OptionsContractInfoPolygonDRow, OptionsDataDailyPolygonDRow, OptionsNoDataTickersPolygonDRow, QueueOptionsDataDailyDRow, OptionsNoContractsSymbolsPolygonDRow
+from managers._generatedDatabaseExtras.databaseRowObjects import ExchangesRow, ExchangeAliasesRow, AssetTypesRow, SymbolsRow, SectorsRow, InputVectorFactoriesRow, EdgarSubBalanceStatusRow, VwtbEdgarQuartersRow, VwtbEdgarFinancialNumsRow, SqliteStat1Row, NetworkAccuraciesRow, TickerSplitsRow, AssetSubtypesRow, StatusKeyRow, HistoricalDataRow, LastUpdatesRow, NetworksTempRow, NetworkTrainingConfigRow, HistoricalDataMinuteRow, AccuracyLastUpdatesRow, CboeVolatilityIndexRow,  NetworkMetricsRow, NetworksRow, TechnicalIndicatorDataCRow, EarningsDatesCRow, GoogleInterestsCRow, QueryCachesCRow, OptionsDataDailyCRow, VectorSimilaritiesCRow, SqliteStat1Row, FinancialStmtsTagDataSetEdgarDRow, FinancialStmtsSubDataSetEdgarDRow, FinancialStmtsLoadedPeriodsDRow, FinancialStmtsNumDataSetEdgarDRow, StockSplitsPolygonDRow, GoogleInterestsDRow, StagingFinancialsDRow, EarningsDatesNasdaqDRow, SymbolStatisticsYahooDRow, ShortInterestFinraDRow, EarningsDatesMarketwatchDRow, EarningsDatesYahooDRow, SymbolInfoYahooDRow, StagingSymbolInfoDRow, SymbolInfoPolygonDOldRow, SymbolInfoPolygonDRow, SymbolInfoPolygonDBkActivesonlyRow, SymbolInfoPolygonDBkInactivesonlyRow, StockDataDailyPolygonDRow, SymbolInfoAlphavantageDRow, StockDataDailyAlphavantageDRow, GoogleTopicIdsDRow, QueueStockDataDailyDRow, OptionsAdditionalUnderlyingsDRow, OptionsContractInfoPolygonDRow, OptionsDataDailyPolygonDRow, OptionsNoDataTickersPolygonDRow, QueueOptionsDataDailyDRow, OptionsNoContractsSymbolsPolygonDRow
 from managers._generatedDatabaseExtras.databaseRowObjects import symbolsSnakeCaseTableColumns, stockDataDailyCCamelCaseTableColumns, earningsDatesNasdaqDCamelCaseTableColumns, earningsDatesMarketwatchDCamelCaseTableColumns, earningsDatesYahooDCamelCaseTableColumns, symbolStatisticsYahooDCamelCaseTableColumns, shortInterestFinraDCamelCaseTableColumns, symbolInfoAlphavantageDSnakeCaseTableColumns, symbolInfoPolygonDSnakeCaseTableColumns, symbolInfoYahooDSnakeCaseTableColumns, vectorSimilaritiesCCamelCaseTableColumns
 
 class DatabaseManager(Singleton):
@@ -213,12 +213,6 @@ class DatabaseManager(Singleton):
             rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[NetworksTempRow]:
         return _dbGetter("networks_temp", **locals())
 
-    def getNetworks_basic(self,
-            id=None,
-            factoryId=None, accuracyType=None, overallAccuracy=None, negativeAccuracy=None, positiveAccuracy=None, epochs=None,
-            rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[NetworksRow]:
-        return _dbGetter("networks", **locals())
-
     def getNetworkTrainingConfig_basic(self,
             id=None,
             precedingRange=None, followingRange=None, changeValue=None, changeType=None, seriesType=None, highestHistoricalHigh=None, highestHistoricalVolume=None, minimumHistoricalCloseAllowed=None,
@@ -241,6 +235,18 @@ class DatabaseManager(Singleton):
             open=None, high=None, low=None, close=None, artificial=None,
             rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[CboeVolatilityIndexRow]:
         return _dbGetter("cboe_volatility_index", **locals())
+
+    def getNetworkMetrics_basic(self,
+            id=None, name=None,
+            value=None,
+            rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[NetworkMetricsRow]:
+        return _dbGetter("network_metrics", **locals())
+
+    def getNetworks_basic(self,
+            id=None,
+            factoryId=None, focusedMetric=None, epochs=None,
+            rowid=None, groupBy=None, orderBy=None, limit=None, excludeKeys=None, onlyColumn_asList=None, sqlColumns='*', rawStatement=False) -> List[NetworksRow]:
+        return _dbGetter("networks", **locals())
 
     def getTechnicalIndicatorData_basic(self,
             exchange=None, symbol=None, dateType=None, date=None, indicator=None, period=None,
@@ -1328,19 +1334,24 @@ class DatabaseManager(Singleton):
                 if not dryrun: self.dbc.execute(stmt, tpl)
                 else: print('inserting input vector factory\n', stmt, tpl)
                 factoryId = self.dbc.getLastRowId()
-            nn.stats.factoryId = factoryId
+            nn.properties.factoryId = factoryId
         else:
-            factoryId = nn.stats.factoryId
+            factoryId = nn.properties.factoryId
         
-        args = list(nn.stats.getNetworksTableData(dbInsertReady=True).values())
+        args = list(nn.properties.getNetworksTableData(dbInsertReady=True).values())
         stmt = f'INSERT OR REPLACE INTO networks VALUES ({generateCommaSeparatedQuestionMarkString(args)})'
         if not dryrun: self.dbc.execute(stmt, tuple(args))
         else: print('inserting network\n', stmt, args)
 
-        args = list(nn.stats.getNetworkTrainingConfigTableData(dbInsertReady=True).values())
+        args = list(nn.properties.getNetworkTrainingConfigTableData(dbInsertReady=True).values())
         stmt = f'INSERT OR REPLACE INTO network_training_config VALUES ({generateCommaSeparatedQuestionMarkString(args)})'
         if not dryrun: self.dbc.execute(stmt, tuple(args))
         else: print('inserting network/training config\n', stmt, args)
+
+        args = [(nn.properties.id, m, v) for m,v in nn.properties.metrics.items()]
+        stmt = f'INSERT OR REPLACE INTO network_metrics VALUES ({generateCommaSeparatedQuestionMarkString(args[0])})'
+        if not dryrun: self.dbc.executemany(stmt, tuple(args))
+        else: print('inserting network metrics\n', stmt, args)
 
     def insertVIXRow(self, row=None, point=None):
         stmt = 'INSERT OR REPLACE INTO cboe_volatility_index(period_date, open, high, low, close, artificial) VALUES (?,?,?,?,?,?)'
@@ -1860,6 +1871,13 @@ class DatabaseManager(Singleton):
         stmt = f"INSERT {insertStrategy.value} INTO {getTableString('options_no_contracts_symbols_polygon_d')}({','.join(convertToSnakeCase(keySet))}) VALUES ({generateCommaSeparatedQuestionMarkString(keySet)})"
         self.dbc.execute(stmt, keySortedValues(kwargs))        
 
+    def insertNetworkMetrics(self, id=None, name=None, value=None, insertStrategy=SQLInsertHelpers.REPLACE):
+        kwargs = repackKWArgs(locals(), remove='insertStrategy')
+        keySet = sortedKeys(kwargs)
+
+        stmt = f"INSERT {insertStrategy.value} INTO {getTableString('network_metrics')}({','.join(convertToSnakeCase(keySet))}) VALUES ({generateCommaSeparatedQuestionMarkString(keySet)})"
+        self.dbc.execute(stmt, keySortedValues(kwargs))    
+
 
     #endregion
     ####################################################################################################################################################################
@@ -1908,6 +1926,10 @@ class DatabaseManager(Singleton):
 
     def deleteNetworkAccuracy(self, id):
         stmt = f'DELETE FROM {getTableString("network_accuracies")} WHERE network_id = ?'
+        self.dbc.execute(stmt, (id,))
+
+    def deleteMetrics(self, id):
+        stmt = f'DELETE FROM {getTableString("network_metrics")} WHERE id = ?'
         self.dbc.execute(stmt, (id,))
 
     def deleteVectorSimilarities(self, exchange, symbol, seriesType: SeriesType=None, dt=None, vclass: OutputClass=None, precedingRange=None, followingRange=None, threshold=None):

@@ -224,11 +224,14 @@ def addAdditionalDefaultKWArgs(kwargs, config):
     
     return kwargs
 
-def getCustomAccuracy(statsObj=None, positiveAccuracy=None, negativeAccuracy=None, classValueRatio=gconfig.trainer.customValidationClassValueRatio): 
-    positiveAccuracy = shortc(positiveAccuracy, statsObj[AccuracyType.POSITIVE.name].current) 
-    negativeAccuracy = shortc(negativeAccuracy, statsObj[AccuracyType.NEGATIVE.name].current)
+def getCustomAccuracy(metricsObj=None, positiveAccuracy=None, negativeAccuracy=None, classValueRatio=gconfig.trainer.customValidationClassValueRatio): 
+    positiveAccuracy = shortc(positiveAccuracy, metricsObj[AccuracyType.POSITIVE.name].current) 
+    negativeAccuracy = shortc(negativeAccuracy, metricsObj[AccuracyType.NEGATIVE.name].current)
     return (positiveAccuracy * classValueRatio) + (negativeAccuracy * (1 - classValueRatio))
     
+def getPrecision(v):
+    try: return len(str(v).split('.')[1])
+    except IndexError: return 0
 
 if __name__ == '__main__':
     # ## nyse:mtb-

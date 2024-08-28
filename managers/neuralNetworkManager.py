@@ -24,16 +24,16 @@ class NeuralNetworkManager(Singleton):
         self.networks = {}
         for x in dbm.getNetworks():
             factoryConfig = dill.loads(x.config)
-            self.networks[str(x.id)] = NeuralNetworkInstance.fromSave(x.factory, factoryConfig, os.path.join(self.savePath, str(x.id)), x)
+            metrics = dbm.getNetworkMetrics_basic(x.id)
+            self.networks[str(x.id)] = NeuralNetworkInstance.fromSave(x.factory, factoryConfig, os.path.join(self.savePath, str(x.id)), x, metrics)
 
     def createNetworkInstance(self, *args, **kwargs):
-        print('Creating NN', args, kwargs)
         id = str(int(time.time()))
         r = self.networks[id] = NeuralNetworkInstance.new(id, *args, **kwargs)
         return r
 
     def save(self, k, dryrun=False):
-        key = k if type(k) == str else k.stats.id
+        key = k if type(k) == str else k.properties.id
         n = self.networks[key]
         nSavePath = os.path.join(self.savePath, key)
         if not dryrun: dbm.startBatch()

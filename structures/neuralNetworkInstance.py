@@ -17,11 +17,11 @@ from tensorflow.keras.layers import Dense, Dropout, Activation, AlphaDropout, GR
 from tensorflow.keras.optimizers import SGD, Nadam, Adam
 from typing import Dict
 
-from structures.networkStats import NetworkStats
-from structures.EvaluationResultsObj import EvaluationResultsObj
+from structures.metricValuesObject import MetricValuesObject
+from structures.networkProperties import NetworkProperties
 from constants.exceptions import LocationNotSpecificed
-from constants.enums import AccuracyType, ChangeType, DataFormType, LossAccuracy, SeriesType
-from utils.support import asBytes, recdotdict, shortc, shortcdict
+from constants.enums import AccuracyType, ChangeType, DataFormType, SeriesType
+from utils.support import asBytes, getMetricsNames, recdotdict, shortc, shortcdict, shortcobj
 from utils.other import getCustomAccuracy, maxQuarters
 from managers.inputVectorFactory import InputVectorFactory
 from structures.EvaluationDataHandler import EvaluationDataHandler
@@ -55,7 +55,7 @@ os.environ["TF_MIN_GPU_MULTIPROCESSOR_COUNT"]= "8" if gconfig.useMainGPU else "5
 
 class NeuralNetworkInstance:
 
-    def __init__(self, id=None, model: tf.keras.Model=None, inputVectorFactory: InputVectorFactory=None, factoryConfig=gconfig, recurrent=None, filepath=None, stats: NetworkStats=None):
+    def __init__(self, id=None, model: tf.keras.Model=None, inputVectorFactory: InputVectorFactory=None, factoryConfig=gconfig, recurrent=None, filepath=None, properties: NetworkProperties=None):
         self.model = model
         if inputVectorFactory:
             self.inputVectorFactory = inputVectorFactory(factoryConfig)
@@ -65,22 +65,23 @@ class NeuralNetworkInstance:
             self.defaultInputVectorFactory = True
         self.config = factoryConfig
         self.filepath = filepath
-        if stats:
-            self.id = stats.id
-            self.stats = stats
+        if properties:
+            self.id = str(properties.id)
+            self.properties = properties
         else:
-            self.id = id
+            self.id = str(id)
             self.recurrent = shortc(recurrent, self.config.network.recurrent)
             if self.recurrent: 
                 precedingRange = model.input_shape[-1][1] ## last input layer is series one, e.g. [(None, 9), (None, 60, 34)]
             else: ## sequential
                 precedingRange = model.input_shape[-1]
-            self.stats = NetworkStats(id, precedingRange=precedingRange) 
+            self.properties = NetworkProperties(self.id, precedingRange=precedingRange, metrics=self.getMetricsNames()) 
         self.useAllSets = None
         self.useAllSetsAccumulator = None
         self.reEvaluating = False
 
-        self._initializeAccumulatorIfRequired()
+        if self.model is not None:
+            self._initializeAccumulatorIfRequired()
 
     @classmethod
     def new(
@@ -214,9 +215,9 @@ class NeuralNetworkInstance:
         return cls(id=id, model=model, factoryConfig=factoryConfig)
 
     @classmethod
-    def fromSave(cls, factoryFile, factoryConfig, modelpath, rawDBStats):
+    def fromSave(cls, factoryFile, factoryConfig, modelpath, rawDBProps, rawMetrics):
         folder = '_dynamicallyLoadedFactories'
-        id = str(rawDBStats.id)
+        id = str(rawDBProps.id)
         with open(os.path.join(path, 'managers', folder, id) + '.py', 'wb') as f:
             f.write(asBytes(factoryFile))
         # factory = importlib.import_module('managers.' + folder + '.' + id).InputVectorFactory
@@ -230,14 +231,14 @@ class NeuralNetworkInstance:
                 time.sleep(1)
         if not factory: factory = factoryModule.InputVectorFactory
 
-        return cls(inputVectorFactory=factory, factoryConfig=factoryConfig, filepath=modelpath, stats=NetworkStats.importFrom(rawDBStats))
+        return cls(inputVectorFactory=factory, factoryConfig=factoryConfig, filepath=modelpath, properties=NetworkProperties.importFrom(rawDBProps, rawMetrics))
 
-    def updateStats(self, changeValue=None, changeType: ChangeType=None, precedingRange=None, followingRange=None, seriesType: SeriesType=None, accuracyType: AccuracyType=None, normalizationData=None, useAllSets=None, **kwargs):
+    def updateProperties(self, changeValue=None, changeType: ChangeType=None, precedingRange=None, followingRange=None, seriesType: SeriesType=None, focusedMetric=None, normalizationData=None, useAllSets=None, **kwargs):
         for k,v in locals().items():
             if k in ['self', 'kwargs']: continue
             if k is not None:
                 if k == 'useAllSets': self.useAllSets = v
-                else: setattr(self.stats, k, v)     
+                else: setattr(self.properties, k, v)     
 
     def save(self, path=None):
         if not self.filepath and not path:
@@ -253,6 +254,7 @@ class NeuralNetworkInstance:
             K.clear_session()
             gc.collect()
             self.model = load_model(self.filepath)
+            self._initializeAccumulatorIfRequired()
 
     def unload(self, save=False):
         if self.model:
@@ -264,53 +266,59 @@ class NeuralNetworkInstance:
 
     def _initializeAccumulatorIfRequired(self):
         if not self.useAllSetsAccumulator:
-            self.useAllSetsAccumulator = {
-                actype: [] for actype in AccuracyType
-            }
-            self.useAllSetsAccumulator['last'] = {
-                actype: 0 for actype in AccuracyType
-            }
+            self.useAllSetsAccumulator = {}
+            self.useAllSetsAccumulator['last'] = {}
+            for m in self.getMetricsKeysForAccumulator():
+                self.useAllSetsAccumulator[m] = []
+                self.useAllSetsAccumulator['last'][m] = 0
 
-    def _generateAccuracyStatsObj(rootObj):
-        retstats = {}
-        for actype in AccuracyType:
-            retstats[actype.name] = {
-                'current': rootObj.stats.__getattribute__(actype.statsName),
-                'last': rootObj.useAllSetsAccumulator['last'][actype]
-            }
-        return recdotdict(retstats)
+    def _generateMetricsValuesDict(self) -> Dict[str, MetricValuesObject]:
+        metricsNames = self.getMetricsNames()
+        retMetrics = {}
+        for m in metricsNames:
+            retMetrics[m] = MetricValuesObject(m,
+                                                self.properties.metrics[m],
+                                               shortcdict(self.useAllSetsAccumulator['last'], m, 0)
+                                               )
+        return recdotdict(retMetrics)
 
-    def updateAccuracyStats(self, resultsObj: EvaluationResultsObj, dryRun=False):
+    def updateMetrics(self, resultsObj: Dict, evaluationDataHandler=None, dryRun=False):
         if dryRun:
             rootObj = recdotdict()
             rootObj.useAllSetsAccumulator = copy.deepcopy(self.useAllSetsAccumulator)
-            # parent.stats = copy.deepcopy(self.stats)
-            rootObj.stats = NetworkStats(None, **{ actype.statsName: self.stats.__getattribute__(actype.statsName) for actype in AccuracyType })
+            rootObj.properties = recdotdict()
+            rootObj.properties.metrics = copy.deepcopy(self.properties.metrics)
         else:
             rootObj = self
 
         if self.useAllSets:
-            for actype in AccuracyType:
+            metrics = self.getMetricsDict()
+            for m,v in metrics.items():
                 if not self.reEvaluating:
-                    rootObj.useAllSetsAccumulator['last'][actype] = self.stats.__getattribute__(actype.statsName)
-                    
-                rootObj.useAllSetsAccumulator[actype].append(resultsObj[actype][LossAccuracy.ACCURACY])
-                rootObj.stats.__setattr__(actype.statsName, numpy.average(rootObj.useAllSetsAccumulator[actype]))
+                    rootObj.useAllSetsAccumulator['last'][m] = v.last
+                
+                rootObj.useAllSetsAccumulator[m].append(resultsObj[m])
+                if m in ['loss'] or 'accuracy' in m:
+                    rootObj.properties.metrics[m] = numpy.average(rootObj.useAllSetsAccumulator[m])
+                elif 'true' in m or 'false' in m:
+                    ## is a summation value, like true_positives
+                    rootObj.properties.metrics[m] = numpy.sum(rootObj.useAllSetsAccumulator[m])
 
-        elif resultsObj[self.stats.accuracyType][LossAccuracy.ACCURACY] > self.stats[self.stats.accuracyType.statsName]:
-            rootObj.stats.overallAccuracy = resultsObj[AccuracyType.OVERALL][LossAccuracy.ACCURACY]
-            rootObj.stats.positiveAccuracy = resultsObj[AccuracyType.POSITIVE][LossAccuracy.ACCURACY]
-            rootObj.stats.negativeAccuracy = resultsObj[AccuracyType.NEGATIVE][LossAccuracy.ACCURACY]
+        elif resultsObj[self.properties.focusedMetric] > self.properties.metrics[self.properties.focusedMetric]:
+            for m,v in resultsObj.items():
+                rootObj.properties.metrics[m] = v
 
         if dryRun:
-            return NeuralNetworkInstance._generateAccuracyStatsObj(rootObj)
+            rootObj.getMetricsNames = self.getMetricsNames
+            return NeuralNetworkInstance._generateMetricsValuesDict(rootObj)    
 
     def prepareForReEvaluation(self):
         '''sets reEvaluating to true, clears useAllSetsAccumulator for new stats'''
         self.reEvaluating = True
-        for actype in AccuracyType:
-            self.useAllSetsAccumulator['last'][actype] = self.stats.__getattribute__(actype.statsName)
-            self.useAllSetsAccumulator[actype] = []
+        for m in self.getMetricsNames():
+            self.useAllSetsAccumulator['last'][m] = self.properties.metrics[m]
+        for m in self.getMetricsKeysForAccumulator(): # includes some non-metrics required for calculation of other real metrics
+            self.useAllSetsAccumulator[m] = []
 
     def fit(self, inputVectors, outputVectors, **kwargs):
         if not self.model: raise BufferError('Model not loaded')
@@ -321,19 +329,20 @@ class NeuralNetworkInstance:
         hist = self.model.fit(inputVectors, outputVectors, **kwargs)
         if kwargs['epochs']:
             # self.stats.epochs += kwargs['epochs']
-            self.stats.epochs += len(hist.epoch)
-    
-    def evaluate(self, evaluationDataHandler: EvaluationDataHandler, updateAccuracyStats=True, verbose=1, **kwargs) -> EvaluationResultsObj:
+            self.properties.epochs += len(hist.epoch)
+        return hist
+
+    def evaluate(self, evaluationDataHandler: EvaluationDataHandler, updateMetrics=True, verbose=1, **kwargs):
         if not self.model: raise BufferError('Model not loaded')
         if verbose > 0: print(f"{'Re-e' if self.reEvaluating else 'E'}valuating... (overall > positive > negative)")
         
         results = evaluationDataHandler.evaluateAll(self.model, verbose=verbose, **kwargs)
 
-        if updateAccuracyStats and evaluationDataHandler.accuracyTypesCount() == 3:
-            self.updateAccuracyStats(results)
+        if updateMetrics:
+            self.updateMetrics(results, evaluationDataHandler)
             if verbose > 0:
-                # if self.useAllSets: print('Iterations:', len(self.useAllSetsAccumulator[AccuracyType.OVERALL]) + 1)
-                if not self.reEvaluating: self.printAllAccuracyStats()
+                if not self.reEvaluating:
+                    self.printAllMetrics()
 
         return results
 
@@ -354,21 +363,38 @@ class NeuralNetworkInstance:
         elif self.config.dataForm.outputVector == DataFormType.CATEGORICAL:
             return numpy.argmax(p, axis=None, out=None)
 
-    def getAccuracyStats(self):
-        return self._generateAccuracyStatsObj()
+    def getMetricsDict(self):
+        return self._generateMetricsValuesDict()
+
+    def getMetricsNames(self):
+        return getMetricsNames(self.model)
+    
+    def _getNonMetricKeysForAccumulator(self):
+        metrics = self.getMetricsNames()
+        keys = []
+        if 'tfpr_metric' in metrics:
+            ## not a metric but required for this calculation
+            keys.append('positiveCount')
+        return keys
+
+    def getMetricsKeysForAccumulator(self):
+        return self.getMetricsNames() + self._getNonMetricKeysForAccumulator()
 
     @staticmethod
-    def prettyPrintStat(accuracyName=None, name=None, stats=None, current=None, last=None):
-        current = shortc(current, shortcdict(stats, 'current'))
-        last = shortc(last, shortcdict(stats, 'last'))
+    def prettyPrintMetric(
+        # accuracyName=None,
+        name=None, metrics=None, current=None, last=None, isFocused=False):
+        current = shortc(current, shortcdict(metrics, 'current', shortcobj(metrics, 'current')))
+        last = shortc(last, shortcdict(metrics, 'last', shortcobj(metrics, 'last')))
         print(
-            (f'{accuracyName} accuracy:' if accuracyName else f'{name}:').ljust(19) + 
+            # (f'{accuracyName} accuracy:' if accuracyName else f'{name}:').ljust(19) + 
+            f"{'*' if isFocused else ''}{name}:".ljust(19) + 
             f'{current}'.ljust(22) + 
             (f"({'+' if current >= last else '-'} {f'{abs(current - last):.20f}'})" if last else '')
         )
 
     @classmethod
-    def printAccuracyStats(cls, stats, classValueRatio=None, config=None):
+    def printMetrics(cls, metrics, focusedMetric=None, classValueRatio=None, config=None):
         if config:
             pass ## config already set
         elif hasattr(cls, 'inputVectorFactory'):
@@ -377,13 +403,13 @@ class NeuralNetworkInstance:
             config = gconfig
         classValueRatio = shortc(classValueRatio, config.trainer.customValidationClassValueRatio)
 
-        if type(stats) == list and len(stats) == 1:
-            stats = stats[0]
+        if type(metrics) == list and len(metrics) == 1:
+            metrics = metrics[0]
 
-        if type(stats) == list and len(stats) > 1: ## multiple values for each
-            statsDict = { k: [shortcdict(s[k], 'current', s[k]) for s in stats] for k in stats[0].keys() }
-            statsDict['CUSTOM'] = [getCustomAccuracy(s, classValueRatio=classValueRatio) for s in stats]
-            for k, sts in statsDict.items():
+        if type(metrics) == list and len(metrics) > 1: ## multiple values for each
+            metricsDict = { k: [shortcdict(s[k], 'current', s[k]) for s in metrics] for k in metrics[0].keys() }
+            metricsDict['CUSTOM'] = [getCustomAccuracy(s, classValueRatio=classValueRatio) for s in metrics]
+            for k, sts in metricsDict.items():
                 print(f'{k} Accuracy')
                 print('Minimum:'.ljust(19) + f'{min(sts)}'.ljust(22))
                 print('Median:'.ljust(19) + f'{sts[int(len(sts)/2)]}'.ljust(22))
@@ -391,13 +417,13 @@ class NeuralNetworkInstance:
                 print('Average:'.ljust(19) + f'{numpy.average(sts)}'.ljust(22))
                 print()
         else:
-            for name, sts in stats.items():
-                cls.prettyPrintStat(accuracyName=name, stats=sts)
-            cls.prettyPrintStat(accuracyName='CUSTOM', current=getCustomAccuracy(stats, classValueRatio=classValueRatio))
+            for name, sts in metrics.items():
+                cls.prettyPrintMetric(name, metrics=sts, isFocused=name==focusedMetric)
+            # cls.prettyPrintMetric(accuracyName='CUSTOM', current=getCustomAccuracy(stats, classValueRatio=classValueRatio))
         print()
 
-    def printAllAccuracyStats(self):
-        self.printAccuracyStats(self.getAccuracyStats())
+    def printAllMetrics(self):
+        self.printMetrics(self.getMetricsDict(), focusedMetric=self.properties.focusedMetric)
 
 if __name__ == '__main__':
     ## standard neural network
@@ -452,7 +478,7 @@ if __name__ == '__main__':
         inputSize=4
     )
 
-    n.printAllAccuracyStats()
+    n.printAllMetrics()
 
     n.fit(inp, oup, epochs=5, batch_size=1, verbose=1)
 

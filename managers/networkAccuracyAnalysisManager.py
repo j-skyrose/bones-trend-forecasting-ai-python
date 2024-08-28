@@ -20,14 +20,13 @@ from managers.databaseManager import DatabaseManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.EvaluationDataHandler import EvaluationDataHandler
-from structures.EvaluationResultsObj import EvaluationResultsObj
 from constants.exceptions import NoData
 from managers.dataManager import DataManager
 from structures.trainingInstance import TrainingInstance
 from managers.inputVectorFactory import InputVectorFactory
 from utils.support import Singleton, recdotdict, shortc
 from utils.other import determinePrecedingRangeType
-from constants.enums import AccuracyAnalysisTypes, AccuracyType, LossAccuracy, PrecedingRangeType, CorrBool
+from constants.enums import AccuracyAnalysisTypes, AccuracyType, PrecedingRangeType, CorrBool
 
 dbm = DatabaseManager()
 nnm = NeuralNetworkManager()
@@ -35,7 +34,7 @@ ivf: InputVectorFactory = InputVectorFactory()
 
 def breakdownWeightsByInputSection(nn: NeuralNetworkInstance):
     ws = nn.model.get_weights()
-    precRange = nn.stats.precedingRange
+    precRange = nn.properties.precedingRange
 
     # print(ws[0])
     # print(len(ws[0]))
@@ -195,7 +194,7 @@ class NetworkAccuracyAnalysisManager(Singleton):
             _,_, seriesSize = self.nn.inputVectorFactory.getInputSize() ## eval
             accuracies = recdotdict({ e: { c: 0 for c in CorrBool } for e in PrecedingRangeType })
             newaccuracies = copy.deepcopy(accuracies)
-            newmindate = list(dm.stockDataHandlers.values())[0].data[-(self.nn.stats.precedingRange+self.nn.stats.followingRange+1)].period_date
+            newmindate = list(dm.stockDataHandlers.values())[0].data[-(self.nn.properties.precedingRange+self.nn.properties.followingRange+1)].period_date
             lastexchange = None
             lastsymbol = None
             interrupted = False
@@ -220,7 +219,7 @@ class NetworkAccuracyAnalysisManager(Singleton):
                             if gconfig.testing.predictor:
                                 self.testing_evaluateAllTime += time.time() - startt
                             
-                            dbm.updateStockAccuracyForNetwork(self.nn.id, exchange, symbol, res[AccuracyType.OVERALL][LossAccuracy.ACCURACY], len(validationSet))
+                            dbm.updateStockAccuracyForNetwork(self.nn.id, exchange, symbol, res['accuracy'], len(validationSet))
                         
                     elif acctype == AccuracyAnalysisTypes.PRECEDING_RANGE:
                         # ## predict method-1 >> ~11% slower than evaluate method-2, perhaps low enough that some fixes to method-1 might help
@@ -260,14 +259,14 @@ class NetworkAccuracyAnalysisManager(Singleton):
                         ksets = dm.getKerasSets(validationSetOnly=True, exchange=exchange, symbol=symbol, verbose=0.5)
                         indexgroups = recdotdict({ e: [] for e in PrecedingRangeType })
                         for dindex in trange(len(ksets[1]), desc='Evaluating ' + exchange + ':' + symbol, leave=False):
-                            prectype = determinePrecedingRangeType(sdh.data[dindex:dindex + self.nn.stats.precedingRange])
+                            prectype = determinePrecedingRangeType(sdh.data[dindex:dindex + self.nn.properties.precedingRange])
                             indexgroups[prectype].append(dindex)
                         for p in PrecedingRangeType:
                             if len(indexgroups[p]) == 0: continue
                             oup = numpy.array([ ksets[1][i] for i in indexgroups[p]])
                             inp = [  
                                 tensorflow.experimental.numpy.vstack(numpy.reshape( [ksets[0][0][i] for i in indexgroups[p]],  (len(indexgroups[p]), ksets[0][0][dindex].size))),
-                                numpy.reshape( [ksets[0][1][i] for i in indexgroups[p]],  (len(indexgroups[p]), self.nn.stats.precedingRange, seriesSize))
+                                numpy.reshape( [ksets[0][1][i] for i in indexgroups[p]],  (len(indexgroups[p]), self.nn.properties.precedingRange, seriesSize))
                             ]
 
                             _, accuracy = self.nn.model.evaluate(inp, oup, verbose=0)

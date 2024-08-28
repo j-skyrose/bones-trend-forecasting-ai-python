@@ -17,28 +17,35 @@ from structures.normalizationDataHandler import NormalizationDataHandler
 from utils.dbSupport import convertToCamelCase, isNormalizationColumn
 from utils.support import recdotdict
 
-class NetworkStats:
+class NetworkProperties:
 
-    def __init__(self, id, precedingRange=None, **kwargs):
+    def __init__(self, id, precedingRange=None, focusedMetric=None, metrics=None, **kwargs):
         ''' kwargs: network_training_config columns '''
         self.id = id
         self.precedingRange = precedingRange
         self.normalizationData: NormalizationDataHandler = NormalizationDataHandler()
-        self.overallAccuracy = 0
-        self.negativeAccuracy = 0
-        self.positiveAccuracy = 0
         self.epochs = 0
+
+        self.focusedMetric = focusedMetric
+        self.metrics: Dict = { k.statsName:0 for k in AccuracyType }
+        if metrics:
+            if type(metrics) is list:
+                for m in metrics:
+                    self.metrics[m] = 0
+            else:
+                for m,v in metrics.items():
+                    self.metrics[m] = v
 
         for k,v in kwargs.items():
             setattr(self, k, v)
 
     @classmethod
-    def importFrom(cls, statsObj):
-        c = cls(statsObj.id)
+    def importFrom(cls, propsObj, metricsObj):
+        c = cls(propsObj.id)
         ## adding to attribute in-place results in it applying to the class statically (i.e. all instances have all the columns)
         ## probably due to __setattr__ override        
         normalizationData = NormalizationDataHandler() 
-        for k,v in statsObj.items():
+        for k,v in propsObj.items():
             if k in ['factory', 'config']: continue
             if isNormalizationColumn(k):
                 # c.normalizationData.append(NormalizationColumnObj(k, v))
@@ -48,6 +55,8 @@ class NetworkStats:
                 if not hasattr(c, k) or (hasattr(c, k) and not c[k]):
                     setattr(c, k, v)
         setattr(c, 'normalizationData', normalizationData)
+        for _,m,v in metricsObj:
+            c.metrics[m] = v
         return c
 
 
@@ -76,7 +85,7 @@ class NetworkStats:
                 ## for missing keys, backward compatibility
                 value = enumType(value.upper())
 
-        super(NetworkStats, self).__setattr__(name, value)
+        super(NetworkProperties, self).__setattr__(name, value)
 
     def _getTableData(self, sccolumns, cccolumns, camelCase, dbInsertReady) -> Dict:
         retdict = recdotdict({})
@@ -98,7 +107,7 @@ class NetworkStats:
 
 if __name__ == '__main__':
     ## testing
-    n = NetworkStats(2, 2, seriesType=SeriesType.DAILY)
+    n = NetworkProperties(2, 2, seriesType=SeriesType.DAILY)
     print(n.id, n.seriesType)
     n.setMax('test', 3)
     print(n.testMax)
@@ -107,5 +116,5 @@ if __name__ == '__main__':
 
     print(n.getNormalizationInfo())
 
-    n = NetworkStats.importFrom(recdotdict({'id': 2, 'overallAccuracy': 5}))
+    n = NetworkProperties.importFrom(recdotdict({'id': 2, 'overallAccuracy': 5}))
     print(n.overallAccuracy, n.accuracyType)

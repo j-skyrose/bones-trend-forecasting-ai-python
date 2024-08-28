@@ -198,8 +198,8 @@ class Predictor(Singleton):
                     if gconfig.network.recurrent:
                         predictionInputVectors[InputVectorDataType.STATIC].append(inptpl[0].reshape(-1, staticsize))
                         if gconfig.feature.financials.enabled:
-                            predictionInputVectors[InputVectorDataType.SEMISERIES].append(inptpl[1].reshape(-1, nn.stats.precedingRange, semiseriessize))
-                        predictionInputVectors[InputVectorDataType.SERIES].append(inptpl[2].reshape(-1, nn.stats.precedingRange, seriessize))
+                            predictionInputVectors[InputVectorDataType.SEMISERIES].append(inptpl[1].reshape(-1, nn.properties.precedingRange, semiseriessize))
+                        predictionInputVectors[InputVectorDataType.SERIES].append(inptpl[2].reshape(-1, nn.properties.precedingRange, seriessize))
                     else:
                         predictionInputVectors.append(inptpl)
                 
@@ -267,7 +267,7 @@ class Predictor(Singleton):
                 if len(predictionExceptions) > 0:
                     print('There was an exception for this ticker')
                 else:
-                    print(('{}redicted to'.format('P' if predictResults == 1 else 'Not p')) if gconfig.predictor.ifBinaryUseRaw else '{:.2f}% chance ticker will'.format(predictResults*100), 'exceed threshold from EOD', MarketDayManager.getPreviousMarketDay(dt).isoformat(), 'to', MarketDayManager.advance(dt, nn.stats.followingRange).isoformat())
+                    print(('{}redicted to'.format('P' if predictResults == 1 else 'Not p')) if gconfig.predictor.ifBinaryUseRaw else '{:.2f}% chance ticker will'.format(predictResults*100), 'exceed threshold from EOD', MarketDayManager.getPreviousMarketDay(dt).isoformat(), 'to', MarketDayManager.advance(dt, nn.properties.followingRange).isoformat())
             else:
                 tickersMeetingThreshold = []
                 tickersJustBelowThreshold = []
@@ -276,12 +276,12 @@ class Predictor(Singleton):
                 ## perform additional weighting on the predict results accuracies
                 if postPredictionWeighting:
                     key = AccuracyType.OVERALL
-                    # if nn.stats.accuracyType == AccuracyType.POSITIVE:
+                    # if nn.properties.accuracyType == AccuracyType.POSITIVE:
                     #     key = AccuracyType.NEGATIVE
-                    # elif nn.stats.accuracyType == AccuracyType.NEGATIVE:
+                    # elif nn.properties.accuracyType == AccuracyType.NEGATIVE:
                     #     key = AccuracyType.POSITIVE
 
-                    networkFactor = getattr(nn.stats, key.statsName)
+                    networkFactor = getattr(nn.properties, key.statsName)
                     weightedAccuracyLambda = lambda v: reduce(operator.mul, list(v), 1)
                     weightingsCount = 0
                     try:
@@ -390,7 +390,7 @@ class Predictor(Singleton):
                     ## output summary of the predictions
                     print()
                     print(len(predictionExceptions), '/', len(tickers), 'had exceptions')
-                    print(len(tickersMeetingThreshold), '/', len(predictionTickers), 'predicted to exceed threshold from EOD', MarketDayManager.getPreviousMarketDay(dt).isoformat(), 'to', MarketDayManager.advance(MarketDayManager.getLastMarketDay(dt), nn.stats.followingRange).isoformat())
+                    print(len(tickersMeetingThreshold), '/', len(predictionTickers), 'predicted to exceed threshold from EOD', MarketDayManager.getPreviousMarketDay(dt).isoformat(), 'to', MarketDayManager.advance(MarketDayManager.getLastMarketDay(dt), nn.properties.followingRange).isoformat())
                     if len(tickersMeetingThreshold) == 0:
                         print(len(tickersJustBelowThreshold), '/', len(predictionTickers), 'are just below the threshold')
 

@@ -190,19 +190,6 @@ class NetworksTempRow():
         self.volumeMax = volumeMaxValue
         self.epochs = epochsValue
 
-## TABLE: networks ######################################
-networksSnakeCaseTableColumns = ['id', 'factory_id', 'accuracy_type', 'overall_accuracy', 'negative_accuracy', 'positive_accuracy', 'epochs']
-networksCamelCaseTableColumns = ['id', 'factoryId', 'accuracyType', 'overallAccuracy', 'negativeAccuracy', 'positiveAccuracy', 'epochs']
-class NetworksRow():
-    def __init__(self, idValue: int, factory_idValue: int, accuracy_typeValue: str, overall_accuracyValue: float, negative_accuracyValue: float, positive_accuracyValue: float, epochsValue: int):
-        self.id = idValue
-        self.factory_id = factory_idValue
-        self.accuracy_type = accuracy_typeValue
-        self.overall_accuracy = overall_accuracyValue
-        self.negative_accuracy = negative_accuracyValue
-        self.positive_accuracy = positive_accuracyValue
-        self.epochs = epochsValue
-
 ## TABLE: network_training_config ######################################
 networkTrainingConfigSnakeCaseTableColumns = ['id', 'preceding_range', 'following_range', 'change_value', 'change_type', 'series_type', 'highest_historical_high', 'highest_historical_volume', 'minimum_historical_close_allowed']
 networkTrainingConfigCamelCaseTableColumns = ['id', 'precedingRange', 'followingRange', 'changeValue', 'changeType', 'seriesType', 'highestHistoricalHigh', 'highestHistoricalVolume', 'minimumHistoricalCloseAllowed']
@@ -258,6 +245,25 @@ class CboeVolatilityIndexRow():
         self.low = lowValue
         self.close = closeValue
         self.artificial = artificialValue
+
+## TABLE: network_metrics ######################################
+networkMetricsSnakeCaseTableColumns = ['id', 'name', 'value']
+networkMetricsCamelCaseTableColumns = ['id', 'name', 'value']
+class NetworkMetricsRow():
+    def __init__(self, idValue: str, nameValue: str, valueValue: float):
+        self.id = idValue
+        self.name = nameValue
+        self.value = valueValue
+
+## TABLE: networks ######################################
+networksSnakeCaseTableColumns = ['id', 'factory_id', 'focused_metric', 'epochs']
+networksCamelCaseTableColumns = ['id', 'factoryId', 'focusedMetric', 'epochs']
+class NetworksRow():
+    def __init__(self, idValue: int, factory_idValue: int, focused_metricValue: str, epochsValue: int):
+        self.id = idValue
+        self.factory_id = factory_idValue
+        self.focused_metric = focused_metricValue
+        self.epochs = epochsValue
 
 ## TABLE: technical_indicator_data_c ######################################
 technicalIndicatorDataCSnakeCaseTableColumns = ['exchange', 'symbol', 'date_type', 'date', 'indicator', 'period', 'value']
