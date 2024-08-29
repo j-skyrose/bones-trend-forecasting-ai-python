@@ -16,9 +16,6 @@ from structures.optionsContract import OptionsContract
 from utils.support import GetMemoryUsage, asISOFormat, getItem
 from utils.types import TickerKeyType
 
-
-dbm: DatabaseManager = DatabaseManager()
-
 class OptionsDataHandler(GetMemoryUsage):
 
     def __init__(self, exchange, symbol, offset=stockOffset, jitInitialization=True):
@@ -69,7 +66,7 @@ class OptionsDataHandler(GetMemoryUsage):
         contractKeys = list(self.getOptionsContractKeys())
         if len(contractKeys) > 0:
             for tickerChunk in numpy.array_split(contractKeys, int(math.ceil(len(contractKeys)/950))): ## max sqlite args=999
-                dataChunk = dbm.getOptionsDataDaily_basic(ticker=tickerChunk, orderBy='period_date')
+                dataChunk = DatabaseManager().getOptionsDataDaily_basic(ticker=tickerChunk, orderBy='period_date')
                 for d in dataChunk:
                     self.data[d.ticker].append(d)
         self.initializedData = True
