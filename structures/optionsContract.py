@@ -37,6 +37,9 @@ class OptionsContract:
     def getTicker(self, withOPrefix=True):
         return f"{'O:' if withOPrefix else ''}{self.symbol}{self.expirationDate.strftime('%y%m%d')}{'C' if self.optionType == OptionType.CALL else 'P'}{int(self.strikePrice*1000):0>8}"
 
+    def __repr__(self):
+        return self.getTicker()
+
     def __hash__(self) -> int:
         return hash((self.symbol, self.optionType, self.expirationDate, self.strikePrice))
 

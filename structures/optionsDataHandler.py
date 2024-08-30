@@ -49,7 +49,11 @@ class OptionsDataHandler(GetMemoryUsage):
         self._initializeData()
 
     def _initializeTickers(self):
-        if self.initializedTickers: return
+        if self.initializedTickers:
+            print(f'{self.symbol} tickers already initialized')
+            return
+        else:
+            print(f'initializing {self.symbol} tickers')
         distinctTickers = DatabaseManager().getDistinct('options_contract_info_polygon_d', 'ticker', underlyingTicker=self.symbol)
         for r in distinctTickers:
             self.data[r] = None if self.jitInitialization else []
@@ -58,7 +62,10 @@ class OptionsDataHandler(GetMemoryUsage):
     def _initializeDatum(self, oc:str):
         self._initializeTickers()
         if self.data[oc] is None:
+            print(f'initializing {oc} datum')
             self.data[oc] = DatabaseManager().getOptionsDataDaily_basic(ticker=oc, orderBy='period_date')
+        else:
+            print(f'{oc} datum already initialized')
 
     def _initializeData(self):
         if self.initializedData: return
