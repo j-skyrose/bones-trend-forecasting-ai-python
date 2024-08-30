@@ -12,6 +12,7 @@ from multiprocessing.managers import SyncManager
 
 from constants.enums import OptionType
 from managers.optionsDataManager import OptionsDataManager
+from structures.optionsContract import OptionsContract
 from utils.support import repackKWArgs
 
 odServerPort = 5069
@@ -49,9 +50,9 @@ class OptionsDataManagerProxy(object):
         global odm
         return odm.getTickers(**kwargs)
     
-    def getDay(self, symbol, ticker, dt):
+    def getDay(self, symbol, ticker:OptionsContract, dt):
         '''gets prices object at given date'''
-        if not self.runningOnMainProcess: print(f'Getting day {dt} for {symbol}:{ticker}')
+        if not self.runningOnMainProcess: print(f'Getting day {dt} for {symbol}: {ticker.getTicker() if type(ticker) is OptionsContract else ticker}')
         global odm
         return odm.data[symbol].getDay(ticker, dt)
     
