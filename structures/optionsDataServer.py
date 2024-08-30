@@ -22,7 +22,9 @@ odm: OptionsDataManager = None
 initializeManager = lambda: OptionsDataManager()
 
 class OptionsDataManagerProxy(object):
-    def __init__(self, runningOnMainProcess=False) -> None:
+    def __init__(self, runningOnMainProcess=False, pid='', originatingScript='') -> None:
+        self.pid = pid
+        self.originatingScript = originatingScript
         self.runningOnMainProcess = runningOnMainProcess
         ## if running on Main process, meaning not as a proxy-server then there will be no caching that can be re-used by later processes/runs
         if self.runningOnMainProcess:
