@@ -40,7 +40,7 @@ class OptionsDataManagerProxy(object):
         global odm
         return odm._get(symbol)
 
-    def getTickers(self, symbol, expiringWeekDate=None, strike=None, strikeAbove=None, contractType:OptionType=None):
+    def getTickers(self, symbol, expiringWeekDate=None, strike=None, strikeAbove=None, strikeBelow=None, contractType:OptionType=None):
         '''gets all options tickers for the given symbol that meet the expiry week and strike parameters'''
         kwargs = repackKWArgs(locals())
         if not self.runningOnMainProcess: print(f'Getting tickers for {symbol} with kwargs {kwargs}')

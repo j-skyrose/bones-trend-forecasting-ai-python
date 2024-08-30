@@ -61,9 +61,9 @@ class OptionsDataManager(Singleton):
                 self.addSymbols(symbolList=[(exchange, symbol)])
         return self.data[symbol]
 
-    def getTickers(self, symbol, expiringWeekDate=None, strike=None, strikeAbove=None, contractType:OptionType=None) -> List[OptionsContract]:
+    def getTickers(self, symbol, expiringWeekDate=None, strike=None, strikeAbove=None, strikeBelow=None, contractType:OptionType=None) -> List[OptionsContract]:
         '''gets all options tickers for the given symbol that meet the expiry week and strike parameters'''
-        if strike and strikeAbove: raise ValueError
+        if list(s is not None for s in [strike, strikeAbove, strikeBelow]).count(True) > 1: raise ValueError
 
         if not self.jitInitialization and symbol not in self.data.keys(): return ## no tickers, no data
 
@@ -81,6 +81,7 @@ class OptionsDataManager(Singleton):
             ## fulfills desired strike(s)
             if strike: matchLambdas.append(lambda x: x.strikePrice == strike)
             elif strikeAbove: matchLambdas.append(lambda x: x.strikePrice > strikeAbove)
+            elif strikeBelow: matchLambdas.append(lambda x: x.strikePrice < strikeBelow)
 
             ## correct contract type
             if contractType: matchLambdas.append(lambda x: x.optionType == contractType)
