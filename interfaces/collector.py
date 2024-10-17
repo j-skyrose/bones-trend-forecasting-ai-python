@@ -1215,7 +1215,7 @@ class Collector:
 
         print('inserted {} splits'.format(insertcount))
 
-    def startEarningsDateCollection(self, api:Api=None, dryrun=False, verbose=1, **kwargs):
+    def startEarningsDateCollection(self, api:Api=None, dryrun=False, verbose=1, startDate=None, **kwargs):
         if api is not None and api not in APIManager.getEarningsCollectionAPIs(): raise NotSupportedYet
         
         exchangeDictCache = {}
@@ -1229,24 +1229,36 @@ class Collector:
             if not apiCurrentCollectDate:
                 ## manually determined minimum date based on historical data table
                 apiCurrentCollectDate = date(1999, 11, 1) - timedelta(days=1)
+                skipRecollectionThresholdDate = apiCurrentCollectDate
             else:
                 apiCurrentCollectDate = date.fromisoformat(apiCurrentCollectDate)
 
                 if api == Api.MARKETWATCH: ## adjust back to start of week as collection will only be done on Mondays (since full week returned)
                     apiCurrentCollectDate -= timedelta(days=apiCurrentCollectDate.weekday())
-            currentCollectDate = apiCurrentCollectDate
+                    
+                ## verify integrity of last collection
+                latestEarningsDateCollected = dbm.getDumpEarningsDates(api, input_date=apiCurrentCollectDate, sqlColumns='max(earnings_date) as d', onlyColumn_asList='d')
+                if latestEarningsDateCollected:
+                    latestEarningsDateCollected = date.fromisoformat(latestEarningsDateCollected[0])
+                    if latestEarningsDateCollected < apiCurrentCollectDate:
+                        ## last collection did not fully complete, some historical days (at the time) were missed; need to ensure they are not skipped now
+                        skipRecollectionThresholdDate = latestEarningsDateCollected
+                    else:
+                        skipRecollectionThresholdDate = apiCurrentCollectDate
+
             if apiCurrentCollectDate < minDate:
                 minDate = apiCurrentCollectDate
         
             ## MarketWatch: 2015/7/13 gives 403 error, 7/14 does not
             # minDate = date(2023,9,30) - timedelta(days=2) ## debugging
+            minDate = shortc(startDate, minDate)
             # endDate = date(2008,1,31)
         
             ## collect for all days from last anchor date to ~3 months out, inclusive
             firstIntegrityError = True
             for cdate in tqdmLoopHandleWrapper([minDate + timedelta(days=d) for d in range((endDate - minDate).days + 1)], verbose=verbose, desc='Collecting data'):
                 if api == Api.MARKETWATCH and cdate.weekday() != 0: continue ## MarketWatch returns all days until end of week
-                if currentCollectDate > cdate: continue ## skip re-collection of data
+                if cdate < skipRecollectionThresholdDate: continue ## skip re-collection of data
                 data = self.apiManager.get(api).getEarningsDates(cdate, week=True)
 
                 ## parse data
@@ -1318,7 +1330,9 @@ class Collector:
 
                     ## insert data into DB
                     try:
-                        if not dryrun: dbm.insertEarningsDateDump(api, **datapointKWArgs)
+                        if not dryrun:
+                            dbm.insertEarningsDateDump(api, **datapointKWArgs)
+                            dbm.commit()
                         insertcount += 1
                         uniquedates.add(datapointKWArgs['earningsDate'])
                     except sqlite3.IntegrityError as e:
@@ -1330,7 +1344,6 @@ class Collector:
                             print(res)
                             firstIntegrityError = False
 
-                    dbm.commit()
         print(f'got data for {len(uniquedates)} days')
         print(f'inserted {insertcount} earnings dates')
 
