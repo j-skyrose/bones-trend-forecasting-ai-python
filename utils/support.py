@@ -7,7 +7,7 @@ while ".vscode" not in os.listdir(path):
 sys.path.append(path)
 ## done boilerplate "package"
 
-import numpy, re, math, calendar, json, tqdm, zlib, hashlib, base64
+import numpy, re, math, calendar, json, tqdm, zlib, hashlib, base64, random
 from enum import Enum
 from datetime import date, datetime, timedelta
 from multiprocessing import Pool, cpu_count
@@ -465,6 +465,14 @@ def getMetricsNames(model):
     if len(metrics) and type(metrics[0]) is list:
         metrics = metrics[0]
     return ['loss'] + [m.name if type(m) is not str else m for m in metrics]
+
+def massageRandomGeneratorArgument(r) -> random.Random:
+    if r is None:
+        return random
+    elif type(r) is random.Random:
+        return r
+    else:
+        return random.Random(r)
 
 if __name__ == '__main__':
     # print(processRawValueToInsertValue(44))

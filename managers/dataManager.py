@@ -19,7 +19,7 @@ from argparse import ArgumentError
 from globalConfig import config as gconfig
 from constants.enums import ChangeType, DataFormType, Direction, NormalizationGroupings, OperatorDict, OutputClass, ReductionMethod, SeriesType, SetClassificationType, SetType, DataManagerType, IndicatorType
 from constants.exceptions import InsufficientInstances
-from utils.support import asList, generateFibonacciSequence, getAdjustedSlidingWindowPercentage, partition, recdotlist, shortc, multicore_poolIMap, shortcdict, shortcobj, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
+from utils.support import asList, generateFibonacciSequence, getAdjustedSlidingWindowPercentage, massageRandomGeneratorArgument, partition, recdotlist, shortc, multicore_poolIMap, shortcdict, shortcobj, someIndicatorEnabled, tqdmLoopHandleWrapper, tqdmProcessMapHandlerWrapper
 from utils.other import getInstancesByClass, getMaxIndicatorPeriod, getOutputClass, maxQuarters, getIndicatorPeriod, addAdditionalDefaultKWArgs
 from utils.technicalIndicatorFormulae import generateADXs_AverageDirectionalIndex
 from constants.values import unusableSymbols, indicatorsKey
@@ -80,8 +80,10 @@ class DataManager():
 
         maxPageSize=0, skipAllDataInitialization=False,
         maxGoogleInterestHandlers=50,
+        randomGenerator=None,
         verbose=None, **kwargs
     ):
+        self.random = massageRandomGeneratorArgument(randomGenerator)
         self.stockDataHandlers: Dict[TickerKeyType, StockDataHandler] = {}
         self.explicitValidationStockDataHandlers: Dict[TickerKeyType, StockDataHandler] = {}        
         self.financialDataHandlers: Dict[TickerKeyType, FinancialDataHandler] = {}
@@ -487,7 +489,7 @@ class DataManager():
         return getMaxIndicatorPeriod(self.config.feature[indicatorsKey].keys(), self.indicatorConfig)
 
     ## preserves much of the initialized data while mainly allowing new input vectors to be created with a different configuration
-    def setNewConfig(self, config, indicatorConfig=None, page=0,
+    def setNewConfig(self, config, indicatorConfig=None, page=0, randomGenerator=None,
                      verbose=None):
         verbose = shortc(verbose, self.verbose)
 
@@ -498,6 +500,7 @@ class DataManager():
         self.config = config
         self.indicatorConfig = indicatorConfig
         self.inputVectorFactory = InputVectorFactory(config)
+        self.random = massageRandomGeneratorArgument(randomGenerator)
         self.precedingRange = shortcdict(self.config.training, 'precedingRange', self.precedingRange, True)
         self.followingRange = shortcdict(self.config.training, 'followingRange', self.followingRange, True)
         self.changeType = shortcdict(self.config.training, 'changeType', self.changeType, True)
@@ -690,8 +693,8 @@ class DataManager():
                         removedDates = [vs.date for indx,vs in enumerate(middle) if indx not in fibsequence]
 
                     elif self.config.sets.instanceReduction.method == ReductionMethod.RANDOM:
-                        random.shuffle(middle)
-                        selected = random.sample(middle, int(len(middle)*self.config.sets.instanceReduction.additionalParameter))
+                        self.random.shuffle(middle)
+                        selected = self.random.sample(middle, int(len(middle)*self.config.sets.instanceReduction.additionalParameter))
                         removedDates = [vs.date for vs in middle if vs not in selected]
 
                     elif self.config.sets.instanceReduction.method == ReductionMethod.ALL:
@@ -1014,9 +1017,9 @@ class DataManager():
     def setupExplicitValidationSet(self):
         self.explicitValidationSet = list(self.explicitValidationStockDataInstances.values())
         if gconfig.testing.enabled:
-            random.shuffle(self.explicitValidationSet)
+            self.random.shuffle(self.explicitValidationSet)
             self.explicitValidationSet = self.explicitValidationSet[:self.setCount]
-        random.shuffle(self.explicitValidationSet)
+        self.random.shuffle(self.explicitValidationSet)
 
     def setupSets(self, setCount=None, setSplitTuple=None, minimumSetsPerSymbol=None, selectAll=False, verbose=None):
         verbose = shortc(verbose, self.verbose)
@@ -1031,7 +1034,7 @@ class DataManager():
             self.selectedInstances = list(self.stockDataInstances.values())
 
             if gconfig.testing.enabled:
-                random.shuffle(self.selectedInstances)
+                self.random.shuffle(self.selectedInstances)
                 self.selectedInstances = self.selectedInstances[:self.setCount]
 
             ## determine window size for iterating through all sets            
@@ -1061,7 +1064,7 @@ class DataManager():
                         # print(available)
                         # print(sampleSize)
                         # print(selectDates)
-                        random.shuffle(selectDates)
+                        self.random.shuffle(selectDates)
                         for d in selectDates[:sampleSize]:
                             self.selectedInstances.append(self.stockDataInstances[(h.getTickerTuple(), d)])
                         for d in selectDates[sampleSize:]:
@@ -1086,8 +1089,8 @@ class DataManager():
                     print('Positive sample size', positiveUnselectedSampleSize)
                     print('Negative sample size', negativeUnselectedSampleSize)
 
-                self.selectedInstances.extend(random.sample(positiveUnselectedInstances, positiveUnselectedSampleSize))
-                self.selectedInstances.extend(random.sample(negativeUnselectedInstances, negativeUnselectedSampleSize))
+                self.selectedInstances.extend(self.random.sample(positiveUnselectedInstances, positiveUnselectedSampleSize))
+                self.selectedInstances.extend(self.random.sample(negativeUnselectedInstances, negativeUnselectedSampleSize))
             else:
                 print('Warning: setCount too low for minimum sets per symbol')
             if verbose>=2:
@@ -1098,7 +1101,7 @@ class DataManager():
             ## instance selection done
 
         ## shuffle and distribute instances
-        random.shuffle(self.selectedInstances)
+        self.random.shuffle(self.selectedInstances)
         c1, c2 = getInstancesByClass(self.selectedInstances)
         trnStop = setSplitTuple[0]
         vldStop = setSplitTuple[1] + trnStop
@@ -1116,9 +1119,9 @@ class DataManager():
         self.validationSet = c1[trsc1Index:vsc1Index] + c2[trsc2Index:vsc2Index]
         self.testingSet = c1[vsc1Index:] + c2[vsc2Index:]
 
-        random.shuffle(self.trainingSet)
-        random.shuffle(self.validationSet)
-        random.shuffle(self.testingSet)
+        self.random.shuffle(self.trainingSet)
+        self.random.shuffle(self.validationSet)
+        self.random.shuffle(self.testingSet)
         if verbose>=2: print('Sets split into', len(self.trainingSet), '/', len(self.validationSet), '/', len(self.testingSet))
 
         # return trainingSet, validationSet, testingSet
