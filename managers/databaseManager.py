@@ -1977,6 +1977,11 @@ class DatabaseManager(Singleton):
         stmt = f'DELETE FROM {getTableString("queue_options_data_daily_d")}'
         return self.dbc.execute(stmt + additionalStmt, arguments)
 
+    def deleteEarningsDatesYahooDump(self, inputDate=None):
+        additionalStmt, arguments = generateSQLSuffixStatementAndArguments(**locals())
+        stmt = f'DELETE FROM {getTableString("earnings_dates_yahoo_d")}'
+        return self.dbc.execute(stmt + additionalStmt, arguments)
+
     #endregion
     ####################################################################################################################################################################
     #region migrations

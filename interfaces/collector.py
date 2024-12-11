@@ -23,9 +23,9 @@ from structures.api.googleTrends.gt_exceptions import ResponseError
 from structures.optionsContract import OptionsContract
 from structures.sql.sqlArgumentObj import SQLArgumentObj
 
-from constants.exceptions import APILimitReached, APIError, APITimeout, NotSupportedYet
+from constants.exceptions import APILimitReached, APIError, APITimeout, DatabaseStructureChanged, NotSupportedYet
 from utils.collectorSupport import getExchange
-from utils.dbSupport import convertToSnakeCase, getTableString
+from utils.dbSupport import convertToSnakeCase, generateDatabaseAnnotationObjectsFile, getTableString
 from utils.other import parseCommandLineOptions
 from utils.support import asDate, asDatetime, asISOFormat, asList, recdotdict, shortc, shortcdict, tqdmLoopHandleWrapper, unixToDatetime
 from constants.enums import APIState, Api, FinancialReportType, FinancialStatementType, InterestType, MarketType, OperatorDict, OptionType, SQLHelpers, SQLInsertHelpers, SeriesType, Direction, TimespanType
@@ -1221,6 +1221,7 @@ class Collector:
         exchangeDictCache = {}
         insertcount = 0
         uniquedates = set()
+        apiDBErrors = []
         endDate = self.currentDate + timedelta(days=90)
         for api in asList(api) if api else APIManager.getEarningsCollectionAPIs():
             ## determine start date
@@ -1255,97 +1256,109 @@ class Collector:
             # endDate = date(2008,1,31)
         
             ## collect for all days from last anchor date to ~3 months out, inclusive
-            firstIntegrityError = True
-            for cdate in tqdmLoopHandleWrapper([minDate + timedelta(days=d) for d in range((endDate - minDate).days + 1)], verbose=verbose, desc='Collecting data'):
-                if api == Api.MARKETWATCH and cdate.weekday() != 0: continue ## MarketWatch returns all days until end of week
-                if cdate < skipRecollectionThresholdDate: continue ## skip re-collection of data
-                data = self.apiManager.get(api).getEarningsDates(cdate, week=True)
+            try:
+                firstIntegrityError = True
+                for cdate in tqdmLoopHandleWrapper([minDate + timedelta(days=d) for d in range((endDate - minDate).days + 1)], verbose=verbose, desc='Collecting data'):
+                    if api == Api.MARKETWATCH and cdate.weekday() != 0: continue ## MarketWatch returns all days until end of week
+                    if cdate < skipRecollectionThresholdDate: continue ## skip re-collection of data
+                    data = self.apiManager.get(api).getEarningsDates(cdate, week=True)
 
-                ## parse data
-                for d in tqdm.tqdm(data, leave=False, desc='Parsing and inserting'):
-                    datapointKWArgs = {
-                        'inputDate': self.currentDate,
-                        'earningsDate': cdate if api == Api.NASDAQ else d['date']
-                    }
-                    if api != Api.NASDAQ:
-                        ekey = { 'symbol': shortcdict(d, 'ticker', shortcdict(d, 'symbol')), 'companyName': shortcdict(d, 'companyshortname', shortcdict(d, 'name')) }
-                        datapointKWArgs['exchange'] = shortcdict(exchangeDictCache, ekey, lambda: getExchange(**ekey))
+                    ## parse data
+                    for d in tqdm.tqdm(data, leave=False, desc='Parsing and inserting'):
+                        datapointKWArgs = {
+                            'inputDate': self.currentDate,
+                            'earningsDate': cdate if api == Api.NASDAQ else d['date']
+                        }
+                        if api != Api.NASDAQ:
+                            ekey = { 'symbol': shortcdict(d, 'ticker', shortcdict(d, 'symbol')), 'companyName': shortcdict(d, 'companyshortname', shortcdict(d, 'name')) }
+                            datapointKWArgs['exchange'] = shortcdict(exchangeDictCache, ekey, lambda: getExchange(**ekey))
 
-                    for k,v in d.items():
-                        ## ignore keys
-                        if k in ['date']: continue
+                        for k,v in d.items():
+                            ## ignore keys
+                            if k in ['date']: continue
 
-                        ## adjust key to DB column (in camel case)
-                        key = k
-                        if k == 'lastYearRptDt': key = 'lastYearReportDate'
-                        elif k in ['surprise', 'epssurprisepct', 'surprise_percentage']: key = 'surprisePercentage'
-                        elif k == 'noOfEsts': key = 'numberOfEstimates'
-                        elif k == 'ticker': key = 'symbol'
-                        elif k == 'companyshortname': key = 'name'
-                        elif k == 'epsestimate': key = 'epsForecast'
-                        elif k == 'epsactual': key = 'eps'
-                        elif k == 'fiscal quarter': key = 'fiscalQuarterEnding'
-                        elif k == 'eventname': key = 'eventName'
-                        elif k == 'startdatetime': key = 'startDateTime'
-                        elif k == 'startdatetimetype': key = 'startDateTimeType'
-                        elif k == 'lastYearEPS': key = 'lastYearEps'
+                            ## adjust key to DB column (in camel case)
+                            key = k
+                            if k == 'lastYearRptDt': key = 'lastYearReportDate'
+                            elif k in ['surprise', 'epssurprisepct', 'surprise_percentage']: key = 'surprisePercentage'
+                            elif k == 'noOfEsts': key = 'numberOfEstimates'
+                            elif k == 'ticker': key = 'symbol'
+                            elif k == 'companyshortname': key = 'name'
+                            elif k == 'epsestimate': key = 'epsForecast'
+                            elif k == 'epsactual': key = 'eps'
+                            elif k == 'fiscal quarter': key = 'fiscalQuarterEnding'
+                            elif k == 'eventname': key = 'eventName'
+                            elif k == 'startdatetime': key = 'startDateTime'
+                            elif k == 'startdatetimetype': key = 'startDateTimeType'
+                            elif k == 'lastYearEPS': key = 'lastYearEps'
 
-                        ## parse and adjust value
-                        val = v
-                        if k in ['lastYearEPS', 'marketCap', 'epsForecast', 'eps']:
-                            val = v.replace('$','').replace(',','')
-                            if '(' in val:
-                                val = val.replace('(','').replace(')','')
-                                val = float(val) * -1
-                            elif val not in ['', 'N/A']:
-                                val = float(val)
-                        elif k == 'lastYearRptDt' and v != 'N/A':
-                            val = datetime.strptime(v, "%m/%d/%Y").date()
-                        elif k == 'fiscalQuarterEnding':
-                            try:
-                                val = datetime.strptime(v, '%b/%Y').date()
-                            except ValueError as e: ## v is '/2000'-type
-                                print('got value error for fiscalQuarterEnding', v, e)
-                                if v.count('/') == 1:
-                                    vsplit = v.split('/')
-                                    if vsplit[0] == '':
-                                        val = vsplit[1]
-                                else:
-                                    val = v
-                        elif k == 'fiscal quarter':
-                            val = datetime.strptime(v, '%m/%d/%Y').date()
-                        elif k == 'surprise_percentage' and v != 'N/A' and api == Api.MARKETWATCH:
-                            val = float(v.split('(')[1].split('%')[0].replace(',',''))
+                            ## parse and adjust value
+                            val = v
+                            if k in ['lastYearEPS', 'marketCap', 'epsForecast', 'eps']:
+                                val = v.replace('$','').replace(',','')
+                                if '(' in val:
+                                    val = val.replace('(','').replace(')','')
+                                    val = float(val) * -1
+                                elif val not in ['', 'N/A']:
+                                    val = float(val)
+                            elif k == 'lastYearRptDt' and v != 'N/A':
+                                val = datetime.strptime(v, "%m/%d/%Y").date()
+                            elif k == 'fiscalQuarterEnding':
+                                try:
+                                    val = datetime.strptime(v, '%b/%Y').date()
+                                except ValueError as e: ## v is '/2000'-type
+                                    print('got value error for fiscalQuarterEnding', v, e)
+                                    if v.count('/') == 1:
+                                        vsplit = v.split('/')
+                                        if vsplit[0] == '':
+                                            val = vsplit[1]
+                                    else:
+                                        val = v
+                            elif k == 'fiscal quarter':
+                                val = datetime.strptime(v, '%m/%d/%Y').date()
+                            elif k == 'surprise_percentage' and v != 'N/A' and api == Api.MARKETWATCH:
+                                val = float(v.split('(')[1].split('%')[0].replace(',',''))
 
-                        ## no need to have multiple types of empty/blank/N/A values, use null instead 
-                        if type(val) == str and val.lower() in ['', 'n/a']:
-                            val = None
+                            ## no need to have multiple types of empty/blank/N/A values, use null instead 
+                            if type(val) == str and val.lower() in ['', 'n/a']:
+                                val = None
+                            
+                            datapointKWArgs[key] = val
                         
-                        datapointKWArgs[key] = val
-                    
-                    ## market watch surprise sign can be incorrect if forecasted eps is negative (e.g. forecast: -0.49, actual: -0.53, surprise: +8.7%)
-                    if api == Api.MARKETWATCH and type(datapointKWArgs['eps']) not in [str, NoneType] and type(datapointKWArgs['epsForecast']) not in [str, NoneType] and type(datapointKWArgs['surprisePercentage']) not in [str, NoneType]:
-                        if (datapointKWArgs['eps'] < datapointKWArgs['epsForecast'] and datapointKWArgs['surprisePercentage'] > 0) or (datapointKWArgs['eps'] > datapointKWArgs['epsForecast'] and datapointKWArgs['surprisePercentage'] < 0):
-                            datapointKWArgs['surprisePercentage'] *= -1
+                        ## market watch surprise sign can be incorrect if forecasted eps is negative (e.g. forecast: -0.49, actual: -0.53, surprise: +8.7%)
+                        if api == Api.MARKETWATCH and type(datapointKWArgs['eps']) not in [str, NoneType] and type(datapointKWArgs['epsForecast']) not in [str, NoneType] and type(datapointKWArgs['surprisePercentage']) not in [str, NoneType]:
+                            if (datapointKWArgs['eps'] < datapointKWArgs['epsForecast'] and datapointKWArgs['surprisePercentage'] > 0) or (datapointKWArgs['eps'] > datapointKWArgs['epsForecast'] and datapointKWArgs['surprisePercentage'] < 0):
+                                datapointKWArgs['surprisePercentage'] *= -1
 
-                    ## insert data into DB
-                    try:
-                        if not dryrun:
-                            dbm.insertEarningsDateDump(api, **datapointKWArgs)
-                            dbm.commit()
-                        insertcount += 1
-                        uniquedates.add(datapointKWArgs['earningsDate'])
-                    except sqlite3.IntegrityError as e:
-                        if firstIntegrityError:
-                            ## typically occurs when earnings release and earnings call are on the same day, which is fine for basic earnings date use. TODO: add eventName as key so both rows are kept, e.g. Q4 2023  Earnings Release, Q4 2023  Earnings Call for NASDAQ:CSPI:2023-12-12
-                            print(e)
-                            print(datapointKWArgs)
-                            res = dbm.getDumpEarningsDates(api, shortcdict(datapointKWArgs, 'exchange'), shortcdict(datapointKWArgs, 'symbol'), inputDate=asISOFormat(datapointKWArgs['inputDate']), earningsDate=asISOFormat(datapointKWArgs['earningsDate']))
-                            print(res)
-                            firstIntegrityError = False
+                        ## insert data into DB
+                        try:
+                            if not dryrun:
+                                dbm.insertEarningsDateDump(api, **datapointKWArgs)
+                                dbm.commit()
+                            insertcount += 1
+                            uniquedates.add(datapointKWArgs['earningsDate'])
+                        except sqlite3.IntegrityError as e:
+                            if firstIntegrityError:
+                                ## typically occurs when earnings release and earnings call are on the same day, which is fine for basic earnings date use. TODO: add eventName as key so both rows are kept, e.g. Q4 2023  Earnings Release, Q4 2023  Earnings Call for NASDAQ:CSPI:2023-12-12
+                                print(e)
+                                print(datapointKWArgs)
+                                res = dbm.getDumpEarningsDates(api, shortcdict(datapointKWArgs, 'exchange'), shortcdict(datapointKWArgs, 'symbol'), inputDate=asISOFormat(datapointKWArgs['inputDate']), earningsDate=asISOFormat(datapointKWArgs['earningsDate']))
+                                print(res)
+                                firstIntegrityError = False
+            except DatabaseStructureChanged:
+                if api != Api.YAHOO:
+                    raise ValueError(f'Unexpected API raised DatabaseStructureChanged exception: {api}')
+                dbm.deleteEarningsDatesYahooDump(inputDate=self.currentDate)
+                dbm.commit()
+                generateDatabaseAnnotationObjectsFile()
+                apiDBErrors.append(api)
+                continue
 
-        print(f'got data for {len(uniquedates)} days')
-        print(f'inserted {insertcount} earnings dates')
+        if uniquedates or insertcount:
+            print(f'got data for {len(uniquedates)} days')
+            print(f'inserted {insertcount} earnings dates')
+        if apiDBErrors:
+            print(f'Database was changed during execution; re-run for {apiDBErrors}')
 
     ## collect google interests and insert to DB
     ## measures up-to-date-ness by comparing latest GI and stock data dates, if not then it will collect data up til maxdate rather than til the latest stock data date

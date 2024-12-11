@@ -11,12 +11,13 @@ import difflib, sqlite3
 from enum import Enum
 
 from constants.enums import Api, Direction
+from constants.exceptions import DatabaseStructureChanged
 from constants.values import usExchanges, multiExchangeSymbols
 from managers.apiManager import APIManager
 from managers.databaseManager import DatabaseManager
 from managers._generatedDatabaseExtras.databaseRowObjects import symbolInfoYahooDCamelCaseTableColumns
 from structures.sql.sqlOrderObj import SQLOrderObj
-from utils.dbSupport import generateCommaSeparatedQuestionMarkString, getTableFunctionName
+from utils.dbSupport import convertToSnakeCase, generateCommaSeparatedQuestionMarkString, getTableFunctionName
 from utils.support import getItem, shortcdict, tqdmLoopHandleWrapper
 
 dbm: DatabaseManager = DatabaseManager()
@@ -87,10 +88,14 @@ def getExchange(symbol, source:Enum=None, companyName:str=None, fromOptions=Fals
             for k,v in yahooSymbol.items():
                 if v is not None:
                     if k not in symbolInfoYahooDCamelCaseTableColumns: 
-                        ## only appears for limited number of symbols (e.g. MYO), ignore unless real data is apparent
+                        ## only appears for limited number of symbols (e.g. MYO, AIFU)
                         ## ['underlyingExchangeSymbol', 'headSymbol', 'uuid', 'underlyingSymbol']
-                        if k not in ['uuid']:
-                            raise ValueError(f'"{k}" argument not in table columns')
+                        if k not in ['uuid', 'newSymbol']:
+                            ## key does not have basically duplicate/irrelevant data, may be worth saving
+                            print(f'Warning: "{k}" argument not in symbol_info_yahoo_d columns; adding')
+                            dbm._addColumn('symbol_info_yahoo_d', convertToSnakeCase(k))
+                            raise DatabaseStructureChanged()
+
                     proccessedkwargs[k] = v
             args = [shortcdict(proccessedkwargs, argName) for argName in symbolInfoYahooDCamelCaseTableColumns]
             dbm.dbc.execute(f'INSERT INTO {dbm.getTableString("symbol_info_yahoo_d")} VALUES ({generateCommaSeparatedQuestionMarkString(symbolInfoYahooDCamelCaseTableColumns)})', args)

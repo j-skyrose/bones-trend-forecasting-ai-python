@@ -36,3 +36,6 @@ class DamageDetected(Exception):
 
 class NotMarketDay(Exception):
     pass
+
+class DatabaseStructureChanged(Exception):
+    pass
