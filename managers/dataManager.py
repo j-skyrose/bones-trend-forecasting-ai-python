@@ -355,34 +355,13 @@ class DataManager():
     @classmethod
     def forStats(cls, seriesType=SeriesType.DAILY, **kwargs):
         return cls.forTraining(seriesType, statsOnly=True, **kwargs)
-    
-    @classmethod
-    def determineAllSetsTickerSplit(cls, setCount, **kwargs):
+
+    @staticmethod
+    def determineAllSetsTickerSplit(setCount, **kwargs):
                                     # precedingRange=0, followingRange=0, threshold=0,
-        if gconfig.testing.REDUCED_SYMBOL_SCOPE: raise ValueError('Do not run with reduced symbol scope, results will be inadequate.')
+        if gconfig.testing.REDUCED_SYMBOL_SCOPE: raise ValueError('Do not run with reduced symbol scope, results will be incomplete.')
 
-        self = cls.forAnalysis(
-            initializeStockDataHandlersOnly=True,
-            maxPageSize=100,
-            **kwargs
-        )
-
-        ## catalog output classes for all instances for all handlers
-        outputClassCountsByTicker = {}
-        for i in range(self.getSymbolListPageCount()):
-            _localOutputClassCountsByTicker = {}
-            if i != 0: self.initializeAllDataForPage(i)
-            for k,v in tqdm.tqdm(self.stockDataHandlers.items(), desc='Collecting output class counts'):
-                if not v.selections: continue ## no instances
-                _localOutputClassCountsByTicker[k] = self.initializeStockDataInstances([v], collectOutputClassesOnly=True, verbose=0)
-            hasPositivesCount = 0
-            for k,v in _localOutputClassCountsByTicker.items():
-                if v[OutputClass.POSITIVE] > 0:
-                    print(k.getTuple(), v)
-                    hasPositivesCount += 1
-            print(f'Initialized page {i+1}/{self.getSymbolListPageCount()+1}. Tickers with positives count: {hasPositivesCount}/{len(_localOutputClassCountsByTicker)}')
-            outputClassCountsByTicker = {**outputClassCountsByTicker, **_localOutputClassCountsByTicker}
-
+        outputClassCountsByTicker = getOutputClassCountsByTicker(verbose=1, **kwargs)
         instanceCount = 0
         positiveInstanceCount = 0
         for v in outputClassCountsByTicker.values():
@@ -1386,6 +1365,53 @@ class DataManager():
 
     def save(self, networkId, setId=None):
         dbm.saveDataSet(networkId, self.trainingSet, self.validationSet, self.testingSet, setId)
+
+
+def getOutputClassCountsByTicker(dm: DataManager=None, maxPageSize=100, 
+                                 dropTickersWithoutPositiveInstances=False,
+                                 **kwargs) -> Dict[TickerKeyType, Dict[OutputClass, int]]:
+    '''catalog output classes for all instances for all handlers'''
+    verbose = shortcdict(kwargs, 'verbose', 1)
+    kwargs['verbose'] = 0
+
+    if dm is None:
+        dm = DataManager.forAnalysis(
+            initializeStockDataHandlersOnly=True,
+            maxPageSize=maxPageSize,
+            **kwargs
+        )
+
+    outputClassCountsByTicker = {}
+    hasPositivesCount = 0
+    paging = dm.usePaging
+    if paging:
+        loopHandle = tqdmLoopHandleWrapper(range(dm.getSymbolListPageCount()), verbose, desc='Pages')
+    else:
+        loopHandle = [1]
+    for i in loopHandle:
+        _localOutputClassCountsByTicker = {}
+        if paging and i != 0: dm.initializeAllDataForPage(i)
+        for k,v in tqdmLoopHandleWrapper(dm.stockDataHandlers.items(), max(0, verbose-0.5), desc='Collecting output class counts'):
+            if not v.selections: continue ## no instances
+            _localOutputClassCountsByTicker[k] = dm.initializeStockDataInstances([v], collectOutputClassesOnly=True, verbose=0)
+        _localHasPositivesCount = 0
+        for k,v in _localOutputClassCountsByTicker.items():
+            hasPositives = v[OutputClass.POSITIVE] > 0
+            if hasPositives:
+                if verbose > 1: print(k.getTuple(), v)
+                _localHasPositivesCount += 1
+            elif dropTickersWithoutPositiveInstances:
+                continue
+            outputClassCountsByTicker[k] = v
+
+        if paging:
+            if verbose > 1:
+                print(f'Initialized page {i+1}/{dm.getSymbolListPageCount()+1}. Tickers with positives count: {_localHasPositivesCount}/{len(_localOutputClassCountsByTicker)}')
+            elif verbose > 0:
+                hasPositivesCount += _localHasPositivesCount
+                loopHandle.set_postfix_str(f'Sym w/ pos cnt: {hasPositivesCount}/{len(outputClassCountsByTicker)}')
+    
+    return outputClassCountsByTicker
 
 
 if __name__ == '__main__':
