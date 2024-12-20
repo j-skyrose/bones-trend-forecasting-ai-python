@@ -1238,12 +1238,13 @@ class DataManager():
                 seriesList.append(numpy.reshape(seriesArr, (self.precedingRange, seriesSize)))
 
             return [
-                numpy.array(staticList),
-                *([numpy.array(semiseriesList)] if self.config.feature.financials.enabled else []),
-                numpy.array(seriesList)
+                *([numpy.array(staticList)] if staticSize > 0 else []),
+                *([numpy.array(semiseriesList)] if semiseriesSize > 0 else []),
+                *([numpy.array(seriesList)] if seriesSize > 0 else []),
             ]
 
-        def constructDataSet(dpiList=[], vectorList=[], label=''):
+        def constructDataSet(dpiList=[], vectorList=[], label='') -> List[List]:
+            '''returns [[input vectors], [output vectors]]'''
             if self.config.network.recurrent:
                 inp = constrList_recurrent(dpiList, vectorList, label=label)
             else:
@@ -1277,7 +1278,8 @@ class DataManager():
             setClassification = setClassifications[setType]
             instanceSet = instanceSets[setType]
             if len(setClassification) > 1 or setClassification[0] != SetClassificationType.ALL:
-                sortedSets = getInstancesByClass(instanceSet, setClassification)
+                _setClassification = SetClassificationType.excludingAll() if SetClassificationType.ALL in setClassification else setClassification
+                sortedSets = getInstancesByClass(instanceSet, _setClassification)
                 instanceSets[setType] = sortedSets
             else:
                 instanceSets[setType] = [instanceSet]
@@ -1303,7 +1305,14 @@ class DataManager():
             todoTickers = list(todoTickers)
             
             ## get input vectors
-            inputVectorTuplesDict = { s: [] for s in requiredSetTypes }
+            def sclsTypes(setType): 
+                return SetClassificationType.excludingAll() \
+                        if len(setClassifications[setType]) > 1 and SetClassificationType.ALL in setClassifications[setType] \
+                        else [SetClassificationType.ALL]
+            inputVectorTuplesDict = {}
+            for s in requiredSetTypes:
+                inputVectorTuplesDict[s] = [[] for _ in sclsTypes(s)]
+
             t: TickerKeyType
             for tickerSplitIndex in tqdm.tqdm(range(math.ceil(len(todoTickers)/self.maxGoogleInterestHandlers)), desc='Compiling raw input vectors'):
                 tickers = todoTickers[tickerSplitIndex*self.maxGoogleInterestHandlers:(tickerSplitIndex+1)*self.maxGoogleInterestHandlers]
@@ -1311,45 +1320,67 @@ class DataManager():
 
                 for stype,ticker,dpi in tqdm.tqdm([(s,t,d) for s in requiredSetTypes for t in tickers for instanceSet in instanceSets[s] for d in instanceSet], desc='Generating vectors', leave=False):
                     if dpi.stockDataHandler.getTickerKey() == ticker:
-                        inputVectorTuplesDict[stype].append(dpi.getInputVector())
-
-            ## process input vectors to data sets
-            generatedData = [
-                constructDataSet(instanceSet, inputVectorTuplesDict[setType], setType.name) for instanceSet in instanceSets[setType] for setType in requiredSetTypes
-            ]
-
+                        if len(setClassifications[stype]) > 1 and SetClassificationType.ALL in setClassifications[stype]:
+                            oclassIndx = SetClassificationType.getForOutputClass(dpi.outputClass).index
+                        else:
+                            oclassIndx = SetClassificationType.ALL
+                        inputVectorTuplesDict[stype][oclassIndx].append(dpi.getInputVector())
+            constructDataSetList = lambda setType: [constructDataSet(instanceSet, inputVectorTuplesDict[setType][isindx], setType.name) for isindx, instanceSet in enumerate(instanceSets[setType])]
         else:
-            generatedData = []
-            for setType in requiredSetTypes:
-                generatedDataSets = [constructDataSet(instanceSet, label=setType.name) for instanceSet in instanceSets[setType]]
-                if len(setClassifications[setType]) > 1 and SetClassificationType.ALL in setClassifications[setType]:
-                    ## combine data sets for each individual classification to satisfy ALL class
-                    '''
-                        [ class1, class2
-                            [ input, output
-                                [ static, semi, series
-                                    [
-                                        len(classX instances)  
-                                    ]
-                                ],
-                                [ 
+            constructDataSetList = lambda setType: [constructDataSet(instanceSet, label=setType.name) for instanceSet in instanceSets[setType]]
+
+        ## TODO: input sets should not be wrapped in extraneous lists; particularly happens for recurrent where there is only series data
+
+        generatedData = []
+        for setType in requiredSetTypes:
+            generatedDataSets = constructDataSetList(setType)
+            if len(setClassifications[setType]) > 1 and SetClassificationType.ALL in setClassifications[setType]:
+                ## combine data sets for each individual classification to satisfy ALL class
+                '''
+                    [ class1, class2
+                        [ input, output
+                            [ static, semi, series
+                                [
                                     len(classX instances)  
                                 ]
+                            ],
+                            [ 
+                                len(classX instances)  
                             ]
                         ]
-                    '''
-                    combinedSet = [[
-                        [
-                            ## recurrent, TODO: non
-                            numpy.array(list(itertools.chain(*[s[0][f] for s in generatedDataSets]))) for f in range(sum([
-                                staticSize > 0, semiseriesSize > 0, seriesSize > 0
-                            ]))
-                        ],
-                        numpy.array(list(itertools.chain(*[s[1] for s in generatedDataSets])))
-                    ]]
+                    ]
+                '''
+                
+                combinedOutput = numpy.array(list(itertools.chain(*[classset[1] for classset in generatedDataSets])))
+                if self.config.network.recurrent:
+                    xindexes = [] ## filter out 
+                    if staticSize > 0: xindexes.append(0)
+                    if semiseriesSize > 0: xindexes.append(1)
+                    if seriesSize > 0: xindexes.append(2)
 
-                    generatedDataSets = combinedSet + generatedDataSets
-                generatedData.append(generatedDataSets)
+                    combinedInput = [
+                        ## recurrent, TODO: non
+                        numpy.array(list(itertools.chain(*[classset[0][f] for classset in generatedDataSets]))) for f in 
+
+                        # xindexes
+                        range(sum([
+                            staticSize > 0,
+                            semiseriesSize > 0,
+                            seriesSize > 0
+                        ]))
+                    ]
+                else:
+                    combinedInput = [
+                        numpy.array(list(itertools.chain(*[classset[0] for classset in generatedDataSets])))
+                    ]
+
+                combinedSet = [[
+                    combinedInput,
+                    combinedOutput
+                ]]
+
+                generatedDataSets = combinedSet + generatedDataSets
+            generatedData.append(generatedDataSets)
 
         if gconfig.testing.enabled and verbose > 1:
             print('Stock data handler build time', self.getprecstocktime)
