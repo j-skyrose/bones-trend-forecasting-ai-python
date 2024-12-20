@@ -216,7 +216,9 @@ class Trainer:
                     startt = time.time()
 
                     printCurrentStatus(s)
-                    self.instance.updateSets(**self._getSetKWParams(slice=s, validationSetOnly=True))
+                    self.instance.updateSets(**self._getSetKWParams(slice=s, validationSetOnly=True, 
+                                                                    includeInValidationSetInstancesRemovedByReduction=gconfig.sets.instanceReduction.enabled
+                                                                    ))
                     self.instance.evaluate()
                     gc.collect()
                     iterationTimes.append(time.time() - startt)

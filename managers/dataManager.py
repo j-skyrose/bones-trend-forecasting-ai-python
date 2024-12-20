@@ -1172,13 +1172,16 @@ class DataManager():
                      trainingSetOnly=False, excludeTrainingSet=False, trainingSetClassification=SetClassificationType.ALL,
                      validationSetOnly=False, excludeValidationSet=False, validationSetClassification=SetClassificationType.ALL,
                      testingSetOnly=False, excludeTestingSet=False, testingSetClassification=SetClassificationType.ALL,
-                     exchange=None, symbol=None, slice=None, verbose=None):
+                     exchange=None, symbol=None, slice=None,
+                     includeInValidationSetInstancesRemovedByReduction=False,
+                     verbose=None):
         verbose = shortc(verbose, self.verbose)
 
         if self.useAllSets and not self.useOptimizedSplitMethodForAllSets and shortc(slice, 0) > self.getNumberOfWindowIterations() - 1: raise IndexError()
         # if self.setsSlidingWindowPercentage and slice is None: raise ValueError('Keras set setup will overload memory, useAllSets set but not slice indicated')
         if [trainingSetOnly, validationSetOnly, testingSetOnly].count(True) > 1: raise ValueError('Only one set type can use the "only" argument')
         if [excludeTrainingSet, excludeValidationSet, excludeTestingSet].count(True) == 3: raise ValueError('Cannot exclude all set types')
+        if slice is None and includeInValidationSetInstancesRemovedByReduction: raise ValueError('Cannot include removed instances if not initializing window')
 
         ## lazily ensure slice is not used if not setup for all sets
         if not self.useAllSets:
@@ -1252,9 +1255,16 @@ class DataManager():
                 keras.utils.to_categorical(oup, num_classes=OutputClass.__len__()) if self.config.dataForm.outputVector == DataFormType.CATEGORICAL else oup
             ]
 
-        instanceSets = {}
+        instanceSets: Dict[SetType, List[DataPointInstance]] = {}
         if SetType.TRAINING in requiredSetTypes: instanceSets[SetType.TRAINING] = self.trainingSet
-        if SetType.VALIDATION in requiredSetTypes: instanceSets[SetType.VALIDATION] = shortc(self.explicitValidationSet, self.validationSet)
+        if SetType.VALIDATION in requiredSetTypes:
+            instanceSets[SetType.VALIDATION] = shortc(self.explicitValidationSet, self.validationSet)
+            if includeInValidationSetInstancesRemovedByReduction:
+                for h in tqdmLoopHandleWrapper(self.stockDataHandlers.values(), max(0, verbose-0.5), desc='Initializing removed-dates stock instances'):
+                    for sindex in h.prunedIndexes:
+                        oupclass = getOutputClass(h.data, sindex, self.followingRange, self.changeType, self.changeValue, shortcobj(h, 'stockPriceNormalizationMax'), h.dataOffset)
+                        instanceSets[SetType.VALIDATION].append(DataPointInstance(self.buildInputVector, h, sindex, oupclass))
+                        
         if SetType.TESTING in requiredSetTypes: instanceSets[SetType.TESTING] = self.testingSet
 
         ## reduce instance sets according to exchange/symbol
