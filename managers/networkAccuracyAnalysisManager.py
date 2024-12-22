@@ -19,14 +19,13 @@ from globalConfig import config as gconfig
 from managers.databaseManager import DatabaseManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
-from structures.EvaluationDataHandler import EvaluationDataHandler
 from constants.exceptions import NoData
 from managers.dataManager import DataManager
 from structures.trainingInstance import TrainingInstance
 from managers.inputVectorFactory import InputVectorFactory
 from utils.support import Singleton, recdotdict, shortc
 from utils.other import determinePrecedingRangeType
-from constants.enums import AccuracyAnalysisTypes, AccuracyType, PrecedingRangeType, CorrBool
+from constants.enums import AccuracyAnalysisTypes, PrecedingRangeType, CorrBool
 
 dbm = DatabaseManager()
 nnm = NeuralNetworkManager()
@@ -211,11 +210,9 @@ class NetworkAccuracyAnalysisManager(Singleton):
                     if acctype == AccuracyAnalysisTypes.STOCK:
                         validationSet = dm.getKerasSets(exchange=exchange, symbol=symbol, validationSetOnly=True, verbose=0.5)
                         if len(validationSet) > 0:
-                            vhandler: EvaluationDataHandler = EvaluationDataHandler(overallValidationSet=validationSet)
-
                             if gconfig.testing.predictor:
                                 startt = time.time()
-                            res = vhandler.evaluateAll(self.nn.model, verbose=0)
+                            res = self.nn.evaluate(validationSet, verbose=0)
                             if gconfig.testing.predictor:
                                 self.testing_evaluateAllTime += time.time() - startt
                             

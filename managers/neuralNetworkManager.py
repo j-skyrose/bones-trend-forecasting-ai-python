@@ -11,7 +11,7 @@ sys.path.append(path)
 import tqdm, time, dill
 from managers.databaseManager import DatabaseManager
 from utils.support import Singleton, recdotdict
-from constants.enums import AccuracyType, SeriesType
+from constants.enums import SeriesType
 
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 
@@ -49,13 +49,11 @@ class NeuralNetworkManager(Singleton):
         if type(arg) == NeuralNetworkInstance: return arg
         return self.networks[str(arg)]
 
-    def getAllNetworksBy(self, accuracyType=AccuracyType.NEGATIVE, negativeAccuracy=0.0, changeThreshold=0.0, precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, epochs=0):
+    def getAllNetworksBy(self, changeThreshold=0.0, precedingRange=0, followingRange=0, seriesType=SeriesType.DAILY, epochs=0):
         retnns = []
         for nn in self.networks.values():
             nnst = nn.stats
-            if nnst.accuracyType == accuracyType and \
-                nnst.negativeAccuracy >= negativeAccuracy and \
-                nnst.changeThreshold >= changeThreshold and \
+            if nnst.changeThreshold >= changeThreshold and \
                 nnst.precedingRange >= precedingRange and \
                 nnst.followingRange >= followingRange and \
                 nnst.seriesType == seriesType and \
@@ -66,4 +64,3 @@ class NeuralNetworkManager(Singleton):
 
 if __name__ == '__main__':
     nm = NeuralNetworkManager()
-    # print(AccuracyType.COMBINED)

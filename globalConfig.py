@@ -8,7 +8,7 @@ sys.path.append(path)
 ## done boilerplate "package"
 
 from constants.values import indicatorsKey
-from constants.enums import AccuracyType, ChangeType, DataFormType, Direction, FeatureExtraType, IndicatorType, NormalizationMethod, OutputClass, ReductionMethod, SeriesType
+from constants.enums import ChangeType, DataFormType, Direction, FeatureExtraType, IndicatorType, NormalizationMethod, OutputClass, ReductionMethod, SeriesType
 from utils.support import recdotdict
 
 # TESTING = True
@@ -141,8 +141,6 @@ config = recdotdict({
         'recurrent': True
     },
     'trainer': {
-        'customValidationClassValueRatio': 0.15, ## positive : negative
-
     },
     'feature': {
         'exchange': genFeatureObj(True, FeatureExtraType.SINGLE),

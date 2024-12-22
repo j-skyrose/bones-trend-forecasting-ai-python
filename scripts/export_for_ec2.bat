@@ -42,7 +42,6 @@ del %EXPORTDIR%\interfaces\predictor.py
 del %EXPORTDIR%\interfaces\trainer.py
 del %EXPORTDIR%\managers\dataManager.py
 del %EXPORTDIR%\managers\networkAnalysisManager.py
-del %EXPORTDIR%\structures\EvaluationDataHandler.py
 del %EXPORTDIR%\structures\neuralNetworkInstance.py
 rmdir /S /Q %EXPORTDIR%\structures\callbacks
 

@@ -13,11 +13,10 @@ from keras.callbacks import EarlyStopping
 from typing import Dict
 
 from globalConfig import trainingConfig
-from constants.enums import SeriesType, AccuracyType
+from constants.enums import SeriesType
 from managers.dataManager import DataManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
-from structures.EvaluationDataHandler import EvaluationDataHandler
 from structures.callbacks.EarlyStoppingWithCustomValidationCallback import EarlyStoppingWithCustomValidation
 from structures.callbacks.TimeBasedEarlyStoppingCallback import TimeBasedEarlyStopping
 from structures.callbacks.DeviationFromBasedEarlyStoppingCallback import DeviationFromBasedEarlyStopping
@@ -30,26 +29,19 @@ class TrainingInstance():
     testingSet = None
 
     def __init__(self, nnetwork: NeuralNetworkInstance, tconfig=trainingConfig, **kwargs):
-            # trainingSet=None, validationSet=None, testingSet=None, 
-            # validationPSet=None, validationNSet=None, testingPSet=None, testingNSet=None):
+            # trainingSet=None, validationSet=None, testingSet=None):
         self.network = nnetwork
         self.config = recdotdict(tconfig)
 
         self.updateSets(**kwargs)
 
-    def updateSets(self, trainingSet=None, validationSet=None, testingSet=None, validationPSet=None, validationNSet=None, testingPSet=None, testingNSet=None):
+    def updateSets(self, trainingSet=None, validationSet=None, testingSet=None):
         self.trainingSet = shortc(trainingSet, self.trainingSet)
         self.validationSet = shortc(validationSet, self.validationSet)
         self.testingSet = shortc(testingSet, self.testingSet)
 
-        if (type(validationSet) is list and (len(validationSet[0][0] if self.network.config.network.recurrent else validationSet[0]))) or (validationPSet and validationNSet):
-            self.validationDataHandler: EvaluationDataHandler = EvaluationDataHandler(validationSet, validationPSet, validationNSet)
-
-        if (type(testingSet) is list and (len(testingSet[0][0] if self.network.config.network.recurrent else testingSet[0]))) or (testingPSet and testingNSet):
-            self.testingDataHandler: EvaluationDataHandler = EvaluationDataHandler(testingSet, testingPSet, testingNSet)
-
     def updateNetworkMetrics(self, resultsObj: Dict, dryRun=False):
-        return self.network.updateMetrics(resultsObj, self.validationDataHandler, dryRun)
+        return self.network.updateMetrics(resultsObj, self.validationSet, dryRun)
 
     def setTrainingConfig(self, config=None, epochs=None, batchSize=None):
         if config:
@@ -72,14 +64,11 @@ class TrainingInstance():
             pass
         return self.evaluate(verbose)
 
-    def train(self, epochs=None, minEpochs=5, validationType: AccuracyType=AccuracyType.OVERALL, patience=None, stopTime=None, timeDuration=None, verbose=1, **kwargs):
-        pos = self.validationDataHandler[AccuracyType.POSITIVE][0]
-        neg = self.validationDataHandler[AccuracyType.NEGATIVE][0]
-        if verbose > 0: print('split:', len(pos[0] if self.network.config.network.recurrent else pos), ':', len(neg[0] if self.network.config.network.recurrent else pos))
+    def train(self, epochs=None, minEpochs=5, patience=None, stopTime=None, timeDuration=None, verbose=1, **kwargs):
 
         try:
             if not epochs:
-                validation_data = self.validationDataHandler.getTuple(validationType) if validationType else None
+                validation_data = self.validationSet
                 self.network.fit(*self.trainingSet,
                     epochs=sys.maxsize,
                     batch_size=self.config.batchSize, verbose=verbose,
@@ -91,10 +80,8 @@ class TrainingInstance():
                             additionalLabel='POSITIVE',
                             network = self.network, batchSize=self.config.batchSize, verbose=verbose, restore_best_weights=True,
                             
-                            custom_validation_data=None if validationType == AccuracyType.OVERALL else [
-                                self.validationDataHandler.getTuple(AccuracyType.POSITIVE)
-                            ],
-                            custom_validation_data_values=[1] if validationType != AccuracyType.OVERALL else None,
+                            custom_validation_data=None,
+                            custom_validation_data_values=None,
                             monitor='val_accuracy', mode='max',
                             # monitor='val_loss', mode='min',
                             override_stops_on_value=0,
@@ -114,13 +101,13 @@ class TrainingInstance():
                     patience=patience,
                     min_delta=0.00001
                 ))
-                fitKWArgs['validation_data'] = self.validationDataHandler.getTuple(AccuracyType.OVERALL)
+                fitKWArgs['validation_data'] = self.validationSet
 
             if stopTime and verbose > 0: 
                 print('Stopping at', stopTime)
                 print('Current time', time.time())
 
-            if len(self.validationDataHandler[validationType][0]) == 0:
+            if len(self.validationSet[0]) == 0:
                 raise IndexError('Validation set empty')
 
             self.network.fit(*self.trainingSet,
@@ -140,12 +127,12 @@ class TrainingInstance():
             pass
     
     def evaluate(self, verbose=1, **kwargs):
-        if not self.validationDataHandler: raise AttributeError
-        return self.network.evaluate(self.validationDataHandler, batch_size=self.config.batchSize, verbose=verbose, **kwargs)
+        if not self.validationSet: raise AttributeError
+        return self.network.evaluate(self.validationSet, batch_size=self.config.batchSize, verbose=verbose, **kwargs)
 
     def test(self, verbose=1):
-        if not self.testingDataHandler: raise AttributeError
-        return self.network.evaluate(self.testingDataHandler, batch_size=self.config.batchSize, verbose=verbose)        
+        if not self.testingSet: raise AttributeError
+        return self.network.evaluate(self.testingSet, batch_size=self.config.batchSize, verbose=verbose)        
 
 
 
@@ -203,7 +190,7 @@ class TrainingInstance():
 #         { 'units': math.floor(inputSize / 1.5), 'dropout': False, 'dropoutRate': 0.001 },
 #     ]
 #     nn = nnm.createNetworkInstance(optimizer, layers, inputSize,
-#             threshold, precedingRange, followingRange, seriesType, sm.normalizationInfo.high, sm.normalizationInfo.volume, accuracyType=AccuracyType.NEGATIVE
+#             threshold, precedingRange, followingRange, seriesType, sm.normalizationInfo.high, sm.normalizationInfo.volume
 #         )
 
 # ## training

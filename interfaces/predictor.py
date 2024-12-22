@@ -23,7 +23,7 @@ from managers.marketDayManager import MarketDayManager
 from managers.neuralNetworkManager import NeuralNetworkManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.stockDataHandler import StockDataHandler
-from constants.enums import AccuracyType, InputVectorDataType
+from constants.enums import InputVectorDataType
 from constants.exceptions import AnchorDateAheadOfLastDataDate, SufficientlyUpdatedDataNotAvailable
 from utils.support import Singleton, asDate, asList, getIndex, shortc, shortcdict, tqdmLoopHandleWrapper
 from globalConfig import config as gconfig
@@ -275,13 +275,7 @@ class Predictor(Singleton):
 
                 ## perform additional weighting on the predict results accuracies
                 if postPredictionWeighting:
-                    key = AccuracyType.OVERALL
-                    # if nn.properties.accuracyType == AccuracyType.POSITIVE:
-                    #     key = AccuracyType.NEGATIVE
-                    # elif nn.properties.accuracyType == AccuracyType.NEGATIVE:
-                    #     key = AccuracyType.POSITIVE
-
-                    networkFactor = getattr(nn.properties, key.statsName)
+                    networkFactor = getattr(nn.properties, 'accuracy')
                     weightedAccuracyLambda = lambda v: reduce(operator.mul, list(v), 1)
                     weightingsCount = 0
                     try:

@@ -10,7 +10,7 @@ sys.path.append(path)
 from enum import Enum
 from typing import Any, Dict, List
 
-from constants.enums import ChangeType, SeriesType, AccuracyType
+from constants.enums import ChangeType, SeriesType
 from managers._generatedDatabaseExtras.databaseRowObjects import networksSnakeCaseTableColumns, networksCamelCaseTableColumns, networkTrainingConfigSnakeCaseTableColumns, networkTrainingConfigCamelCaseTableColumns
 from structures.normalizationColumnObj import NormalizationColumnObj
 from structures.normalizationDataHandler import NormalizationDataHandler
@@ -27,7 +27,7 @@ class NetworkProperties:
         self.epochs = 0
 
         self.focusedMetric = focusedMetric
-        self.metrics: Dict = { k.statsName:0 for k in AccuracyType }
+        self.metrics: Dict = { 'accuracy': 0 }
         if metrics:
             if type(metrics) is list:
                 for m in metrics:
@@ -73,8 +73,6 @@ class NetworkProperties:
         enumType = None
         if name == 'seriesType':
             enumType = SeriesType
-        elif name == 'accuracyType':
-            enumType = AccuracyType
         elif name == 'changeType':
             enumType = ChangeType
 
@@ -111,10 +109,8 @@ if __name__ == '__main__':
     print(n.id, n.seriesType)
     n.setMax('test', 3)
     print(n.testMax)
-    n.accuracyType = 'COMBINED'
-    print(n.accuracyType)
 
     print(n.getNormalizationInfo())
 
-    n = NetworkProperties.importFrom(recdotdict({'id': 2, 'overallAccuracy': 5}))
-    print(n.overallAccuracy, n.accuracyType)
+    n = NetworkProperties.importFrom(recdotdict({'id': 2, 'accuracy': 5}))
+    print(n.accuracy)

@@ -64,20 +64,6 @@ class Direction(Enum):
     ASCENDING = 'ASC'
     DESCENDING = 'DESC'
 
-class AccuracyType(Enum):
-    def __init__(self, a, b):
-        self.statsName = b
-
-    @classmethod
-    def getOpposite(cls, a):
-        if a == cls.POSITIVE: return cls.NEGATIVE
-        if a == cls.NEGATIVE: return cls.POSITIVE
-        return a
-
-    POSITIVE = 'POSITIVE', 'positiveAccuracy'
-    NEGATIVE = 'NEGATIVE', 'negativeAccuracy'
-    OVERALL = 'OVERALL', 'overallAccuracy'
-
 class SetType(Enum):
     TRAINING = 'TRAINING'
     VALIDATION = 'VALIDATION'
@@ -135,19 +121,6 @@ class InputVectorDataType(Enum):
 class OutputClass(Enum):
     POSITIVE = 'POSITIVE'
     NEGATIVE = 'NEGATIVE'
-
-class SetClassificationType(Enum):
-    def __init__(self, _, index=None, outputClass: OutputClass=None):
-        self.index = index
-        self.outputClass = outputClass
-
-    @classmethod
-    def excludingAll(cls):
-        return [e for e in cls if e != cls.ALL]
-    ALL = 'ALL'
-    ## should be kept in sync with OutputClass enum
-    CLASS1 = 'CLASS1', 0, OutputClass.POSITIVE
-    CLASS2 = 'CLASS2', 1, OutputClass.NEGATIVE
 
 class TimespanType(Enum):
     MINUTE = 'MINUTE'

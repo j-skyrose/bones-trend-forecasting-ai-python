@@ -24,9 +24,9 @@ from managers.inputVectorFactory import InputVectorFactory
 from structures.trainingInstance import TrainingInstance
 from managers.statsManager import StatsManager
 from structures.neuralNetworkInstance import NeuralNetworkInstance
-from constants.enums import AccuracyType, ChangeType, SetClassificationType, OperatorDict, SeriesType
+from constants.enums import ChangeType, OperatorDict, SeriesType
 from constants.exceptions import SufficientlyUpdatedDataNotAvailable
-from utils.other import getCustomAccuracy, getPrecision
+from utils.other import getPrecision
 from utils.support import repackKWArgs, shortcdict, xorGeneralized
 from constants.values import tseNoCommissionSymbols
 
@@ -77,31 +77,22 @@ class Trainer:
         verbose = shortcdict(kwargs, 'verbose', 0)
 
         validationSetOnly = shortcdict(kwargs, 'validationSetOnly', False)
-        if not validationSetOnly:
-            kwargs['validationSetClassification'] = [_ for _ in SetClassificationType]
 
         ksetsGroup = self.dm.getKerasSets(**kwargs)
         
-        t = v = vc1 = vc2 = ts = None
+        t = v = ts = None
         if validationSetOnly:
-            v = ksetsGroup[0][0]
+            v = ksetsGroup[0]
         elif shortcdict(kwargs, 'excludeValidationSet', False):
             t, ts = ksetsGroup
-            t = t[0]
-            ts = ts[0]
         else:
             t, v, ts = ksetsGroup
-            v, vc1, vc2 = v
-            t = t[0]
-            ts = ts[0]
 
         if verbose >= 2: print('Keras sets built')
         return {
-            'trainingSet': t, 
-            'validationSet': v, 
-            'testingSet': ts, 
-            'validationPSet': vc1, 
-            'validationNSet': vc2
+            'trainingSet': t,
+            'validationSet': v,
+            'testingSet': ts
         }
 
     def train(self, patience=None, initialPatience=None, finalPatience=None, epochs=None, trainingPatience=None, iterationPatience=None, verbose=1, **kwargs):
@@ -177,11 +168,6 @@ class Trainer:
                     futureMetric_postEvaluate = futureMetrics_postEvaluate[m].current
                     metricsRows.append([m, currentMetric, futureMetric_prevaluate, futureMetric_postEvaluate])
                     metricsRows.append(['', '', getDiffString(futureMetric_prevaluate, currentMetric), getDiffString(futureMetric_postEvaluate, currentMetric)])
-                # currentCustomAccuracy = getCustomAccuracy(currentMetrics)
-                # futureCustomAccuracy_prevaluate = getCustomAccuracy(futureMetrics_prevaluate)
-                # futureCustomAccuracy_postEvaluate = getCustomAccuracy(futureMetrics_postEvaluate)
-                # metricsRows.append(['CUSTOM', currentCustomAccuracy, futureCustomAccuracy_prevaluate, futureCustomAccuracy_postEvaluate])
-                # metricsRows.append(['','', getDiffString(futureCustomAccuracy_prevaluate, currentCustomAccuracy), getDiffString(futureCustomAccuracy_postEvaluate, currentCustomAccuracy)])
 
                 for r in [metricsHeaderLine1, metricsHeaderLine2, *metricsRows]:
                     print("{: >16} {: >21} {: >21} {: >21}".format(*r))
@@ -258,7 +244,6 @@ if __name__ == '__main__':
         # changeType = ChangeType.ENDING_PERCENTAGE
         # changeValue = 10
         # changeType = ChangeType.ANY_DAY_ABSOLUTE
-        # accuracyType = AccuracyType.NEGATIVE
 
         # setSplitTuple = (0.80,0.20)
         explicitValidationSymbolList = []
@@ -344,7 +329,7 @@ if __name__ == '__main__':
     # p.instance.train(trainingDuration=0.2*60*60, evaluateEveryXIterations=20)
     # p.instance.train(patience=4)
     # p.instance.train(stopTime=getTimestamp(hour=14, minute=0))
-    # p.instance.train(validationType=AccuracyType.NEGATIVE, timeDuration=60*2)
+    # p.instance.train(timeDuration=60*2)
     # p.instance.train(timeDuration=30)
     # p.instance.train(stopTime=getTimestamp(hour=22, minute=28))
     

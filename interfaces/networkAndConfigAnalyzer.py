@@ -13,7 +13,7 @@ from typing import Callable
 from tensorflow.keras.optimizers import Adam
 
 from globalConfig import config as gconfig
-from constants.enums import AccuracyType, ChangeType, OperatorDict
+from constants.enums import ChangeType, OperatorDict
 from constants.exceptions import InsufficientInstances
 from constants.values import usExchanges
 from interfaces.trainer import Trainer
@@ -379,51 +379,6 @@ if __name__ == '__main__':
     # cflabels.append(f'10 day 10%')
 
 
-    # newcf = copy.deepcopy(gconfig)
-    # newcf.sets.positiveSplitRatio = 0.25
-    # newcf.trainer.customValidationClassValueRatio = 0.25
-    # configs.append(newcf)
-    # cflabels.append(f'set ratio {newcf.sets.positiveSplitRatio}; value ratio {newcf.trainer.customValidationClassValueRatio}')
-    # newcf = copy.deepcopy(gconfig)
-    # newcf.sets.positiveSplitRatio = 0.25
-    # newcf.trainer.customValidationClassValueRatio = 0.5
-    # configs.append(newcf)
-    # cflabels.append(f'set ratio {newcf.sets.positiveSplitRatio}; value ratio {newcf.trainer.customValidationClassValueRatio}')
-    # newcf = copy.deepcopy(gconfig)
-    # newcf.sets.positiveSplitRatio = 0.25
-    # newcf.trainer.customValidationClassValueRatio = 0.75
-    # configs.append(newcf)
-    # cflabels.append(f'set ratio {newcf.sets.positiveSplitRatio}; value ratio {newcf.trainer.customValidationClassValueRatio}')
-    # newcf = copy.deepcopy(gconfig)
-    # newcf.sets.positiveSplitRatio = 0.5
-    # newcf.trainer.customValidationClassValueRatio = 0.25
-    # configs.append(newcf)
-    # cflabels.append(f'set ratio {newcf.sets.positiveSplitRatio}; value ratio {newcf.trainer.customValidationClassValueRatio}')
-    # newcf = copy.deepcopy(gconfig)
-    # newcf.sets.positiveSplitRatio = 0.5
-    # newcf.trainer.customValidationClassValueRatio = 0.5
-    # configs.append(newcf)
-    # cflabels.append(f'set ratio {newcf.sets.positiveSplitRatio}; value ratio {newcf.trainer.customValidationClassValueRatio}')
-    # newcf = copy.deepcopy(gconfig)
-    # newcf.sets.positiveSplitRatio = 0.5
-    # newcf.trainer.customValidationClassValueRatio = 0.75
-    # configs.append(newcf)
-    # cflabels.append(f'set ratio {newcf.sets.positiveSplitRatio}; value ratio {newcf.trainer.customValidationClassValueRatio}')
-    # newcf = copy.deepcopy(gconfig)
-    # newcf.sets.positiveSplitRatio = 0.75
-    # newcf.trainer.customValidationClassValueRatio = 0.25
-    # configs.append(newcf)
-    # cflabels.append(f'set ratio {newcf.sets.positiveSplitRatio}; value ratio {newcf.trainer.customValidationClassValueRatio}')
-    # newcf = copy.deepcopy(gconfig)
-    # newcf.sets.positiveSplitRatio = 0.75
-    # newcf.trainer.customValidationClassValueRatio = 0.5
-    # configs.append(newcf)
-    # cflabels.append(f'set ratio {newcf.sets.positiveSplitRatio}; value ratio {newcf.trainer.customValidationClassValueRatio}')
-    # newcf = copy.deepcopy(gconfig)
-    # newcf.sets.positiveSplitRatio = 0.75
-    # newcf.trainer.customValidationClassValueRatio = 0.75
-    # configs.append(newcf)
-    # cflabels.append(f'set ratio {newcf.sets.positiveSplitRatio}; value ratio {newcf.trainer.customValidationClassValueRatio}')
 
     pcr: NetworkAndConfigAnalyzer = NetworkAndConfigAnalyzer(
         # networkGenerator=[
@@ -438,7 +393,6 @@ if __name__ == '__main__':
         verbose=2,
         setCount=setCount,
         maxPageSize=500,
-        accuracyType=AccuracyType.NEGATIVE,
 
         minimumSetsPerSymbol=minimumSetsPerSymbol,
         exchange=usExchanges,
@@ -454,8 +408,7 @@ if __name__ == '__main__':
     )
 
     startt = time.time()
-    res1 = pcr.compareConfigs(validationType=AccuracyType.NEGATIVE, patience=7, iterations=iterations)
-
+    res1 = pcr.compareConfigs(patience=7, iterations=iterations)
     print(f'Comparison took {time.time()-startt:.2f} seconds')
 
     print('done')

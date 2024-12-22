@@ -15,7 +15,7 @@ from datetime import date
 
 from globalConfig import config as gconfig
 from constants.values import canadaExchanges, usExchanges
-from constants.enums import AccuracyType, Api, ChangeType, InterestType, MarketRegion, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType, SetClassificationType
+from constants.enums import Api, ChangeType, InterestType, MarketRegion, OutputClass, PrecedingRangeType, IndicatorType, SQLHelpers, SeriesType
 from utils.support import asList, shortc, shortcdict
 
 
@@ -78,14 +78,14 @@ def maxQuarters(precedingDays):
    
 loggedonce = False
 
-def getInstancesByClass(instances, classification: SetClassificationType=None) -> Union[List, Dict[SetClassificationType, List]]:
-    classes = SetClassificationType.excludingAll()
+def getInstancesByClass(instances, class_: OutputClass=None) -> Union[List, Dict[OutputClass, List]]:
+    classes = list(OutputClass)
     classBuckets = {c: [] for c in classes}
-    classes = shortc(asList(classification), classes)
+    classes = shortc(asList(class_), classes)
     for i in instances:
         try:
             for c in classes:
-                if i.outputClass == c.outputClass:
+                if i.outputClass == c:
                     classBuckets[c].append(i)
                     break
         except:
@@ -223,11 +223,6 @@ def addAdditionalDefaultKWArgs(kwargs, config):
         kwargs['sector'] = shortcdict(kwargs, 'sector', SQLHelpers.NOTNULL)
     
     return kwargs
-
-def getCustomAccuracy(metricsObj=None, positiveAccuracy=None, negativeAccuracy=None, classValueRatio=gconfig.trainer.customValidationClassValueRatio): 
-    positiveAccuracy = shortc(positiveAccuracy, metricsObj[AccuracyType.POSITIVE.name].current) 
-    negativeAccuracy = shortc(negativeAccuracy, metricsObj[AccuracyType.NEGATIVE.name].current)
-    return (positiveAccuracy * classValueRatio) + (negativeAccuracy * (1 - classValueRatio))
     
 def getPrecision(v):
     try: return len(str(v).split('.')[1])

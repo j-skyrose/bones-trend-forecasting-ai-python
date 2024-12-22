@@ -20,11 +20,10 @@ from typing import Dict
 from structures.metricValuesObject import MetricValuesObject
 from structures.networkProperties import NetworkProperties
 from constants.exceptions import LocationNotSpecificed
-from constants.enums import AccuracyType, ChangeType, DataFormType, SeriesType
+from constants.enums import ChangeType, DataFormType, SeriesType
 from utils.support import asBytes, getMetricsNames, recdotdict, shortc, shortcdict, shortcobj
-from utils.other import getCustomAccuracy, maxQuarters
+from utils.other import maxQuarters
 from managers.inputVectorFactory import InputVectorFactory
-from structures.EvaluationDataHandler import EvaluationDataHandler
 from globalConfig import config as gconfig
 
 
@@ -282,7 +281,7 @@ class NeuralNetworkInstance:
                                                )
         return recdotdict(retMetrics)
 
-    def updateMetrics(self, resultsObj: Dict, evaluationDataHandler=None, dryRun=False):
+    def updateMetrics(self, resultsObj: Dict, dryRun=False):
         if dryRun:
             rootObj = recdotdict()
             rootObj.useAllSetsAccumulator = copy.deepcopy(self.useAllSetsAccumulator)
@@ -332,19 +331,24 @@ class NeuralNetworkInstance:
             self.properties.epochs += len(hist.epoch)
         return hist
 
-    def evaluate(self, evaluationDataHandler: EvaluationDataHandler, updateMetrics=True, verbose=1, **kwargs):
+    def evaluate(self, x, y=None, updateMetrics=True, verbose=1, **kwargs):
         if not self.model: raise BufferError('Model not loaded')
-        if verbose > 0: print(f"{'Re-e' if self.reEvaluating else 'E'}valuating... (overall > positive > negative)")
+        if verbose > 0: print(f"{'Re-e' if self.reEvaluating else 'E'}valuating...")
+
+        if y is None: x, y = x ## unpack the set
         
-        results = evaluationDataHandler.evaluateAll(self.model, verbose=verbose, **kwargs)
+        results = self.model.evaluate(x, y, verbose=verbose, **kwargs)
+        processedMetrics = {
+            k: v for k,v in zip(getMetricsNames(self.model), results)
+        }
 
         if updateMetrics:
-            self.updateMetrics(results, evaluationDataHandler)
+            self.updateMetrics(processedMetrics)
             if verbose > 0:
                 if not self.reEvaluating:
                     self.printAllMetrics()
 
-        return results
+        return processedMetrics
 
     def predict(self, inputData, raw=False, batchInput=False, **kwargs):
         if not self.model: raise BufferError('Model not loaded')
@@ -394,21 +398,19 @@ class NeuralNetworkInstance:
         )
 
     @classmethod
-    def printMetrics(cls, metrics, focusedMetric=None, classValueRatio=None, config=None):
+    def printMetrics(cls, metrics, focusedMetric=None, config=None):
         if config:
             pass ## config already set
         elif hasattr(cls, 'inputVectorFactory'):
             config = cls.inputVectorFactory.config
         else:
             config = gconfig
-        classValueRatio = shortc(classValueRatio, config.trainer.customValidationClassValueRatio)
 
         if type(metrics) == list and len(metrics) == 1:
             metrics = metrics[0]
 
         if type(metrics) == list and len(metrics) > 1: ## multiple values for each
             metricsDict = { k: [shortcdict(s[k], 'current', s[k]) for s in metrics] for k in metrics[0].keys() }
-            metricsDict['CUSTOM'] = [getCustomAccuracy(s, classValueRatio=classValueRatio) for s in metrics]
             for k, sts in metricsDict.items():
                 print(f'{k} Accuracy')
                 print('Minimum:'.ljust(19) + f'{min(sts)}'.ljust(22))
@@ -419,7 +421,6 @@ class NeuralNetworkInstance:
         else:
             for name, sts in metrics.items():
                 cls.prettyPrintMetric(name, metrics=sts, isFocused=name==focusedMetric)
-            # cls.prettyPrintMetric(accuracyName='CUSTOM', current=getCustomAccuracy(stats, classValueRatio=classValueRatio))
         print()
 
     def printAllMetrics(self):
