@@ -20,13 +20,10 @@ from structures.neuralNetworkInstance import NeuralNetworkInstance
 from structures.callbacks.EarlyStoppingWithCustomValidationCallback import EarlyStoppingWithCustomValidation
 from structures.callbacks.TimeBasedEarlyStoppingCallback import TimeBasedEarlyStopping
 from structures.callbacks.DeviationFromBasedEarlyStoppingCallback import DeviationFromBasedEarlyStopping
-from utils.support import recdotdict, shortc
+from utils.support import recdotdict, shortc, shortcobj
 
 
 class TrainingInstance():
-    trainingSet = None
-    validationSet = None
-    testingSet = None
 
     def __init__(self, nnetwork: NeuralNetworkInstance, tconfig=trainingConfig, **kwargs):
             # trainingSet=None, validationSet=None, testingSet=None):
@@ -36,9 +33,9 @@ class TrainingInstance():
         self.updateSets(**kwargs)
 
     def updateSets(self, trainingSet=None, validationSet=None, testingSet=None):
-        self.trainingSet = shortc(trainingSet, self.trainingSet)
-        self.validationSet = shortc(validationSet, self.validationSet)
-        self.testingSet = shortc(testingSet, self.testingSet)
+        self.trainingSet = shortc(trainingSet, shortcobj(self, 'trainingSet'))
+        self.validationSet = shortc(validationSet, shortcobj(self, 'validationSet'))
+        self.testingSet = shortc(testingSet, shortcobj(self, 'testingSet'))
 
     def updateNetworkMetrics(self, resultsObj: Dict, dryRun=False):
         return self.network.updateMetrics(resultsObj, self.validationSet, dryRun)
