@@ -61,7 +61,7 @@ class TrainingInstance():
             pass
         return self.evaluate(verbose)
 
-    def train(self, epochs=None, minEpochs=5, patience=None, stopTime=None, timeDuration=None, verbose=1, **kwargs):
+    def train(self, epochs=None, minEpochs=5, patience=None, stopTime=None, timeDuration=None, callbacks=None, verbose=1, **kwargs):
 
         try:
             if not epochs:
@@ -89,7 +89,8 @@ class TrainingInstance():
                 )
 
             fitKWArgs = {}
-            callbacks = [TimeBasedEarlyStopping(stopTime=stopTime, timeDuration=timeDuration)]
+            callbacks = asList(callbacks)
+            callbacks.append(TimeBasedEarlyStopping(stopTime=stopTime, timeDuration=timeDuration))
             if patience:
                 callbacks.append(EarlyStopping(
                     restore_best_weights=True,
